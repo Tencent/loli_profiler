@@ -1,0 +1,428 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1024</width>
+    <height>640</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>1024</width>
+    <height>640</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>LoliProfiler</string>
+  </property>
+  <widget class="QWidget" name="centralWidget">
+   <layout class="QVBoxLayout" name="verticalLayout_2">
+    <property name="leftMargin">
+     <number>6</number>
+    </property>
+    <property name="topMargin">
+     <number>6</number>
+    </property>
+    <property name="rightMargin">
+     <number>6</number>
+    </property>
+    <property name="bottomMargin">
+     <number>6</number>
+    </property>
+    <item>
+     <widget class="QSplitter" name="splitter_2">
+      <property name="orientation">
+       <enum>Qt::Vertical</enum>
+      </property>
+      <widget class="QGraphicsView" name="screenshotGraphicsView">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>100</height>
+        </size>
+       </property>
+      </widget>
+      <widget class="QSplitter" name="splitter">
+       <property name="orientation">
+        <enum>Qt::Vertical</enum>
+       </property>
+       <widget class="QWidget" name="chartWidget" native="true">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Preferred" vsizetype="Minimum">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>250</height>
+         </size>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout">
+         <property name="spacing">
+          <number>0</number>
+         </property>
+         <property name="leftMargin">
+          <number>2</number>
+         </property>
+         <property name="topMargin">
+          <number>2</number>
+         </property>
+         <property name="rightMargin">
+          <number>2</number>
+         </property>
+         <property name="bottomMargin">
+          <number>2</number>
+         </property>
+        </layout>
+       </widget>
+       <widget class="QTabWidget" name="tabWidget">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Expanding" vsizetype="Minimum">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="currentIndex">
+         <number>0</number>
+        </property>
+        <widget class="QWidget" name="dashBoard">
+         <attribute name="title">
+          <string>DashBoard</string>
+         </attribute>
+         <layout class="QHBoxLayout" name="horizontalLayout_3">
+          <property name="spacing">
+           <number>2</number>
+          </property>
+          <property name="leftMargin">
+           <number>2</number>
+          </property>
+          <property name="topMargin">
+           <number>2</number>
+          </property>
+          <property name="rightMargin">
+           <number>2</number>
+          </property>
+          <property name="bottomMargin">
+           <number>2</number>
+          </property>
+          <item>
+           <widget class="QWidget" name="widget" native="true">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>260</width>
+              <height>100</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>16777215</width>
+              <height>16777215</height>
+             </size>
+            </property>
+            <widget class="QLineEdit" name="appNameLineEdit">
+             <property name="geometry">
+              <rect>
+               <x>10</x>
+               <y>160</y>
+               <width>151</width>
+               <height>20</height>
+              </rect>
+             </property>
+             <property name="placeholderText">
+              <string>com.company.app</string>
+             </property>
+            </widget>
+            <widget class="QPushButton" name="launchPushButton">
+             <property name="geometry">
+              <rect>
+               <x>170</x>
+               <y>160</y>
+               <width>80</width>
+               <height>20</height>
+              </rect>
+             </property>
+             <property name="text">
+              <string>Launch</string>
+             </property>
+            </widget>
+            <widget class="QPushButton" name="sdkPushButton">
+             <property name="geometry">
+              <rect>
+               <x>170</x>
+               <y>40</y>
+               <width>81</width>
+               <height>20</height>
+              </rect>
+             </property>
+             <property name="text">
+              <string>Select SDK</string>
+             </property>
+            </widget>
+            <widget class="QLineEdit" name="sdkpathLineEdit">
+             <property name="geometry">
+              <rect>
+               <x>10</x>
+               <y>40</y>
+               <width>151</width>
+               <height>20</height>
+              </rect>
+             </property>
+             <property name="readOnly">
+              <bool>true</bool>
+             </property>
+             <property name="placeholderText">
+              <string>path to android sdk</string>
+             </property>
+            </widget>
+            <widget class="QSlider" name="chartScaleHSlider">
+             <property name="geometry">
+              <rect>
+               <x>10</x>
+               <y>10</y>
+               <width>241</width>
+               <height>16</height>
+              </rect>
+             </property>
+             <property name="toolTip">
+              <string>Shift+MouseWheel</string>
+             </property>
+             <property name="minimum">
+              <number>1</number>
+             </property>
+             <property name="maximum">
+              <number>500</number>
+             </property>
+             <property name="value">
+              <number>10</number>
+             </property>
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+            </widget>
+            <widget class="QPushButton" name="symbloPushButton">
+             <property name="geometry">
+              <rect>
+               <x>10</x>
+               <y>100</y>
+               <width>151</width>
+               <height>20</height>
+              </rect>
+             </property>
+             <property name="text">
+              <string>Load Symblos</string>
+             </property>
+            </widget>
+            <widget class="QLineEdit" name="addr2LinePathLineEdit">
+             <property name="geometry">
+              <rect>
+               <x>10</x>
+               <y>70</y>
+               <width>151</width>
+               <height>20</height>
+              </rect>
+             </property>
+             <property name="readOnly">
+              <bool>true</bool>
+             </property>
+             <property name="placeholderText">
+              <string>path to addr2line</string>
+             </property>
+            </widget>
+            <widget class="QPushButton" name="addr2LinePushButton">
+             <property name="geometry">
+              <rect>
+               <x>170</x>
+               <y>70</y>
+               <width>81</width>
+               <height>20</height>
+              </rect>
+             </property>
+             <property name="text">
+              <string>Addr2line</string>
+             </property>
+            </widget>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPlainTextEdit" name="consolePlainTextEdit">
+            <property name="undoRedoEnabled">
+             <bool>false</bool>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+        <widget class="QWidget" name="stackTrace">
+         <attribute name="title">
+          <string>StackTrace</string>
+         </attribute>
+         <layout class="QHBoxLayout" name="horizontalLayout">
+          <property name="spacing">
+           <number>2</number>
+          </property>
+          <property name="leftMargin">
+           <number>2</number>
+          </property>
+          <property name="topMargin">
+           <number>2</number>
+          </property>
+          <property name="rightMargin">
+           <number>2</number>
+          </property>
+          <property name="bottomMargin">
+           <number>2</number>
+          </property>
+          <item>
+           <widget class="StackTreeWidget" name="stackTreeWidget">
+            <property name="contextMenuPolicy">
+             <enum>Qt::CustomContextMenu</enum>
+            </property>
+            <property name="verticalScrollBarPolicy">
+             <enum>Qt::ScrollBarAlwaysOn</enum>
+            </property>
+            <property name="selectionMode">
+             <enum>QAbstractItemView::SingleSelection</enum>
+            </property>
+            <property name="sortingEnabled">
+             <bool>true</bool>
+            </property>
+            <property name="columnCount">
+             <number>4</number>
+            </property>
+            <attribute name="headerShowSortIndicator" stdset="0">
+             <bool>true</bool>
+            </attribute>
+            <column>
+             <property name="text">
+              <string>Time</string>
+             </property>
+            </column>
+            <column>
+             <property name="text">
+              <string>Size</string>
+             </property>
+            </column>
+            <column>
+             <property name="text">
+              <string>Library</string>
+             </property>
+            </column>
+            <column>
+             <property name="text">
+              <string>Function</string>
+             </property>
+            </column>
+           </widget>
+          </item>
+          <item>
+           <widget class="QTableView" name="callStackTableView">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="baseSize">
+             <size>
+              <width>0</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="verticalScrollBarPolicy">
+             <enum>Qt::ScrollBarAlwaysOn</enum>
+            </property>
+            <property name="horizontalScrollMode">
+             <enum>QAbstractItemView::ScrollPerPixel</enum>
+            </property>
+            <property name="wordWrap">
+             <bool>false</bool>
+            </property>
+            <property name="cornerButtonEnabled">
+             <bool>false</bool>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </widget>
+      </widget>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QMenuBar" name="menuBar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>1024</width>
+     <height>22</height>
+    </rect>
+   </property>
+   <widget class="QMenu" name="menuFile">
+    <property name="title">
+     <string>File</string>
+    </property>
+    <addaction name="actionOpen"/>
+    <addaction name="separator"/>
+    <addaction name="actionSave"/>
+    <addaction name="separator"/>
+    <addaction name="actionExit"/>
+   </widget>
+   <addaction name="menuFile"/>
+  </widget>
+  <widget class="QStatusBar" name="statusBar"/>
+  <action name="actionOpen">
+   <property name="text">
+    <string>Open</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+O</string>
+   </property>
+  </action>
+  <action name="actionSave">
+   <property name="text">
+    <string>Save</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+S</string>
+   </property>
+  </action>
+  <action name="actionExit">
+   <property name="text">
+    <string>Exit</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Q</string>
+   </property>
+  </action>
+ </widget>
+ <layoutdefault spacing="6" margin="11"/>
+ <customwidgets>
+  <customwidget>
+   <class>StackTreeWidget</class>
+   <extends>QTreeWidget</extends>
+   <header location="global">stacktreewidget.h</header>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>

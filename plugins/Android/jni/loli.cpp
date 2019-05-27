@@ -52,23 +52,43 @@ void loliDump(bool append, const char* path) {
     // __android_log_print(ANDROID_LOG_INFO, "app_name", "%s", oss.str().c_str());
 }
 
+enum loliFlags {
+    MALLOC_ = 0, 
+    FREE_ = 1, 
+};
+
 void *loliMalloc(size_t size) {
     const size_t max = 30;
     void* buffer[max];
     std::ostringstream oss;
     auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - hookTime_).count();
-    oss << time << '|' << size << ',';
+    auto mem = malloc(size);
+    oss << MALLOC_ << ','<< time << '|' << size << '|' << mem << ',';
     internal::dumpBacktrace(oss, buffer, internal::captureBacktrace(buffer, max));
     {
         std::lock_guard<std::mutex> lock(cacheMutex_);
         cache_.emplace_back(oss.str());
     }
-    return malloc(size);
+    return mem;
+}
+
+void loliFree(void* ptr) {
+    std::ostringstream oss;
+    auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - hookTime_).count();
+    oss << FREE_ << ','<< time << ',' << ptr;
+    {
+        std::lock_guard<std::mutex> lock(cacheMutex_);
+        cache_.emplace_back(oss.str());
+    }
+    free(ptr);
 }
 
 int loliHook() {
     hookTime_ = std::chrono::system_clock::now();
     int ecode = xhook_register(".*/libil2cpp\\.so$", "malloc", (void*)loliMalloc, nullptr);
+    if (ecode == 0) {
+        ecode = xhook_register(".*/libil2cpp\\.so$", "free", (void*)loliFree, nullptr);
+    }
     xhook_refresh(0);
     return ecode;
 }

@@ -67,6 +67,14 @@ MainWindow::MainWindow(QWidget *parent) :
     stackTraceChartView_->setRenderHint(QPainter::Antialiasing);
     stackTraceChartView_->setContentsMargins(0, 0, 0, 0);
     stackTraceChartView_->setFixedHeight(250);
+
+    freeSeries_ = new QLineSeries();
+    freeSeries_->setName("free");
+    stackTraceSeries_.insert("free", freeSeries_);
+    stackTraceChart_->addSeries(freeSeries_);
+    freeSeries_->attachAxis(stackTraceAxisX_);
+    freeSeries_->attachAxis(stackTraceAxisY_);
+
     connect(stackTraceChartView_, &InteractiveChartView::OnSyncScroll, this, &MainWindow::OnSyncScroll);
     connect(stackTraceChartView_, &InteractiveChartView::OnSelectionChange, this, &MainWindow::OnTimeSelectionChange);
 
@@ -114,6 +122,7 @@ const QString SETTINGS_APPNAME = "AppName";
 const QString SETTINGS_SDKPATH = "SdkPath";
 const QString SETTINGS_SPLITER = "Spliter";
 const QString SETTINGS_SPLITER_2 = "Spliter_2";
+const QString SETTINGS_SPLITER_3 = "Spliter_3";
 const QString SETTINGS_SCALEHSLIDER = "ChartScaleHSlider";
 const QString SETTINGS_LASTOPENDIR = "lastopen_dir";
 const QString SETTINGS_ADDR2LINEPATH = "addr2line_path";
@@ -129,7 +138,8 @@ void MainWindow::LoadSettings() {
     ui->sdkpathLineEdit->setText(settings.value(SETTINGS_SDKPATH).toString());
     ui->addr2LinePathLineEdit->setText(settings.value(SETTINGS_ADDR2LINEPATH).toString());
     ui->splitter->restoreState(settings.value(SETTINGS_SPLITER).toByteArray());
-    ui->splitter->restoreState(settings.value(SETTINGS_SPLITER_2).toByteArray());
+    ui->splitter_2->restoreState(settings.value(SETTINGS_SPLITER_2).toByteArray());
+    ui->splitter_3->restoreState(settings.value(SETTINGS_SPLITER_3).toByteArray());
     ui->chartScaleHSlider->setValue(settings.value(SETTINGS_SCALEHSLIDER, 10).toInt());
     auto lastOpenDir = settings.value(SETTINGS_LASTOPENDIR).toString();
     if (QDir(lastOpenDir).exists())
@@ -145,6 +155,7 @@ void MainWindow::SaveSettings() {
     settings.setValue(SETTINGS_ADDR2LINEPATH, ui->addr2LinePathLineEdit->text());
     settings.setValue(SETTINGS_SPLITER, ui->splitter->saveState());
     settings.setValue(SETTINGS_SPLITER_2, ui->splitter_2->saveState());
+    settings.setValue(SETTINGS_SPLITER_3, ui->splitter_3->saveState());
     settings.setValue(SETTINGS_SCALEHSLIDER, ui->chartScaleHSlider->value());
     if (QDir(lastOpenDir_).exists())
         settings.setValue(SETTINGS_LASTOPENDIR, lastOpenDir_);
@@ -192,8 +203,11 @@ void MainWindow::ConnectionFailed() {
     mainTimer_->stop();
     if (screenshotProcess_->IsRunning())
         screenshotProcess_->Process()->kill();
+    if (stacktraceProcess_->IsRunning())
+        stacktraceProcess_->Process()->kill();
+    ui->appNameLineEdit->setEnabled(true);
+    ui->launchPushButton->setText("Connect");
     ui->sdkPushButton->setEnabled(true);
-    ui->launchPushButton->setEnabled(true);
     ui->actionOpen->setEnabled(true);
 }
 
@@ -337,60 +351,91 @@ void MainWindow::ScreenshotProcessErrorOccurred() {
 void MainWindow::StacktraceProcessFinished(AdbProcess* process) {
     auto stacktraceProcess = static_cast<StackTraceProcess*>(process);
     const auto& stacks = stacktraceProcess->GetStackInfo();
-    QHash<int, QHash<QString, int>> funcMap;
-    for (const auto& stack : stacks) {
-        if (stack.size() < 3)
-            continue;
-        auto root = stack[0].split('|');
-        if (root.size() < 2)
-            continue;
-        const auto& rootTime = root[0];
-        const auto& rootSize = root[1];
-        const auto& rootLib = stack[1];
-        const auto& rootAddr = TryAddNewAddress(rootLib, stack[2]);
-        QTreeWidgetItem* parentItem = new SortableTreeWidgetItem(ui->stackTreeWidget);
-        parentItem->setText(0, rootTime);
-        parentItem->setData(0, 0, QVariant(rootTime.toInt()));
-        parentItem->setText(1, rootSize);
-        parentItem->setData(1, 0, QVariant(rootSize.toInt()));
-        parentItem->setText(2, rootLib);
-        parentItem->setText(3, rootAddr);
-        auto castedTime = static_cast<int>(std::ceil(rootTime.toInt() * 0.001f));
-        if (!funcMap.contains(castedTime))
-            funcMap.insert(castedTime, QHash<QString, int>());
-        auto& timeFuncMap = funcMap[castedTime];
-        if (!timeFuncMap.contains(rootAddr))
-            timeFuncMap.insert(rootAddr, 1);
-        else
-            timeFuncMap[rootAddr]++;
-        for (int i = 3; i < stack.size() && i + 1 < stack.size(); i += 2) {
-            const auto& libName = stack[i];
-            const auto& funcName = TryAddNewAddress(libName, stack[i + 1]);
-            auto curItem = new QTreeWidgetItem();
-            curItem->setText(2, libName);
-            curItem->setText(3, funcName);
-            parentItem->addChild(curItem);
-            parentItem = curItem;
+    if (stacks.size() > 0) {
+        QHash<int, QHash<QString, int>> funcMap;
+        for (const auto& stack : stacks) {
+            if (stack.size() < 3)
+                continue;
+            auto root = stack[0].split('|');
+            if (root.size() < 3)
+                continue;
+            const auto& rootTime = root[0];
+            const auto& rootSize = root[1];
+            const auto& rootMem = root[2];
+            const auto& rootLib = stack[1];
+            const auto& rootAddr = TryAddNewAddress(rootLib, stack[2]);
+            persistentAddrs_.insert(rootMem);
+            QTreeWidgetItem* parentItem = new SortableTreeWidgetItem(ui->stackTreeWidget);
+            parentItem->setText(0, rootTime);
+            parentItem->setData(0, 0, QVariant(rootTime.toInt()));
+            parentItem->setText(1, rootSize);
+            parentItem->setData(1, 0, QVariant(rootSize.toInt()));
+            parentItem->setText(2, rootMem);
+            parentItem->setData(2, 0, QVariant(rootMem));
+            parentItem->setText(3, rootLib);
+            parentItem->setText(4, rootAddr);
+            auto hide = GetTreeWidgetItemShouldHide(parentItem);
+            if (parentItem->isHidden() != hide)
+                parentItem->setHidden(hide);
+            auto castedTime = static_cast<int>(std::ceil(rootTime.toInt() * 0.001f));
+            if (!funcMap.contains(castedTime))
+                funcMap.insert(castedTime, QHash<QString, int>());
+            auto& timeFuncMap = funcMap[castedTime];
+            if (!timeFuncMap.contains(rootAddr))
+                timeFuncMap.insert(rootAddr, 1);
+            else
+                timeFuncMap[rootAddr]++;
+            for (int i = 3; i < stack.size() && i + 1 < stack.size(); i += 2) {
+                const auto& libName = stack[i];
+                const auto& funcName = TryAddNewAddress(libName, stack[i + 1]);
+                auto curItem = new QTreeWidgetItem();
+                curItem->setText(3, libName);
+                curItem->setText(4, funcName);
+                parentItem->addChild(curItem);
+                parentItem = curItem;
+            }
+        }
+        for (auto it = funcMap.constBegin(); it != funcMap.constEnd(); ++it) {
+            const auto& time = it.key();
+            const auto& timeFuncMap = it.value();
+            for (auto funcIt = timeFuncMap.begin(); funcIt != timeFuncMap.end(); ++funcIt) {
+                const auto& funcName = funcIt.key();
+                const auto& count = funcIt.value();
+                if (!stackTraceSeries_.contains(funcName)) {
+                    auto series = new QLineSeries();
+                    series->setName(funcName);
+                    stackTraceSeries_.insert(funcName, series);
+                    stackTraceChart_->addSeries(series);
+                    series->attachAxis(stackTraceAxisX_);
+                    series->attachAxis(stackTraceAxisY_);
+                }
+                if (count > maxStackTraceCount_)
+                    maxStackTraceCount_ = count;
+                auto& series = stackTraceSeries_[funcName];
+                series->append(time, static_cast<double>(count));
+            }
         }
     }
-    for (auto it = funcMap.constBegin(); it != funcMap.constEnd(); ++it) {
-        const auto& time = it.key();
-        const auto& timeFuncMap = it.value();
-        for (auto funcIt = timeFuncMap.begin(); funcIt != timeFuncMap.end(); ++funcIt) {
-            const auto& funcName = funcIt.key();
-            const auto& count = funcIt.value();
-            if (!stackTraceSeries_.contains(funcName)) {
-                auto series = new QLineSeries();
-                series->setName(funcName);
-                stackTraceSeries_.insert(funcName, series);
-                stackTraceChart_->addSeries(series);
-                series->attachAxis(stackTraceAxisX_);
-                series->attachAxis(stackTraceAxisY_);
-            }
+    // read free call infos
+    const auto& frees = stacktraceProcess_->GetFreeInfo();
+    if (frees.size() > 0) {
+        QMap<int, int> funcMap;
+        for (const auto& free : frees) {
+            auto time = free.first;
+            const auto address = free.second;
+            persistentAddrs_.remove(address);
+            auto castedTime = static_cast<int>(std::ceil(time * 0.001f));
+            if (!funcMap.contains(castedTime))
+                funcMap[castedTime] = 1;
+            else
+                funcMap[castedTime]++;
+        }
+        for (auto it = funcMap.constBegin(); it != funcMap.constEnd(); ++it) {
+            auto time = it.key();
+            auto count = it.value();
             if (count > maxStackTraceCount_)
                 maxStackTraceCount_ = count;
-            auto& series = stackTraceSeries_[funcName];
-            series->append(time, static_cast<double>(count));
+            freeSeries_->append(time, count);
         }
     }
     UpdateStackTraceRange();
@@ -407,8 +452,8 @@ void MainWindow::AddressProcessFinished(AdbProcess* process) {
     QTreeWidgetItemIterator it(ui->stackTreeWidget);
     while (*it) {
         auto item = *it;
-        const auto& libName = item->text(2);
-        const auto& funcAddr = item->text(3);
+        const auto& libName = item->text(3);
+        const auto& funcAddr = item->text(4);
         if (funcAddr.startsWith("0x")) {
             auto mapIt = symbloMap_.find(libName);
             if (mapIt != symbloMap_.end()) {
@@ -416,7 +461,7 @@ void MainWindow::AddressProcessFinished(AdbProcess* process) {
                 if (addrIt != mapIt->end()) {
                     auto name = addrIt.value();
                     if (name.size() > 0)
-                        item->setText(3, name);
+                        item->setText(4, name);
                 }
             }
         }
@@ -455,12 +500,16 @@ void MainWindow::on_sdkPushButton_clicked() {
 }
 
 void MainWindow::on_launchPushButton_clicked() {
-    if (isConnected_)
+    if (isConnected_) {
+        Print("Stoping capture ...");
+        ConnectionFailed();
         return;
+    }
 
     ui->sdkPushButton->setEnabled(true);
 
-    ui->launchPushButton->setEnabled(false);
+    ui->appNameLineEdit->setEnabled(false);
+    ui->launchPushButton->setText("Stop Capture");
     ui->actionOpen->setEnabled(false);
     ui->statusBar->clearMessage();
 
@@ -493,8 +542,8 @@ void MainWindow::on_stackTreeWidget_itemSelectionChanged() {
     auto selected = selectedItems.front();
     auto row = 0;
     while (selected != nullptr) {
-        callStackModel_->setItem(row, 0, new QStandardItem(selected->text(3)));
-        callStackModel_->setItem(row, 1, new QStandardItem(selected->text(2)));
+        callStackModel_->setItem(row, 0, new QStandardItem(selected->text(4)));
+        callStackModel_->setItem(row, 1, new QStandardItem(selected->text(3)));
         row++;
         if (selected->childCount() > 0) {
             selected = selected->child(0);
@@ -525,4 +574,42 @@ void MainWindow::on_symbloPushButton_clicked() {
 void MainWindow::on_addr2LinePushButton_clicked() {
     auto path = QFileDialog::getOpenFileName(this, tr("Select Executable Addr2line"), QDir::homePath());
     ui->addr2LinePathLineEdit->setText(path);
+}
+
+void MainWindow::on_modeComboBox_currentIndexChanged(int) {
+    on_memSizeComboBox_currentIndexChanged(ui->memSizeComboBox->currentIndex());
+}
+
+void MainWindow::on_memSizeComboBox_currentIndexChanged(int) {
+    for (int i = 0; i < ui->stackTreeWidget->topLevelItemCount(); i++) {
+        auto item = ui->stackTreeWidget->topLevelItem(i);
+        auto hide = GetTreeWidgetItemShouldHide(item);
+        if (item->isHidden() != hide)
+            item->setHidden(hide);
+    }
+}
+
+bool MainWindow::GetTreeWidgetItemShouldHide(QTreeWidgetItem* item) const {
+    auto checkPersistent = ui->modeComboBox->currentIndex() == 1;
+    auto addr = item->data(2, 0).toString();
+    auto size = item->data(1, 0).toInt();
+    auto hide = false;
+    switch(ui->memSizeComboBox->currentIndex()) {
+    case 0: // all allocations
+        hide = false;
+        break;
+    case 1: // large
+        hide = size < 1048576;
+        break;
+    case 2: // medium
+        hide = size >= 1048576 || size <= 1024;
+        break;
+    case 3: // small
+        hide = size > 1024;
+        break;
+    }
+    if (!hide && checkPersistent) {
+        hide = !persistentAddrs_.contains(addr);
+    }
+    return hide;
 }

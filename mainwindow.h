@@ -26,6 +26,7 @@ enum class IOErrorCode : qint32 {
     CORRUPTED_DATA,
 };
 
+class QTreeWidgetItem;
 class QStandardItemModel;
 class QGraphicsPixmapItem;
 class MainWindow : public QMainWindow {
@@ -54,6 +55,7 @@ private:
 
     void HideToolTips();
     void UpdateStackTraceRange();
+    bool GetTreeWidgetItemShouldHide(QTreeWidgetItem* item) const;
 
     QString TryAddNewAddress(const QString& lib, const QString& addr);
 
@@ -79,6 +81,8 @@ private slots:
     void on_stackTreeWidget_itemSelectionChanged();
     void on_symbloPushButton_clicked();
     void on_addr2LinePushButton_clicked();
+    void on_modeComboBox_currentIndexChanged(int index);
+    void on_memSizeComboBox_currentIndexChanged(int index);
 
 private:
     Ui::MainWindow *ui;
@@ -107,6 +111,8 @@ private:
     AddressProcess* addrProcess_;
     // <dllname, <func address, func name>>
     QHash<QString, QHash<QString, QString>> symbloMap_;
+    // <mem address>
+    QSet<QString> persistentAddrs_;
 
     // charts
     FixedScrollArea* scrollArea_;
@@ -117,6 +123,7 @@ private:
     QtCharts::QValueAxis *stackTraceAxisY_;
     QtCharts::QChart *stackTraceChart_;
     InteractiveChartView *stackTraceChartView_;
+    QtCharts::QLineSeries *freeSeries_;
 
     bool isConnected_ = false;
 };

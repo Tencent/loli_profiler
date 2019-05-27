@@ -12,6 +12,10 @@ public:
         return stackInfo_;
     }
 
+    const QVector<QPair<int, QString>>& GetFreeInfo() const {
+        return freeInfo_;
+    }
+
     void DumpAsync(const QString& appIdentifier);
 
 protected:
@@ -20,6 +24,7 @@ protected:
 private:
     QString appIdentifier_;
     QVector<QStringList> stackInfo_;
+    QVector<QPair<int, QString>> freeInfo_;
 };
 
 #endif // STACKTRACEPROCESS_H

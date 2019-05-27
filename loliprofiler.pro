@@ -34,7 +34,6 @@ SOURCES += \
         mainwindow.cpp \
         screenshotprocess.cpp \
         stacktraceprocess.cpp \
-        stacktreewidget.cpp \
         startappprocess.cpp
 
 HEADERS += \
@@ -46,7 +45,6 @@ HEADERS += \
         mainwindow.h \
         screenshotprocess.h \
         stacktraceprocess.h \
-        stacktreewidget.h \
         startappprocess.h
 
 FORMS += \

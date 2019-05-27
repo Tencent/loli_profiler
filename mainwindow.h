@@ -64,6 +64,7 @@ private slots:
 
     void OnTimeSelectionChange(const QPointF& pos);
     void OnSyncScroll(QtCharts::QChartView* sender, int prevMouseX, int delta);
+    void OnStackTreeWidgetContextMenu(const QPoint & pos);
 
     void StartAppProcessFinished(AdbProcess* process);
     void StartAppProcessErrorOccurred();

@@ -104,7 +104,7 @@
          </size>
         </property>
         <property name="currentIndex">
-         <number>0</number>
+         <number>1</number>
         </property>
         <widget class="QWidget" name="dashBoard">
          <attribute name="title">
@@ -328,7 +328,7 @@
                <number>0</number>
               </property>
               <item>
-               <widget class="StackTreeWidget" name="stackTreeWidget">
+               <widget class="QTreeWidget" name="stackTreeWidget">
                 <property name="sizePolicy">
                  <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
                   <horstretch>1</horstretch>
@@ -360,7 +360,7 @@
                 </column>
                 <column>
                  <property name="text">
-                  <string>Size</string>
+                  <string>Size(Byte)</string>
                  </property>
                 </column>
                 <column>
@@ -541,13 +541,6 @@
   </action>
  </widget>
  <layoutdefault spacing="6" margin="11"/>
- <customwidgets>
-  <customwidget>
-   <class>StackTreeWidget</class>
-   <extends>QTreeWidget</extends>
-   <header location="global">stacktreewidget.h</header>
-  </customwidget>
- </customwidgets>
  <resources/>
  <connections/>
 </ui>

@@ -1,16 +1,18 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 
+#include <QClipboard>
 #include <QDataStream>
-#include <QTextStream>
 #include <QDebug>
 #include <QDir>
 #include <QFileDialog>
+#include <QGraphicsPixmapItem>
+#include <QMenu>
 #include <QMessageBox>
 #include <QSettings>
-#include <QTemporaryFile>
-#include <QGraphicsPixmapItem>
 #include <QStandardItemModel>
+#include <QTemporaryFile>
+#include <QTextStream>
 
 #include <algorithm>
 
@@ -69,8 +71,8 @@ MainWindow::MainWindow(QWidget *parent) :
     stackTraceChartView_->setFixedHeight(250);
 
     freeSeries_ = new QLineSeries();
-    freeSeries_->setName("free");
-    stackTraceSeries_.insert("free", freeSeries_);
+    freeSeries_->setName("loliFree");
+    stackTraceSeries_.insert("loliFree", freeSeries_);
     stackTraceChart_->addSeries(freeSeries_);
     freeSeries_->attachAxis(stackTraceAxisX_);
     freeSeries_->attachAxis(stackTraceAxisY_);
@@ -107,6 +109,8 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->callStackTableView->show();
 
     LoadSettings();
+
+    connect(ui->stackTreeWidget, &QTreeWidget::customContextMenuRequested, this, &MainWindow::OnStackTreeWidgetContextMenu);
 
     mainTimer_ = new QTimer(this);
     connect(mainTimer_, SIGNAL(timeout()), this, SLOT(FixedUpdate()));
@@ -312,6 +316,42 @@ void MainWindow::OnTimeSelectionChange(const QPointF& pos) {
 
 void MainWindow::OnSyncScroll(QtCharts::QChartView* sender, int prevMouseX, int delta) {
     stackTraceChartView_->SyncScroll(sender, prevMouseX, delta);
+}
+
+void MainWindow::OnStackTreeWidgetContextMenu(const QPoint & pos) {
+    QMenu menu(this);
+    auto actionCollapse = new QAction("Expand");
+    menu.addAction(actionCollapse);
+    connect(actionCollapse, &QAction::triggered, [this]() {
+        const auto& selections = ui->stackTreeWidget->selectedItems();
+        for (auto selection : selections) {
+            if (!selection->isExpanded()) {
+                auto child = selection;
+                while (child) {
+                    child->setExpanded(true);
+                    child = child->childCount() > 0 ? child->child(0) : nullptr;
+                }
+            }
+        }
+    });
+    auto actionCopy = new QAction("Copy to Clipboard");
+    menu.addAction(actionCopy);
+    connect(actionCopy, &QAction::triggered, this, [this]() {
+        const auto& selections = ui->stackTreeWidget->selectedItems();
+        QString output;
+        QTextStream stream(&output);
+        for (auto selection : selections) {
+            auto child = selection;
+            while (child) {
+                stream << child->text(3) << ", " << child->text(4) << endl;
+                child->setExpanded(true);
+                child = child->childCount() > 0 ? child->child(0) : nullptr;
+            }
+        }
+        stream.flush();
+        QApplication::clipboard()->setText(output);
+    });
+    menu.exec(ui->stackTreeWidget->mapToGlobal(pos));
 }
 
 void MainWindow::StartAppProcessFinished(AdbProcess* process) {

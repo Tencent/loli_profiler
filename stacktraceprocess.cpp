@@ -15,8 +15,9 @@ void StackTraceProcess::DumpAsync(const QString& appIdentifier) {
 }
 
 enum loliFlags {
-    MALLOC_ = 0,
-    FREE_ = 1,
+    FREE_ = 0,
+    MALLOC_ = 1,
+    CALLOC_ = 2,
 };
 
 void StackTraceProcess::OnProcessFinihed() {
@@ -32,13 +33,13 @@ void StackTraceProcess::OnProcessFinihed() {
         if (words.size() == 0)
             continue;
         auto type = words[0].toInt();
-        if (type == MALLOC_) {
-            words.removeAt(0);
-            stackInfo_.push_back(words);
-        } else if (type == FREE_) {
+        if (type == FREE_) {
             if (words.size() < 3)
                 continue;
             freeInfo_.push_back(qMakePair(words[1].toInt(), words[2]));
+        } else {
+            words.removeAt(0);
+            stackInfo_.push_back(words);
         }
     }
 }

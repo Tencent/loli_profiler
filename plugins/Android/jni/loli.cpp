@@ -53,8 +53,9 @@ void loliDump(bool append, const char* path) {
 }
 
 enum loliFlags {
-    MALLOC_ = 0, 
-    FREE_ = 1, 
+    FREE_ = 0, 
+    MALLOC_ = 1, 
+    CALLOC_ = 2, 
 };
 
 void *loliMalloc(size_t size) {
@@ -83,12 +84,28 @@ void loliFree(void* ptr) {
     free(ptr);
 }
 
+void *loliCalloc(int n, int size) {
+    const size_t max = 30;
+    void* buffer[max];
+    std::ostringstream oss;
+    auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - hookTime_).count();
+    auto mem = calloc(n, size);
+    oss << CALLOC_ << ','<< time << '|' << size << '|' << mem << ',';
+    internal::dumpBacktrace(oss, buffer, internal::captureBacktrace(buffer, max));
+    {
+        std::lock_guard<std::mutex> lock(cacheMutex_);
+        cache_.emplace_back(oss.str());
+    }
+    return mem;
+}
+
 int loliHook() {
     hookTime_ = std::chrono::system_clock::now();
     int ecode = xhook_register(".*/libil2cpp\\.so$", "malloc", (void*)loliMalloc, nullptr);
-    if (ecode == 0) {
+    if (ecode == 0) 
         ecode = xhook_register(".*/libil2cpp\\.so$", "free", (void*)loliFree, nullptr);
-    }
+    if (ecode == 0)
+        ecode = xhook_register(".*/libil2cpp\\.so$", "calloc", (void*)loliCalloc, nullptr);
     xhook_refresh(0);
     return ecode;
 }

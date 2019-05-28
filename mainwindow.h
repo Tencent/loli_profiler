@@ -19,13 +19,6 @@ namespace Ui {
 class MainWindow;
 }
 
-enum class IOErrorCode : qint32 {
-    NONE = 0,
-    MAGIC_NUMBER_MISSMATCH,
-    VERSION_MISSMATCH,
-    CORRUPTED_DATA,
-};
-
 class QTreeWidgetItem;
 class QStandardItemModel;
 class QGraphicsPixmapItem;
@@ -44,8 +37,9 @@ public:
 private:
     void Print(const QString& str);
     void SaveToFile(QFile *file);
-    IOErrorCode LoadFromFile(QFile *file);
+    int LoadFromFile(QFile *file);
     QString GetLastOpenDir() const;
+    QString GetLastSymbolDir() const;
 
     void ConnectionFailed();
     void RemoveExistingSwapFiles();
@@ -58,6 +52,7 @@ private:
     bool GetTreeWidgetItemShouldHide(QTreeWidgetItem* item) const;
 
     QString TryAddNewAddress(const QString& lib, const QString& addr);
+    QtCharts::QLineSeries* GetStackTraceSeries(const QString &name);
 
 private slots:
     void FixedUpdate();
@@ -76,6 +71,9 @@ private slots:
     void AddressProcessErrorOccurred();
 
     void on_actionOpen_triggered();
+    void on_actionSave_triggered();
+    void on_actionExit_triggered();
+    void on_actionAbout_triggered();
     void on_sdkPushButton_clicked();
     void on_launchPushButton_clicked();
     void on_chartScaleHSlider_valueChanged(int value);
@@ -91,6 +89,7 @@ private:
     QString adbPath_;
     QString appPid_;
     QString lastOpenDir_;
+    QString lastSymbolDir_;
     QTimer* mainTimer_;
     int time_ = 0;
 
@@ -124,7 +123,6 @@ private:
     QtCharts::QValueAxis *stackTraceAxisY_;
     QtCharts::QChart *stackTraceChart_;
     InteractiveChartView *stackTraceChartView_;
-    QtCharts::QLineSeries *freeSeries_;
 
     bool isConnected_ = false;
 };

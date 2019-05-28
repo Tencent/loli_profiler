@@ -33,3 +33,4 @@ First copy plugins/Unity/LoliProfiler to your unity project, then build the nati
 ## Links
 
 * xHook https://github.com/iqiyi/xHook
+* App Icon https://www.flaticon.com/authors/smashicons

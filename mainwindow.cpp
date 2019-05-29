@@ -1,5 +1,6 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
+#include "timeprofiler.h"
 
 #include <QClipboard>
 #include <QDataStream>
@@ -461,6 +462,7 @@ bool MainWindow::GetTreeWidgetItemShouldHide(QTreeWidgetItem* item) const {
 }
 
 void MainWindow::FilterTreeWidget() {
+    TimerProfiler profiler("MainWindow.FilterTreeWidget");
     for (int i = 0; i < ui->stackTreeWidget->topLevelItemCount(); i++) {
         auto item = ui->stackTreeWidget->topLevelItem(i);
         auto hide = GetTreeWidgetItemShouldHide(item);
@@ -507,7 +509,9 @@ void MainWindow::SetSeriesY(QtCharts::QLineSeries* series, int x, int y) {
         auto point = series->at(i);
         auto cx = static_cast<int>(point.x());
         if (cx == x) {
-            series->replace(i, x, point.y() + y);
+            auto newY = static_cast<int>(point.y() + y);
+            maxStackTraceCount_ = std::max(maxStackTraceCount_, newY);
+            series->replace(i, x, newY);
             return;
         } else if (x > cx && x < static_cast<int>(series->at(i + 1).x())) {
             series->insert(i + 1, QPointF(x, y));
@@ -620,6 +624,7 @@ void MainWindow::ScreenshotProcessErrorOccurred() {
 }
 
 void MainWindow::StacktraceProcessFinished(AdbProcess* process) {
+    TimerProfiler profiler("MainWindow.StacktraceProcessFinished");
     auto stacktraceProcess = static_cast<StackTraceProcess*>(process);
     const auto& stacks = stacktraceProcess->GetStackInfo();
     if (stacks.size() > 0) {

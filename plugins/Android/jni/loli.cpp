@@ -33,6 +33,7 @@ void dumpBacktrace(std::ostream& os, void** buffer, size_t count);
 std::chrono::system_clock::time_point hookTime_;
 std::mutex cacheMutex_;
 std::vector<std::string> cache_;
+const std::size_t bandwidth_ = 4000;
 
 int loliCacheCount() {
     std::lock_guard<std::mutex> lock(cacheMutex_);
@@ -44,7 +45,15 @@ void loliDump(bool append, const char* path) {
     std::vector<std::string> cacheCopy;
     { // copy in memory is faster than write to file
         std::lock_guard<std::mutex> lock(cacheMutex_);
-        cacheCopy = std::move(cache_);
+        auto cacheSize = cache_.size();
+        if (cacheSize <= bandwidth_) {
+            cacheCopy = std::move(cache_);
+        } else {
+            cacheCopy.reserve(bandwidth_);
+            for (std::size_t i = cacheSize - bandwidth_; i < cacheSize; i++)
+                cacheCopy.push_back(cache_[i]);
+            cache_.erase(cache_.begin() + (cacheSize - bandwidth_), cache_.end());
+        }
     }
     for (auto&& cache : cacheCopy) 
         file << cache << '\n';

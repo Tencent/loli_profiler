@@ -45,7 +45,8 @@ HEADERS += \
         mainwindow.h \
         screenshotprocess.h \
         stacktraceprocess.h \
-        startappprocess.h
+        startappprocess.h \
+        timeprofiler.h
 
 FORMS += \
         mainwindow.ui

@@ -1,4 +1,5 @@
 #include "stacktraceprocess.h"
+#include "timeprofiler.h"
 
 #include <QTextStream>
 #include <QRegularExpression>
@@ -21,6 +22,7 @@ enum loliFlags {
 };
 
 void StackTraceProcess::OnProcessFinihed() {
+    TimerProfiler profiler("StackTraceProcess.OnProcessFinihed");
     stackInfo_.clear();
     freeInfo_.clear();
 

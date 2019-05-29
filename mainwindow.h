@@ -50,9 +50,11 @@ private:
     void HideToolTips();
     void UpdateStackTraceRange();
     bool GetTreeWidgetItemShouldHide(QTreeWidgetItem* item) const;
+    void FilterTreeWidget();
 
     QString TryAddNewAddress(const QString& lib, const QString& addr);
     QtCharts::QLineSeries* GetStackTraceSeries(const QString &name);
+    void SetSeriesY(QtCharts::QLineSeries* series, int x, int y);
 
 private slots:
     void FixedUpdate();
@@ -82,6 +84,11 @@ private slots:
     void on_addr2LinePushButton_clicked();
     void on_modeComboBox_currentIndexChanged(int index);
     void on_memSizeComboBox_currentIndexChanged(int index);
+    void on_minXspinBox_valueChanged(int arg1);
+    void on_maxXspinBox_valueChanged(int arg1);
+    void on_minXspinBox_editingFinished();
+    void on_maxXspinBox_editingFinished();
+    void on_resetFilterPushButton_clicked();
 
 private:
     Ui::MainWindow *ui;
@@ -124,6 +131,7 @@ private:
     QtCharts::QChart *stackTraceChart_;
     InteractiveChartView *stackTraceChartView_;
 
+    bool rangeFilterChanged_ = false;
     bool isConnected_ = false;
 };
 

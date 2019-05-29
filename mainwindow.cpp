@@ -32,7 +32,10 @@ public:
 private:
     bool operator<(const QTreeWidgetItem &other) const {
         int column = treeWidget()->sortColumn();
-        return data(column, 0).toInt() < other.data(column, 0).toInt();
+        if (column < 2)
+            return data(column, 0).toInt() < other.data(column, 0).toInt();
+        else
+            return text(column) < other.text(column);
     }
 };
 
@@ -42,6 +45,8 @@ MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::MainWindow) {
     ui->setupUi(this);
+    ui->maxXspinBox->setMaximum(std::numeric_limits<int>::max());
+    ui->maxXspinBox->setValue(ui->maxXspinBox->maximum());
 
     // setup adb process
     startAppProcess_ = new StartAppProcess(this);
@@ -429,6 +434,9 @@ void MainWindow::UpdateStackTraceRange() {
 
 bool MainWindow::GetTreeWidgetItemShouldHide(QTreeWidgetItem* item) const {
     auto checkPersistent = ui->modeComboBox->currentIndex() == 1;
+    auto time = static_cast<int>(item->data(0, 0).toInt() * 0.001f);
+    if (time < ui->minXspinBox->value() || time > ui->maxXspinBox->value())
+        return true;
     auto addr = item->data(2, 0).toString();
     auto size = item->data(1, 0).toInt();
     auto hide = false;
@@ -450,6 +458,16 @@ bool MainWindow::GetTreeWidgetItemShouldHide(QTreeWidgetItem* item) const {
         hide = !persistentAddrs_.contains(addr);
     }
     return hide;
+}
+
+void MainWindow::FilterTreeWidget() {
+    for (int i = 0; i < ui->stackTreeWidget->topLevelItemCount(); i++) {
+        auto item = ui->stackTreeWidget->topLevelItem(i);
+        auto hide = GetTreeWidgetItemShouldHide(item);
+        if (item->isHidden() != hide)
+            item->setHidden(hide);
+    }
+    rangeFilterChanged_ = false;
 }
 
 QString MainWindow::TryAddNewAddress(const QString& lib, const QString& addr) {
@@ -480,7 +498,31 @@ QLineSeries* MainWindow::GetStackTraceSeries(const QString &name) {
     return stackTraceSeries_[name];
 }
 
+void MainWindow::SetSeriesY(QtCharts::QLineSeries* series, int x, int y) {
+    if (series->count() == 0 || x > static_cast<int>(series->at(series->count() - 1).x())) {
+        series->append(x, y);
+        return;
+    }
+    for (int i = series->count() - 1; i > 0; i--) {
+        auto point = series->at(i);
+        auto cx = static_cast<int>(point.x());
+        if (cx == x) {
+            series->replace(i, x, point.y() + y);
+            return;
+        } else if (x > cx && x < static_cast<int>(series->at(i + 1).x())) {
+            series->insert(i + 1, QPointF(x, y));
+            return;
+        }
+    }
+    if (x < static_cast<int>(series->at(0).x()))
+        series->insert(0, QPointF(x, y));
+}
+
 void MainWindow::FixedUpdate() {
+    if (rangeFilterChanged_) {
+        FilterTreeWidget();
+        rangeFilterChanged_ = false;
+    }
     if (time_ - lastStackTraceTime_ >= 10 && !stacktraceProcess_->IsRunning()) {
         lastStackTraceTime_ = time_;
         stacktraceProcess_->DumpAsync(ui->appNameLineEdit->text());
@@ -493,6 +535,10 @@ void MainWindow::FixedUpdate() {
 }
 
 void MainWindow::OnTimeSelectionChange(const QPointF& pos) {
+    ui->minXspinBox->setValue(static_cast<int>(pos.x() - 10.0));
+    ui->maxXspinBox->setValue(static_cast<int>(pos.x() + 10.0));
+    if (!mainTimer_->isActive())
+        FilterTreeWidget();
     int index = GetScreenshotIndex(pos);
     if (index == -1)
         return;
@@ -602,7 +648,7 @@ void MainWindow::StacktraceProcessFinished(AdbProcess* process) {
             auto hide = GetTreeWidgetItemShouldHide(parentItem);
             if (parentItem->isHidden() != hide)
                 parentItem->setHidden(hide);
-            auto castedTime = static_cast<int>(std::ceil(rootTime.toInt() * 0.001f));
+            auto castedTime = static_cast<int>(rootTime.toInt() * 0.001f);
             if (!funcMap.contains(castedTime))
                 funcMap.insert(castedTime, QHash<QString, int>());
             auto& timeFuncMap = funcMap[castedTime];
@@ -628,7 +674,7 @@ void MainWindow::StacktraceProcessFinished(AdbProcess* process) {
                 const auto& count = funcIt.value();
                 if (count > maxStackTraceCount_)
                     maxStackTraceCount_ = count;
-                GetStackTraceSeries(funcName)->append(time, static_cast<double>(count));
+                SetSeriesY(GetStackTraceSeries(funcName), time, count);
             }
         }
     }
@@ -640,7 +686,7 @@ void MainWindow::StacktraceProcessFinished(AdbProcess* process) {
             auto time = free.first;
             const auto address = free.second;
             persistentAddrs_.remove(address);
-            auto castedTime = static_cast<int>(std::ceil(time * 0.001f));
+            auto castedTime = static_cast<int>(time * 0.001f);
             if (!funcMap.contains(castedTime))
                 funcMap[castedTime] = 1;
             else
@@ -651,7 +697,7 @@ void MainWindow::StacktraceProcessFinished(AdbProcess* process) {
             auto count = it.value();
             if (count > maxStackTraceCount_)
                 maxStackTraceCount_ = count;
-            GetStackTraceSeries("loliFree")->append(time, count);
+            SetSeriesY(GetStackTraceSeries("loliFree"), time, count);
         }
     }
     UpdateStackTraceRange();
@@ -754,12 +800,14 @@ void MainWindow::on_launchPushButton_clicked() {
         return;
     }
 
-    ui->sdkPushButton->setEnabled(true);
+    HideToolTips();
 
+    ui->sdkPushButton->setEnabled(true);
     ui->appNameLineEdit->setEnabled(false);
     ui->launchPushButton->setText("Stop Capture");
     ui->actionOpen->setEnabled(false);
     ui->statusBar->clearMessage();
+    on_resetFilterPushButton_clicked();
 
     adbPath_ = ui->sdkpathLineEdit->text();
     adbPath_ = adbPath_.size() == 0 ? "adb" : adbPath_ + "/platform-tools/adb";
@@ -829,14 +877,33 @@ void MainWindow::on_addr2LinePushButton_clicked() {
 }
 
 void MainWindow::on_modeComboBox_currentIndexChanged(int) {
-    on_memSizeComboBox_currentIndexChanged(ui->memSizeComboBox->currentIndex());
+    FilterTreeWidget();
 }
 
 void MainWindow::on_memSizeComboBox_currentIndexChanged(int) {
-    for (int i = 0; i < ui->stackTreeWidget->topLevelItemCount(); i++) {
-        auto item = ui->stackTreeWidget->topLevelItem(i);
-        auto hide = GetTreeWidgetItemShouldHide(item);
-        if (item->isHidden() != hide)
-            item->setHidden(hide);
+    FilterTreeWidget();
+}
+
+void MainWindow::on_minXspinBox_valueChanged(int) {
+    rangeFilterChanged_ = true;
+}
+
+void MainWindow::on_maxXspinBox_valueChanged(int) {
+    rangeFilterChanged_ = true;
+}
+
+void MainWindow::on_minXspinBox_editingFinished() {
+    FilterTreeWidget();
+}
+
+void MainWindow::on_maxXspinBox_editingFinished() {
+    FilterTreeWidget();
+}
+
+void MainWindow::on_resetFilterPushButton_clicked() {
+    ui->minXspinBox->setValue(ui->minXspinBox->minimum());
+    ui->maxXspinBox->setValue(ui->maxXspinBox->maximum());
+    if (!mainTimer_->isActive()) {
+        FilterTreeWidget();
     }
 }

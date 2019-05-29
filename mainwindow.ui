@@ -403,7 +403,7 @@
                   <rect>
                    <x>130</x>
                    <y>0</y>
-                   <width>121</width>
+                   <width>120</width>
                    <height>22</height>
                   </rect>
                  </property>
@@ -433,7 +433,7 @@
                   <rect>
                    <x>0</x>
                    <y>0</y>
-                   <width>121</width>
+                   <width>120</width>
                    <height>22</height>
                   </rect>
                  </property>
@@ -447,6 +447,54 @@
                    <string>Persistent</string>
                   </property>
                  </item>
+                </widget>
+                <widget class="QSpinBox" name="minXspinBox">
+                 <property name="geometry">
+                  <rect>
+                   <x>260</x>
+                   <y>0</y>
+                   <width>90</width>
+                   <height>22</height>
+                  </rect>
+                 </property>
+                 <property name="toolTip">
+                  <string>Chart Filter Min</string>
+                 </property>
+                 <property name="maximum">
+                  <number>999999999</number>
+                 </property>
+                </widget>
+                <widget class="QSpinBox" name="maxXspinBox">
+                 <property name="geometry">
+                  <rect>
+                   <x>360</x>
+                   <y>0</y>
+                   <width>90</width>
+                   <height>22</height>
+                  </rect>
+                 </property>
+                 <property name="toolTip">
+                  <string>Chart Filter Max</string>
+                 </property>
+                 <property name="maximum">
+                  <number>999999999</number>
+                 </property>
+                 <property name="value">
+                  <number>999999999</number>
+                 </property>
+                </widget>
+                <widget class="QPushButton" name="resetFilterPushButton">
+                 <property name="geometry">
+                  <rect>
+                   <x>460</x>
+                   <y>0</y>
+                   <width>90</width>
+                   <height>22</height>
+                  </rect>
+                 </property>
+                 <property name="text">
+                  <string>Reset Filter</string>
+                 </property>
                 </widget>
                </widget>
               </item>

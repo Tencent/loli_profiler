@@ -22,6 +22,7 @@ enum loliFlags {
 
 void StackTraceProcess::OnProcessFinihed() {
     stackInfo_.clear();
+    freeInfo_.clear();
 
     QString retStr = process_->readAll();
     process_->close();

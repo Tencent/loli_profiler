@@ -7,6 +7,7 @@
 #include <QtCharts/QChartView>
 #include <QtCharts/QLineSeries>
 #include <QtCharts/QValueAxis>
+#include <QUuid>
 
 #include "screenshotprocess.h"
 #include "stacktraceprocess.h"
@@ -40,6 +41,7 @@ private:
     int LoadFromFile(QFile *file);
     QString GetLastOpenDir() const;
     QString GetLastSymbolDir() const;
+    QString SizeToString(int size) const;
 
     void ConnectionFailed();
     void RemoveExistingSwapFiles();
@@ -93,6 +95,7 @@ private slots:
 private:
     Ui::MainWindow *ui;
     QStandardItemModel *callStackModel_;
+    QHash<QUuid, QVector<QString>> callStackMap_;
     QString adbPath_;
     QString appPid_;
     QString lastOpenDir_;

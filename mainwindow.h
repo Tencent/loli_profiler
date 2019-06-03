@@ -114,6 +114,7 @@ private:
     // stacktrace process
     StackTraceProcess *stacktraceProcess_;
     int maxStackTraceCount_ = 0;
+    int stacktraceRetryCount_ = 0;
 
     // address process
     AddressProcess* addrProcess_;

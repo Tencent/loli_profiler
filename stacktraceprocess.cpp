@@ -70,7 +70,7 @@ void StackTraceProcess::Interpret(const QByteArray& bytes) {
         }
         lineCount++;
     }
-    qDebug() << "OnDataArrived: " << bytes.size() << " bytes " << " lines: " << lineCount << " stacks: " << stackInfo_.size() << " frees: " << freeInfo_.size();
+//    qDebug() << "OnDataArrived: " << bytes.size() << " bytes " << " lines: " << lineCount << " stacks: " << stackInfo_.size() << " frees: " << freeInfo_.size();
     emit DataReceived();
 }
 
@@ -83,7 +83,7 @@ void StackTraceProcess::OnDataReceived() {
     while (remainBytes > 0) {
         if (packetSize_ == 0) {
             packetSize_ = *reinterpret_cast<quint32*>(buffer_ + bufferPos);
-            qDebug() << "receiving: " <<  packetSize_;
+//            qDebug() << "receiving: " <<  packetSize_;
             remainBytes -= 4;
             bufferPos = size - remainBytes;
             bufferCache_.resize(0);
@@ -118,13 +118,11 @@ void StackTraceProcess::OnDataReceived() {
 }
 
 void StackTraceProcess::OnConnected() {
-//    qDebug() << "connected";
     connectingServer_ = false;
     serverConnected_ = true;
 }
 
 void StackTraceProcess::OnDisconnected() {
-//    qDebug() << "disconnected";
     connectingServer_ = false;
     serverConnected_ = false;
     emit ConnectionLost();

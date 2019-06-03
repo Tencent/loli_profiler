@@ -16,6 +16,7 @@
 #include <QTextStream>
 
 #include <algorithm>
+#include <cmath>
 #include <vector>
 
 #define APP_MAGIC 0xA4B3C2D1
@@ -547,7 +548,7 @@ void MainWindow::FixedUpdate() {
         lastScreenshotTime_ = time_;
         screenshotProcess_->CaptureScreenshot();
     }
-    if (time_ > 5 && !stacktraceProcess_->IsConnecting() && !stacktraceProcess_->IsConnected()) {
+    if (!stacktraceProcess_->IsConnecting() && !stacktraceProcess_->IsConnected()) {
         stacktraceProcess_->ConnectToServer(8006);
         Print("Connecting to application server ... ");
     }
@@ -623,7 +624,7 @@ void MainWindow::StartAppProcessFinished(AdbProcess* process) {
     lastScreenshotTime_ = time_ = 0;
     mainTimer_->start(1000);
     Print("Application Started!");
-    // TODO: start trying to connect server here, if success, then start mainTimer, if not call ConnectionFailed.
+    stacktraceRetryCount_ = 10;
 }
 
 void MainWindow::StartAppProcessErrorOccurred() {
@@ -645,6 +646,7 @@ void MainWindow::ScreenshotProcessErrorOccurred() {
 }
 
 void MainWindow::StacktraceDataReceived() {
+    stacktraceRetryCount_ = 5;
     const auto& stacks = stacktraceProcess_->GetStackInfo();
     if (stacks.size() > 0) {
         QHash<int, QHash<QString, int>> funcMap;
@@ -725,8 +727,10 @@ void MainWindow::StacktraceDataReceived() {
 }
 
 void MainWindow::StacktraceConnectionLost() {
-    Print("Connection lost!");
-    ConnectionFailed();
+    Print("Connection failed!");
+    stacktraceRetryCount_--;
+    if (stacktraceRetryCount_ <= 0)
+        ConnectionFailed();
 }
 
 void MainWindow::AddressProcessFinished(AdbProcess* process) {

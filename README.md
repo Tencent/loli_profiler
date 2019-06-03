@@ -1,37 +1,51 @@
 # Loli Profiler
 
-Lightweight Opensource profiLing Instrument
+轻量开源内存分析工具（Lightweight Opensource profiLing Instrument）
 
-**Please Note: this project is still in early stage**
+**注意：此程序仍处于初级研发阶段**
 
-## Intro
+## 简介
 
-Connect your android device and text your app's name com.compnay.app, then press launch and you're done. Normally the stack trace will contain function address infomations, you will need to provide addr2line's path by clicking Addr2line button and select the correct executable in your ndk path. Then click Load Symblos to select the correct symblo for target .so library, then those address will be translated to human readable format.
+首先整合对应（Unity、Unreal）插件至游戏apk中，打开LoliProfiler，输入apk程序名称如：com.company.name，点击Launch即可。一般情况下堆栈数据会包含函数地址信息，你需要提供安卓NDK工具链中的addr2line可执行程序的路径给LoliProfiler。接着就可以选择Load Symbol来加载符号表数据，当翻译完成后，StackTrace中的数据就会被翻译为真正的函数名称。
 
 ![](images/screenshot.gif)
 
-## Unity Integration
+## 特性
 
-First copy plugins/Unity/LoliProfiler to your unity project, then build the native hooking plugin plugins/Android using correct NDK (r10e for example), and copy the built so to LoliProfiler/Android folder, at last add LoliProfiler to any long living GameObject and that's all.
+* 可hook目标APK中任意so库
+* 可将函数地址自动批量转换为函数名称
+* 可过滤常驻内存
+* 每5s自动截图一次
+* 基于时间线的过滤交互操作
+* 从手机端实时获取内存相关函数的堆栈信息（通过TCP Socket）
+* 运行流畅（使用C++与QT开发）
 
-## Plan
+## Unity整合
 
-**Future plans**
+首先将plugins/Unity/LoliProfiler拷贝到你的Unity工程下，接着需要用NDK（如r10e）来编译 plugins/Android下的Unity安卓native插件，并将编译出的插件放到LoliProfiler/Android目录下。最后将LoliProfiler.cs中的Component挂载到一个常驻游戏的GameObject上即可。
 
-* hook more memory functions realloc/free/etc ...
-* and more ... 
+## Unreal整合
 
-## Building
+WIP
 
-**Requirments**
+## 计划
 
-* QT 5 or greater
-* QtCharts plugin installed
-* QT Creater 4.8 or greater
-* C++11 Compiler
+**短期计划**
 
-## Links
+* hook 更多的内存相关函数 realloc/etc ... 
+* 计划中 ... 
+
+## 编译
+
+**环境**
+
+* QT 5 或更高
+* 安装QtCharts插件
+* QT Creater 4.8 或更高
+* C++11 编译器
+
+## 链接
 
 * xHook https://github.com/iqiyi/xHook
-* App Icon https://www.flaticon.com/authors/smashicons
-* Prebuild Binaries https://git.code.oa.com/xinhou/loli_profiler/wikis/home
+* 图标 https://www.flaticon.com/authors/smashicons
+* 定期预编译的程序（包含UnityNative插件） https://git.code.oa.com/xinhou/loli_profiler/wikis/home

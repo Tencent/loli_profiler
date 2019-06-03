@@ -44,7 +44,6 @@ private:
     QString SizeToString(int size) const;
 
     void ConnectionFailed();
-    void RemoveExistingSwapFiles();
 
     int GetScreenshotIndex(const QPointF& pos) const;
     void ShowScreenshotAt(int index);
@@ -69,8 +68,8 @@ private slots:
     void StartAppProcessErrorOccurred();
     void ScreenshotProcessFinished(AdbProcess* process);
     void ScreenshotProcessErrorOccurred();
-    void StacktraceProcessFinished(AdbProcess* process);
-    void StacktraceProcessErrorOccurred();
+    void StacktraceDataReceived();
+    void StacktraceConnectionLost();
     void AddressProcessFinished(AdbProcess* process);
     void AddressProcessErrorOccurred();
 
@@ -114,7 +113,6 @@ private:
 
     // stacktrace process
     StackTraceProcess *stacktraceProcess_;
-    int lastStackTraceTime_ = 0;
     int maxStackTraceCount_ = 0;
 
     // address process

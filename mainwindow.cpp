@@ -63,8 +63,8 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(screenshotProcess_, &ScreenshotProcess::ProcessErrorOccurred, this, &MainWindow::ScreenshotProcessErrorOccurred);
 
     stacktraceProcess_ = new StackTraceProcess(this);
-    connect(stacktraceProcess_, &StackTraceProcess::ProcessFinished, this, &MainWindow::StacktraceProcessFinished);
-    connect(stacktraceProcess_, &StackTraceProcess::ProcessErrorOccurred, this, &MainWindow::StacktraceProcessErrorOccurred);
+    connect(stacktraceProcess_, &StackTraceProcess::DataReceived, this, &MainWindow::StacktraceDataReceived);
+    connect(stacktraceProcess_, &StackTraceProcess::ConnectionLost, this, &MainWindow::StacktraceConnectionLost);
 
     addrProcess_ = new AddressProcess(this);
     connect(addrProcess_, &AddressProcess::ProcessFinished, this, &MainWindow::AddressProcessFinished);
@@ -390,23 +390,11 @@ void MainWindow::ConnectionFailed() {
     mainTimer_->stop();
     if (screenshotProcess_->IsRunning())
         screenshotProcess_->Process()->kill();
-    if (stacktraceProcess_->IsRunning())
-        stacktraceProcess_->Process()->kill();
+    stacktraceProcess_->Disconnect();
     ui->appNameLineEdit->setEnabled(true);
-    ui->launchPushButton->setText("Connect");
+    ui->launchPushButton->setText("Launch");
     ui->sdkPushButton->setEnabled(true);
     ui->actionOpen->setEnabled(true);
-}
-
-void MainWindow::RemoveExistingSwapFiles() {
-    QProcess process;
-    QStringList arguments;
-    arguments << "shell" << "rm" << "-f" << "/storage/emulated/0/Android/data/" + ui->appNameLineEdit->text() + "/files/loli.csv";
-    process.start(adbPath_, arguments);
-    if (!process.waitForStarted())
-        return;
-    if (!process.waitForFinished())
-        return;
 }
 
 int MainWindow::GetScreenshotIndex(const QPointF& pos) const { // TODO: optimize with binary search
@@ -555,13 +543,13 @@ void MainWindow::FixedUpdate() {
         FilterTreeWidget();
         rangeFilterChanged_ = false;
     }
-    if (time_ - lastStackTraceTime_ >= 10 && !stacktraceProcess_->IsRunning()) {
-        lastStackTraceTime_ = time_;
-        stacktraceProcess_->DumpAsync(ui->appNameLineEdit->text());
-    }
     if (time_ - lastScreenshotTime_ >= 5 && !screenshotProcess_->IsRunning()) {
         lastScreenshotTime_ = time_;
         screenshotProcess_->CaptureScreenshot();
+    }
+    if (time_ > 5 && !stacktraceProcess_->IsConnecting() && !stacktraceProcess_->IsConnected()) {
+        stacktraceProcess_->ConnectToServer(8006);
+        Print("Connecting to application server ... ");
     }
     time_++;
 }
@@ -632,10 +620,10 @@ void MainWindow::StartAppProcessFinished(AdbProcess* process) {
     isConnected_ = true;
     screenshotProcess_->SetExecutablePath(adbPath_);
     stacktraceProcess_->SetExecutablePath(adbPath_);
-    lastScreenshotTime_ = time_;
-    lastStackTraceTime_ = time_ + 5;
+    lastScreenshotTime_ = time_ = 0;
     mainTimer_->start(1000);
-    Print("Connected!");
+    Print("Application Started!");
+    // TODO: start trying to connect server here, if success, then start mainTimer, if not call ConnectionFailed.
 }
 
 void MainWindow::StartAppProcessErrorOccurred() {
@@ -656,15 +644,14 @@ void MainWindow::ScreenshotProcessErrorOccurred() {
     Print("Error occurred when capturing screenshot ...");
 }
 
-void MainWindow::StacktraceProcessFinished(AdbProcess* process) {
-    auto stacktraceProcess = static_cast<StackTraceProcess*>(process);
-    const auto& stacks = stacktraceProcess->GetStackInfo();
+void MainWindow::StacktraceDataReceived() {
+    const auto& stacks = stacktraceProcess_->GetStackInfo();
     if (stacks.size() > 0) {
         QHash<int, QHash<QString, int>> funcMap;
         for (const auto& stack : stacks) {
             if (stack.size() < 3)
                 continue;
-            auto root = stack[0].split('|');
+            auto root = stack[0].split(',');
             if (root.size() < 3)
                 continue;
             const auto& rootTime = root[0];
@@ -679,9 +666,10 @@ void MainWindow::StacktraceProcessFinished(AdbProcess* process) {
             parentItem->setText(2, rootMem);
             parentItem->setText(3, rootLib);
             parentItem->setText(4, rootAddr);
-            auto hide = GetTreeWidgetItemShouldHide(parentItem);
-            if (parentItem->isHidden() != hide)
-                parentItem->setHidden(hide);
+            // setHidden is extremly slow when there's large number of items in the TreeViewWidget
+//            auto hide = GetTreeWidgetItemShouldHide(parentItem);
+//            if (parentItem->isHidden() != hide)
+//                parentItem->setHidden(hide);
             auto castedTime = static_cast<int>(rootTime.toInt() * 0.001f);
             if (!funcMap.contains(castedTime))
                 funcMap.insert(castedTime, QHash<QString, int>());
@@ -736,8 +724,9 @@ void MainWindow::StacktraceProcessFinished(AdbProcess* process) {
     UpdateStackTraceRange();
 }
 
-void MainWindow::StacktraceProcessErrorOccurred() {
-
+void MainWindow::StacktraceConnectionLost() {
+    Print("Connection lost!");
+    ConnectionFailed();
 }
 
 void MainWindow::AddressProcessFinished(AdbProcess* process) {
@@ -854,7 +843,8 @@ void MainWindow::on_launchPushButton_clicked() {
     callStackMap_.clear();
     callStackModel_->clear();
 
-    RemoveExistingSwapFiles();
+    maxStackTraceCount_ = 0;
+    UpdateStackTraceRange();
 
     startAppProcess_->SetExecutablePath(adbPath_);
     startAppProcess_->StartApp(ui->appNameLineEdit->text());

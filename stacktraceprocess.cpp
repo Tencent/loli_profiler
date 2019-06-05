@@ -13,6 +13,7 @@
 StackTraceProcess::StackTraceProcess(QObject* parent)
     : QObject(parent), socket_(new QTcpSocket(this)) {
     buffer_ = new char[BUFFER_SIZE];
+    socket_->setReadBufferSize(BUFFER_SIZE);
     connect(socket_, &QTcpSocket::readyRead, this, &StackTraceProcess::OnDataReceived);
     connect(socket_, &QTcpSocket::connected, this, &StackTraceProcess::OnConnected);
     connect(socket_, &QTcpSocket::disconnected, this, &StackTraceProcess::OnDisconnected);

@@ -185,6 +185,9 @@
                <height>20</height>
               </rect>
              </property>
+             <property name="toolTip">
+              <string>Select the root path of Android SDK</string>
+             </property>
              <property name="text">
               <string>Select SDK</string>
              </property>
@@ -238,6 +241,9 @@
                <width>151</width>
                <height>20</height>
               </rect>
+             </property>
+             <property name="toolTip">
+              <string>Prefer load symbols when capture is finished.</string>
              </property>
              <property name="text">
               <string>Load Symblos</string>
@@ -406,6 +412,9 @@
                    <width>120</width>
                    <height>22</height>
                   </rect>
+                 </property>
+                 <property name="toolTip">
+                  <string>Filter result by size.</string>
                  </property>
                  <item>
                   <property name="text">

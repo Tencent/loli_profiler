@@ -397,6 +397,7 @@ void MainWindow::ConnectionFailed() {
     ui->launchPushButton->setText("Launch");
     ui->sdkPushButton->setEnabled(true);
     ui->actionOpen->setEnabled(true);
+    ui->stackTreeWidget->setSortingEnabled(true);
 }
 
 int MainWindow::GetScreenshotIndex(const QPointF& pos) const { // TODO: optimize with binary search
@@ -651,6 +652,7 @@ void MainWindow::StacktraceDataReceived() {
     const auto& stacks = stacktraceProcess_->GetStackInfo();
     if (stacks.size() > 0) {
         QHash<int, QHash<QString, int>> funcMap;
+        QList<QTreeWidgetItem*> treeItems;
         for (const auto& stack : stacks) {
             if (stack.size() < 3)
                 continue;
@@ -663,12 +665,13 @@ void MainWindow::StacktraceDataReceived() {
             const auto& rootLib = stack[1];
             const auto& rootAddr = TryAddNewAddress(rootLib, stack[2]);
             persistentAddrs_.insert(rootMem);
-            SortableTreeWidgetItem* parentItem = new SortableTreeWidgetItem(ui->stackTreeWidget);
+            SortableTreeWidgetItem* parentItem = new SortableTreeWidgetItem(nullptr);
             parentItem->setData(0, 0, QVariant(rootTime.toInt()));
             parentItem->setData(1, 0, QVariant(rootSize.toInt()));
             parentItem->setText(2, rootMem);
             parentItem->setText(3, rootLib);
             parentItem->setText(4, rootAddr);
+            treeItems.push_back(parentItem);
             // setHidden is extremly slow when there's large number of items in the TreeViewWidget
 //            auto hide = GetTreeWidgetItemShouldHide(parentItem);
 //            if (parentItem->isHidden() != hide)
@@ -690,6 +693,9 @@ void MainWindow::StacktraceDataReceived() {
                 callStack.append(funcAddr);
             }
         }
+        // batch add items to improve performance
+        // and we turn off sorting during data capturing
+        ui->stackTreeWidget->addTopLevelItems(treeItems);
         for (auto it = funcMap.constBegin(); it != funcMap.constEnd(); ++it) {
             const auto& time = it.key();
             const auto& timeFuncMap = it.value();
@@ -840,6 +846,7 @@ void MainWindow::on_launchPushButton_clicked() {
     adbPath_ = adbPath_.size() == 0 ? "adb" : adbPath_ + "/platform-tools/adb";
 
     ui->stackTreeWidget->clear();
+    ui->stackTreeWidget->setSortingEnabled(false);
     stackTraceChart_->removeAllSeries();
     stackTraceSeries_.clear();
     screenshots_.clear();

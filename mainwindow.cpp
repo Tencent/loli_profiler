@@ -626,7 +626,7 @@ void MainWindow::StartAppProcessFinished(AdbProcess* process) {
     lastScreenshotTime_ = time_ = 0;
     mainTimer_->start(1000);
     Print("Application Started!");
-    stacktraceRetryCount_ = 10;
+    stacktraceRetryCount_ = 30;
 }
 
 void MainWindow::StartAppProcessErrorOccurred() {
@@ -734,7 +734,7 @@ void MainWindow::StacktraceDataReceived() {
 }
 
 void MainWindow::StacktraceConnectionLost() {
-    Print("Connection failed!");
+    Print(QString("Connection failed, retrying %1").arg(stacktraceRetryCount_));
     stacktraceRetryCount_--;
     if (stacktraceRetryCount_ <= 0)
         ConnectionFailed();

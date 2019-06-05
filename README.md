@@ -20,6 +20,7 @@
 * 从手机端实时获取内存相关函数的堆栈信息（通过TCP Socket）
 * 运行流畅（使用C++与QT开发）
 * 同时支持Windows与Mac OSX（Mojave+）操作系统
+* 支持且建议使用Release版本的apk测试
 
 ## Unity整合
 

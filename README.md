@@ -33,6 +33,7 @@ WIP
 **短期计划**
 
 * hook 更多的内存相关函数 realloc/etc ... 
+* 制作Unreal插件
 * 计划中 ... 
 
 ## 编译
@@ -44,8 +45,24 @@ WIP
 * QT Creater 4.8 或更高
 * C++11 编译器
 
+## 常见问题
+
+* 点击Launch提示：Error starting app by adb monkey
+  首先确认你可以在命令行访问adb命令，如果可以，则表明此安卓sdk版本过低不支持monkey，请升级安卓sdk，如果您本地有多个sdk版本，也可以在程序里Select SDK选择到更新版本的sdk的跟目录即可
+* 截图截出的图片一直是竖屏
+  我使用adb exec-out screencap -p命令截图，我发现在一些机器上截出来的图就是横竖不分的 。。暂时没有更好的办法，如果截图重要，建议换台手机或者更新手机系统来测试
+* 我发现时不时app取到的数据的时间不对
+  确认C#层没有多次调用loliHook，调用loliHook会重置时间戳，只建议在游戏开始时调用一次
+* 点击Launch成功后App正常启动了，但是一直在提示Connection Lost
+  LoliProfiler会在拉起程序后尝试连接apk中的服务器，连接失败会每秒重连一次，重连尝试10次后会判断apk没有开启服务器，并停止。因此确定App中调用loliHook的时机是在App开始的时候，loliHook会拉起App中的服务器
+* 抓取的数据好像不是很全？
+  我们默认抓取libil2cpp.so中的malloc、calloc、free，也就是会默认抓取unity程序中由gameplay相关代码发起的所有内存io函数堆栈。如果您想抓取如libunity.so的内存io数据，可参考loli.cpp中的loliHook函数进行扩展并重新编译安卓的loli.so（我计划调整loliHook的API，在拉起时去传入想要注入的so与内存函数，就不需要重新编译loli.so了）
+* Unity程序抓取的数据都是包含mono字段的调用，看不到C#的堆栈
+  建议使用Unity的il2cpp编译模式，我们hook的是C语言的内存io函数，因此无法获取mono运行时的信息
+
 ## 链接
 
+* KM介绍文章 http://km.oa.com/articles/show/408991
 * xHook https://github.com/iqiyi/xHook
 * 图标 https://www.flaticon.com/authors/smashicons
 * 定期预编译的程序（包含UnityNative插件） https://git.code.oa.com/xinhou/loli_profiler/wikis/home

@@ -53,6 +53,7 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->setupUi(this);
     ui->maxXspinBox->setMaximum(std::numeric_limits<int>::max());
     ui->maxXspinBox->setValue(ui->maxXspinBox->maximum());
+    ui->stackTreeWidget->setUniformRowHeights(true);
 
     // setup adb process
     startAppProcess_ = new StartAppProcess(this);

@@ -7,20 +7,20 @@ using System.Runtime.InteropServices;
 public class LoliProfiler : MonoBehaviour {
 
 #if UNITY_ANDROID && !UNITY_EDITOR
-    [DllImport("loli")]
-    private static extern int loliHook();
+    [DllImport("loli", CallingConvention = CallingConvention.Cdecl)]
+    private static extern int loliHook(string soNames);
     [DllImport("loli")]
     private static extern void loliTick();
 #else
-    private static int loliHook() { return 0; }
+    private static int loliHook(string soNames) { return 0; }
     private static void loliTick() {}
 #endif
 
-    private string loliFilePath;
-
     private void Awake()
     {
-        Debug.Log("loliHookStatus: " + loliHook());
+        var ecode = loliHook("libil2cpp,libunity");
+        if (ecode != 0)
+            Debug.Log("loliHookError: " + ecode);
     }
     
     private void Update()

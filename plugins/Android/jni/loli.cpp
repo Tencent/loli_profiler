@@ -97,13 +97,23 @@ void *loliCalloc(int n, int size) {
     return mem;
 }
 
-int loliHook() {
+int loliHook(const char *soNames) {
     hookTime_ = std::chrono::system_clock::now();
-    int ecode = xhook_register(".*/libil2cpp\\.so$", "malloc", (void*)loliMalloc, nullptr);
-    if (ecode == 0) 
-        ecode = xhook_register(".*/libil2cpp\\.so$", "free", (void*)loliFree, nullptr);
-    if (ecode == 0)
-        ecode = xhook_register(".*/libil2cpp\\.so$", "calloc", (void*)loliCalloc, nullptr);
+    std::string names(soNames);
+    std::string token;
+    char delimiter = ',';
+    std::size_t pos = 0;
+    int ecode = 0;
+    while ((pos = names.find(delimiter)) != std::string::npos) {
+        token = names.substr(0, pos);
+        auto soName = ".*/" + token + "\\.so$";
+        ecode = xhook_register(soName.c_str(), "malloc", (void*)loliMalloc, nullptr);
+        if (ecode == 0) 
+            ecode = xhook_register(soName.c_str(), "free", (void*)loliFree, nullptr);
+        if (ecode == 0)
+            ecode = xhook_register(soName.c_str(), "calloc", (void*)loliCalloc, nullptr);
+        names.erase(0, pos + 1);
+    }
     xhook_refresh(0);
     auto svr = server::start(7100);
     __android_log_print(ANDROID_LOG_INFO, "Loli", "start status %i", svr);

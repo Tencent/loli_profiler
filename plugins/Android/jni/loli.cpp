@@ -115,7 +115,7 @@ int loliHook(const char *soNames) {
         ecode = xhook_register(soName.c_str(), "free", (void*)loliFree, nullptr);
         if (ecode != 0) {
             __android_log_print(ANDROID_LOG_INFO, "Loli", "error hooking %s's free()", token.c_str());
-            return ecode;   
+            return ecode;
         }
         ecode = xhook_register(soName.c_str(), "calloc", (void*)loliCalloc, nullptr);
         if (ecode != 0) {

@@ -603,14 +603,13 @@ void MainWindow::OnStackTreeWidgetContextMenu(const QPoint & pos) {
             auto child = selection;
             while (child) {
                 stream << child->text(3) << ", " << child->text(4) << endl;
-                child->setExpanded(true);
                 child = child->childCount() > 0 ? child->child(0) : nullptr;
             }
         }
         stream.flush();
         QApplication::clipboard()->setText(output);
     });
-    menu.exec(ui->stackTreeWidget->mapToGlobal(pos));
+    menu.exec(ui->stackTreeWidget->viewport()->mapToGlobal(pos));
 }
 
 void MainWindow::StartAppProcessFinished(AdbProcess* process) {

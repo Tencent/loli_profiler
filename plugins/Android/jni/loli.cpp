@@ -108,15 +108,25 @@ int loliHook(const char *soNames) {
         token = names.substr(0, pos);
         auto soName = ".*/" + token + "\\.so$";
         ecode = xhook_register(soName.c_str(), "malloc", (void*)loliMalloc, nullptr);
-        if (ecode == 0) 
-            ecode = xhook_register(soName.c_str(), "free", (void*)loliFree, nullptr);
-        if (ecode == 0)
-            ecode = xhook_register(soName.c_str(), "calloc", (void*)loliCalloc, nullptr);
+        if (ecode != 0) {
+            __android_log_print(ANDROID_LOG_INFO, "Loli", "error hooking %s's malloc()", token.c_str());
+            return ecode;
+        }
+        ecode = xhook_register(soName.c_str(), "free", (void*)loliFree, nullptr);
+        if (ecode != 0) {
+            __android_log_print(ANDROID_LOG_INFO, "Loli", "error hooking %s's free()", token.c_str());
+            return ecode;   
+        }
+        ecode = xhook_register(soName.c_str(), "calloc", (void*)loliCalloc, nullptr);
+        if (ecode != 0) {
+            __android_log_print(ANDROID_LOG_INFO, "Loli", "error hooking %s's calloc()", token.c_str());
+            return ecode;
+        }
         names.erase(0, pos + 1);
     }
     xhook_refresh(0);
     auto svr = server::start(7100);
-    __android_log_print(ANDROID_LOG_INFO, "Loli", "start status %i", svr);
+    __android_log_print(ANDROID_LOG_INFO, "Loli", "server start status %i", svr);
     return ecode;
 }
 

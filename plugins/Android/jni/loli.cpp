@@ -295,7 +295,7 @@ void serverLoop(int sock) {
                 send(clientSock, &compressSize, 4, 0); // send net buffer size
                 send(clientSock, &srcSize, 4, 0); // send uncompressed buffer size (for decompression)
                 send(clientSock, compressBuffer, compressSize - 4, 0); // then send data
-                __android_log_print(ANDROID_LOG_INFO, "Loli", "send size %i, compressed size %i, lineCount: %i", srcSize, compressSize, static_cast<int>(cacheCopy.size()));
+                // __android_log_print(ANDROID_LOG_INFO, "Loli", "send size %i, compressed size %i, lineCount: %i", srcSize, compressSize, static_cast<int>(cacheCopy.size()));
                 cacheCopy.clear();
             }
         }

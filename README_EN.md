@@ -18,7 +18,10 @@ Connect your android device and text your app's name com.compnay.app, then press
 * Take screen-shot every 5 second
 * Time-line based result filter
 * Transfer memory related function's call-stack in real-time (by TCP Socket)
+* Network packet is compressed using lz4 to speed-up sending & receiving process
 * Fast and portable (Developed in c++ and QT framework)
+* Support Windows & Max OSX (Mojave+)
+* Support and recommend to use release build of apk
 
 ## Unity Integration
 

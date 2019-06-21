@@ -16,7 +16,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE    := libloli
 LOCAL_CFLAGS    := -Werror
 LOCAL_CXXFLAGS  := -Werror -std=c++11
-LOCAL_SRC_FILES := loli.cpp
+LOCAL_SRC_FILES := loli.cpp lz4/lz4.c
 LOCAL_LDLIBS    := -llog -latomic
 LOCAL_SHARED_LIBRARIES := xhook-prebuilt
 

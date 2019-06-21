@@ -41,6 +41,8 @@ private:
     bool serverConnected_ = false;
     quint32 packetSize_ = 0;
     char* buffer_ = nullptr;
+    char* compressBuffer_ = nullptr;
+    quint32 compressBufferSize_ = 1024;
     QByteArray bufferCache_;
 };
 

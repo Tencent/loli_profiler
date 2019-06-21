@@ -24,7 +24,6 @@ extern "C" {
 #include <stdlib.h>
 #include <string.h>
 #include <unwind.h>
-#include <xhook.h>
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -32,6 +31,9 @@ extern "C" {
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+#include "xhook.h"
+#include "lz4/lz4.h"
 
 namespace trace {
 size_t capture(void** buffer, size_t max);
@@ -209,7 +211,7 @@ namespace server { // begin server
 char* buffer_ = NULL;
 std::mutex sendCacheMutex_;
 std::vector<std::string> sendCache_;
-const std::size_t bandwidth_ = 500;
+const std::size_t bandwidth_ = 3000;
 std::atomic<bool> serverRunning_ {true};
 std::atomic<bool> hasClient_ {false};
 std::thread socketThread_;
@@ -227,6 +229,8 @@ void sendMessage(const std::vector<std::string>& cache) {
 
 void serverLoop(int sock) {
     std::vector<std::string> cacheCopy;
+    uint32_t compressBufferSize = 1024;
+    char* compressBuffer = new char[compressBufferSize];
     struct timeval time;
     time.tv_usec = 33;
     fd_set fds;
@@ -275,14 +279,28 @@ void serverLoop(int sock) {
                 for (auto& str : cacheCopy) 
                     stream << str << std::endl;
                 const auto& str = stream.str();
-                std::uint32_t strSize = static_cast<std::uint32_t>(str.size());
-                send(clientSock, &strSize, 4, 0); // send length first
-                send(clientSock, str.c_str(), str.size(), 0); // then send data
-                __android_log_print(ANDROID_LOG_INFO, "Loli", "send size %i, lineCount: %i", strSize, static_cast<int>(cacheCopy.size()));
+                std::uint32_t srcSize = static_cast<std::uint32_t>(str.size());
+                // lz4 compression
+                uint32_t requiredSize = LZ4_compressBound(srcSize);
+                if (requiredSize > compressBufferSize) { // enlarge compress buffer if necessary
+                    compressBufferSize = static_cast<std::uint32_t>(requiredSize * 1.5f);
+                    delete[] compressBuffer;
+                    compressBuffer = new char[compressBufferSize];
+                }
+                uint32_t compressSize = LZ4_compress_default(str.c_str(), compressBuffer, srcSize, requiredSize);
+                if (compressSize == 0) 
+                    __android_log_print(ANDROID_LOG_INFO, "Loli", "LZ4 compression failed!");
+                compressSize += 4;
+                // send messages
+                send(clientSock, &compressSize, 4, 0); // send net buffer size
+                send(clientSock, &srcSize, 4, 0); // send uncompressed buffer size (for decompression)
+                send(clientSock, compressBuffer, compressSize - 4, 0); // then send data
+                __android_log_print(ANDROID_LOG_INFO, "Loli", "send size %i, compressed size %i, lineCount: %i", srcSize, compressSize, static_cast<int>(cacheCopy.size()));
                 cacheCopy.clear();
             }
         }
     }
+    delete[] compressBuffer;
     close(sock);
     if (hasClient_)
         close(clientSock);

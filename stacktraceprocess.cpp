@@ -1,9 +1,12 @@
 #include "stacktraceprocess.h"
 #include "timeprofiler.h"
 
+#include "lz4/lz4.h"
+
 #include <QtEndian>
 #include <QTcpSocket>
 #include <QTextStream>
+#include <QDataStream>
 #include <QRegularExpression>
 #include <QProcess>
 #include <QDebug>
@@ -13,6 +16,7 @@
 StackTraceProcess::StackTraceProcess(QObject* parent)
     : QObject(parent), socket_(new QTcpSocket(this)) {
     buffer_ = new char[BUFFER_SIZE];
+    compressBuffer_ = new char[compressBufferSize_];
     socket_->setReadBufferSize(BUFFER_SIZE);
     connect(socket_, &QTcpSocket::readyRead, this, &StackTraceProcess::OnDataReceived);
     connect(socket_, &QTcpSocket::connected, this, &StackTraceProcess::OnConnected);
@@ -51,9 +55,22 @@ enum loliFlags {
 };
 
 void StackTraceProcess::Interpret(const QByteArray& bytes) {
+    quint32 originSize = *reinterpret_cast<const quint32*>(bytes.data());
+//    qDebug() << "originSize: " << originSize;
+    if (originSize > compressBufferSize_) {
+        compressBufferSize_ = static_cast<quint32>(originSize * 1.5f);
+        delete[] compressBuffer_;
+        compressBuffer_ = new char[compressBufferSize_];
+    }
+    auto decompressSize = LZ4_decompress_safe(bytes.data() + 4, compressBuffer_, bytes.size() - 4, static_cast<qint32>(compressBufferSize_));
+    if (decompressSize == 0) {
+        qDebug() << "LZ4 decompression failed!";
+        return;
+    }
     freeInfo_.clear();
     stackInfo_.clear();
-    QTextStream stream(bytes);
+    QByteArray uncompressedBytes = QByteArray::fromRawData(compressBuffer_, decompressSize);
+    QTextStream stream(uncompressedBytes);
     QString line;
     int lineCount = 0;
     while (stream.readLineInto(&line)) {

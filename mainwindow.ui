@@ -393,7 +393,7 @@
               <item>
                <widget class="QWidget" name="horizontalWidget" native="true">
                 <property name="sizePolicy">
-                 <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                 <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                   <horstretch>0</horstretch>
                   <verstretch>0</verstretch>
                  </sizepolicy>
@@ -404,107 +404,94 @@
                   <height>25</height>
                  </size>
                 </property>
-                <widget class="QComboBox" name="memSizeComboBox">
-                 <property name="geometry">
-                  <rect>
-                   <x>130</x>
-                   <y>0</y>
-                   <width>120</width>
-                   <height>22</height>
-                  </rect>
+                <layout class="QHBoxLayout" name="horizontalLayout">
+                 <property name="spacing">
+                  <number>5</number>
                  </property>
-                 <property name="toolTip">
-                  <string>Filter result by size.</string>
+                 <property name="leftMargin">
+                  <number>0</number>
                  </property>
-                 <item>
-                  <property name="text">
-                   <string>All Allocations</string>
-                  </property>
-                 </item>
-                 <item>
-                  <property name="text">
-                   <string>Large</string>
-                  </property>
-                 </item>
-                 <item>
-                  <property name="text">
-                   <string>Medium</string>
-                  </property>
-                 </item>
-                 <item>
-                  <property name="text">
-                   <string>Small</string>
-                  </property>
-                 </item>
-                </widget>
-                <widget class="QComboBox" name="modeComboBox">
-                 <property name="geometry">
-                  <rect>
-                   <x>0</x>
-                   <y>0</y>
-                   <width>120</width>
-                   <height>22</height>
-                  </rect>
+                 <property name="topMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="rightMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="bottomMargin">
+                  <number>0</number>
                  </property>
                  <item>
-                  <property name="text">
-                   <string>Allocations</string>
-                  </property>
+                  <widget class="QComboBox" name="modeComboBox">
+                   <item>
+                    <property name="text">
+                     <string>Allocations</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>Persistent</string>
+                    </property>
+                   </item>
+                  </widget>
                  </item>
                  <item>
-                  <property name="text">
-                   <string>Persistent</string>
-                  </property>
+                  <widget class="QComboBox" name="memSizeComboBox">
+                   <property name="toolTip">
+                    <string>Filter result by size.</string>
+                   </property>
+                   <item>
+                    <property name="text">
+                     <string>All Allocations</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>Large</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>Medium</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>Small</string>
+                    </property>
+                   </item>
+                  </widget>
                  </item>
-                </widget>
-                <widget class="QSpinBox" name="minXspinBox">
-                 <property name="geometry">
-                  <rect>
-                   <x>260</x>
-                   <y>0</y>
-                   <width>90</width>
-                   <height>22</height>
-                  </rect>
-                 </property>
-                 <property name="toolTip">
-                  <string>Chart Filter Min</string>
-                 </property>
-                 <property name="maximum">
-                  <number>999999999</number>
-                 </property>
-                </widget>
-                <widget class="QSpinBox" name="maxXspinBox">
-                 <property name="geometry">
-                  <rect>
-                   <x>360</x>
-                   <y>0</y>
-                   <width>90</width>
-                   <height>22</height>
-                  </rect>
-                 </property>
-                 <property name="toolTip">
-                  <string>Chart Filter Max</string>
-                 </property>
-                 <property name="maximum">
-                  <number>999999999</number>
-                 </property>
-                 <property name="value">
-                  <number>999999999</number>
-                 </property>
-                </widget>
-                <widget class="QPushButton" name="resetFilterPushButton">
-                 <property name="geometry">
-                  <rect>
-                   <x>460</x>
-                   <y>0</y>
-                   <width>90</width>
-                   <height>22</height>
-                  </rect>
-                 </property>
-                 <property name="text">
-                  <string>Reset Filter</string>
-                 </property>
-                </widget>
+                 <item>
+                  <widget class="QSpinBox" name="minXspinBox">
+                   <property name="toolTip">
+                    <string>Chart Filter Min</string>
+                   </property>
+                   <property name="maximum">
+                    <number>999999999</number>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QSpinBox" name="maxXspinBox">
+                   <property name="toolTip">
+                    <string>Chart Filter Max</string>
+                   </property>
+                   <property name="maximum">
+                    <number>999999999</number>
+                   </property>
+                   <property name="value">
+                    <number>999999999</number>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QPushButton" name="resetFilterPushButton">
+                   <property name="text">
+                    <string>Reset Filter</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
                </widget>
               </item>
              </layout>

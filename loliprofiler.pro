@@ -30,6 +30,7 @@ SOURCES += \
         charttooltipitem.cpp \
         fixedscrollarea.cpp \
         interactivechartview.cpp \
+        lz4/lz4.c \
         main.cpp \
         mainwindow.cpp \
         screenshotprocess.cpp \
@@ -42,6 +43,7 @@ HEADERS += \
         charttooltipitem.h \
         fixedscrollarea.h \
         interactivechartview.h \
+        lz4/lz4.h \
         mainwindow.h \
         screenshotprocess.h \
         stacktraceprocess.h \

@@ -4,7 +4,7 @@
 
 void FixedScrollArea::resizeEvent(QResizeEvent *event) {
     if (widget()) {
-        widget()->setFixedWidth(width() - verticalScrollBar()->width() - 2);
+        widget()->setFixedWidth(width() - (verticalScrollBar()->isVisible() ? (verticalScrollBar()->width() - 2) : 0));
     }
     QScrollArea::resizeEvent(event);
 }

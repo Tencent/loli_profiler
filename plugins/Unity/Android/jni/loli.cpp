@@ -50,7 +50,7 @@ void shundown();
 std::chrono::system_clock::time_point hookTime_;
 std::mutex cacheMutex_;
 std::vector<std::string> cache_;
-std::vector<std::string> cacheCopy_;
+bool hooked_ = false;
 
 enum loliFlags {
     FREE_ = 0, 
@@ -74,6 +74,8 @@ void *loliMalloc(size_t size) {
 }
 
 void loliFree(void* ptr) {
+    if (ptr == nullptr) 
+        return;
     std::ostringstream oss;
     auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - hookTime_).count();
     oss << FREE_ << '\\'<< time << '\\' << ptr;
@@ -100,6 +102,8 @@ void *loliCalloc(int n, int size) {
 }
 
 int loliHook(const char *soNames) {
+    if (hooked_)
+        return 0;
     hookTime_ = std::chrono::system_clock::now();
     std::string names(soNames);
     std::string token;
@@ -129,20 +133,8 @@ int loliHook(const char *soNames) {
     xhook_refresh(0);
     auto svr = server::start(7100);
     __android_log_print(ANDROID_LOG_INFO, "Loli", "server start status %i", svr);
+    hooked_ = true;
     return ecode;
-}
-
-void loliTick() {
-    if (!server::started()) 
-        return;
-    { // copy in memory is faster than write to file
-        std::lock_guard<std::mutex> lock(cacheMutex_);
-        cacheCopy_ = std::move(cache_);
-    }
-    if (cacheCopy_.size() > 0) {
-        server::sendMessage(cacheCopy_);
-        cacheCopy_.clear();
-    }
 }
 
 namespace trace { // begin trace
@@ -209,8 +201,6 @@ void dump(std::ostream& os, void** buffer, size_t count) {
 namespace server { // begin server
 
 char* buffer_ = NULL;
-std::mutex sendCacheMutex_;
-std::vector<std::string> sendCache_;
 const std::size_t bandwidth_ = 3000;
 std::atomic<bool> serverRunning_ {true};
 std::atomic<bool> hasClient_ {false};
@@ -221,20 +211,16 @@ bool started() {
     return started_;
 }
 
-void sendMessage(const std::vector<std::string>& cache) {
-    std::lock_guard<std::mutex> lock(sendCacheMutex_);
-    for (auto& str : cache)
-        sendCache_.emplace_back(std::move(str));
-}
-
 void serverLoop(int sock) {
     std::vector<std::string> cacheCopy;
+    std::vector<std::string> sendCache;
     uint32_t compressBufferSize = 1024;
     char* compressBuffer = new char[compressBufferSize];
     struct timeval time;
     time.tv_usec = 33;
     fd_set fds;
     int clientSock = -1;
+    auto lastTickTime = std::chrono::steady_clock::now();
     int count = 0;
     while (serverRunning_) {
         if (!serverRunning_)
@@ -251,6 +237,19 @@ void serverLoop(int sock) {
                 }
             }
         } else {
+            // fill cached messages
+            auto now = std::chrono::steady_clock::now();
+            if (std::chrono::duration<double, std::milli>(now - lastTickTime).count() > 66.6) {
+                lastTickTime = now;
+                std::lock_guard<std::mutex> lock(cacheMutex_);
+                if (sendCache.size() > 0) {
+                    sendCache.insert(sendCache.end(), cache_.begin(), cache_.end());
+                    cache_.clear();
+                }
+                else {
+                    sendCache = std::move(cache_);
+                }
+            }
             // check for client connectivity
             FD_ZERO(&fds);
             FD_SET(clientSock, &fds);
@@ -263,15 +262,14 @@ void serverLoop(int sock) {
             }
             // send cached messages with limited banwidth
             {
-                std::lock_guard<std::mutex> lock(sendCacheMutex_);
-                auto cacheSize = sendCache_.size();
+                auto cacheSize = sendCache.size();
                 if (cacheSize <= bandwidth_) {
-                    cacheCopy = std::move(sendCache_);
+                    cacheCopy = std::move(sendCache);
                 } else {
                     cacheCopy.reserve(bandwidth_);
                     for (std::size_t i = cacheSize - bandwidth_; i < cacheSize; i++)
-                        cacheCopy.emplace_back(std::move(sendCache_[i]));
-                    sendCache_.erase(sendCache_.begin() + (cacheSize - bandwidth_), sendCache_.end());
+                        cacheCopy.emplace_back(std::move(sendCache[i]));
+                    sendCache.erase(sendCache.begin() + (cacheSize - bandwidth_), sendCache.end());
                 }
             }
             if (cacheCopy.size() > 0) {
@@ -288,14 +286,16 @@ void serverLoop(int sock) {
                     compressBuffer = new char[compressBufferSize];
                 }
                 uint32_t compressSize = LZ4_compress_default(str.c_str(), compressBuffer, srcSize, requiredSize);
-                if (compressSize == 0) 
+                if (compressSize == 0) {
                     __android_log_print(ANDROID_LOG_INFO, "Loli", "LZ4 compression failed!");
-                compressSize += 4;
-                // send messages
-                send(clientSock, &compressSize, 4, 0); // send net buffer size
-                send(clientSock, &srcSize, 4, 0); // send uncompressed buffer size (for decompression)
-                send(clientSock, compressBuffer, compressSize - 4, 0); // then send data
-                // __android_log_print(ANDROID_LOG_INFO, "Loli", "send size %i, compressed size %i, lineCount: %i", srcSize, compressSize, static_cast<int>(cacheCopy.size()));
+                } else {
+                    compressSize += 4;
+                    // send messages
+                    send(clientSock, &compressSize, 4, 0); // send net buffer size
+                    send(clientSock, &srcSize, 4, 0); // send uncompressed buffer size (for decompression)
+                    send(clientSock, compressBuffer, compressSize - 4, 0); // then send data
+                    // __android_log_print(ANDROID_LOG_INFO, "Loli", "send size %i, compressed size %i, lineCount: %i", srcSize, compressSize, static_cast<int>(cacheCopy.size()));
+                }
                 cacheCopy.clear();
             }
         }

@@ -133,7 +133,8 @@ private:
     QtCharts::QChart *stackTraceChart_;
     InteractiveChartView *stackTraceChartView_;
 
-    bool rangeFilterChanged_ = false;
+    bool filterDirty_ = false;
+    bool isCapturing_ = false;
     bool isConnected_ = false;
 };
 

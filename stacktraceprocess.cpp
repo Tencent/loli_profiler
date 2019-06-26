@@ -25,6 +25,7 @@ StackTraceProcess::StackTraceProcess(QObject* parent)
 
 StackTraceProcess::~StackTraceProcess(){
     delete[] buffer_;
+    delete[] compressBuffer_;
 }
 
 void StackTraceProcess::ConnectToServer(int port) {
@@ -46,6 +47,7 @@ void StackTraceProcess::ConnectToServer(int port) {
 
 void StackTraceProcess::Disconnect() {
     socket_->close();
+    packetSize_ = 0;
 }
 
 enum loliFlags {

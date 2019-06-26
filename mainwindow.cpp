@@ -139,6 +139,7 @@ MainWindow::MainWindow(QWidget *parent) :
 
     mainTimer_ = new QTimer(this);
     connect(mainTimer_, SIGNAL(timeout()), this, SLOT(FixedUpdate()));
+    mainTimer_->start(1000);
 }
 
 MainWindow::~MainWindow() {
@@ -389,7 +390,7 @@ QString MainWindow::SizeToString(int size) const {
 
 void MainWindow::ConnectionFailed() {
     isConnected_ = false;
-    mainTimer_->stop();
+    isCapturing_ = false;
     if (screenshotProcess_->IsRunning())
         screenshotProcess_->Process()->kill();
     stacktraceProcess_->Disconnect();
@@ -488,7 +489,7 @@ void MainWindow::FilterTreeWidget() {
         if (item->isHidden() != hide)
             item->setHidden(hide);
     }
-    rangeFilterChanged_ = false;
+    filterDirty_ = false;
 }
 
 QString MainWindow::TryAddNewAddress(const QString& lib, const QString& addr) {
@@ -542,16 +543,17 @@ void MainWindow::SetSeriesY(QtCharts::QLineSeries* series, int x, int y) {
 }
 
 void MainWindow::FixedUpdate() {
-    if (rangeFilterChanged_) {
+    if (filterDirty_)
         FilterTreeWidget();
-        rangeFilterChanged_ = false;
-    }
+    if (!isConnected_)
+        return;
     if (time_ - lastScreenshotTime_ >= 5 && !screenshotProcess_->IsRunning()) {
         lastScreenshotTime_ = time_;
         screenshotProcess_->CaptureScreenshot();
     }
     if (!stacktraceProcess_->IsConnecting() && !stacktraceProcess_->IsConnected()) {
-        stacktraceProcess_->ConnectToServer(8006);
+        static int port = 8000;
+        stacktraceProcess_->ConnectToServer(port++);
         Print("Connecting to application server ... ");
     }
     time_++;
@@ -565,8 +567,6 @@ void MainWindow::OnTimeSelectionChange(const QPointF& pos) {
         ui->minXspinBox->setValue(ui->minXspinBox->minimum());
         ui->maxXspinBox->setValue(static_cast<int>(pos.x()));
     }
-    if (!mainTimer_->isActive())
-        FilterTreeWidget();
     int index = GetScreenshotIndex(pos);
     if (index == -1)
         return;
@@ -623,7 +623,6 @@ void MainWindow::StartAppProcessFinished(AdbProcess* process) {
     screenshotProcess_->SetExecutablePath(adbPath_);
     stacktraceProcess_->SetExecutablePath(adbPath_);
     lastScreenshotTime_ = time_ = 0;
-    mainTimer_->start(1000);
     Print("Application Started!");
     stacktraceRetryCount_ = 30;
 }
@@ -733,6 +732,8 @@ void MainWindow::StacktraceDataReceived() {
 }
 
 void MainWindow::StacktraceConnectionLost() {
+    if (!isCapturing_)
+        return;
     Print(QString("Connection failed, retrying %1").arg(stacktraceRetryCount_));
     stacktraceRetryCount_--;
     if (stacktraceRetryCount_ <= 0)
@@ -860,6 +861,7 @@ void MainWindow::on_launchPushButton_clicked() {
     startAppProcess_->SetExecutablePath(adbPath_);
     startAppProcess_->StartApp(ui->appNameLineEdit->text());
 
+    isCapturing_ = true;
     Print("Starting application ...");
 }
 
@@ -927,33 +929,30 @@ void MainWindow::on_addr2LinePushButton_clicked() {
 }
 
 void MainWindow::on_modeComboBox_currentIndexChanged(int) {
-    FilterTreeWidget();
+    filterDirty_ = true;
 }
 
 void MainWindow::on_memSizeComboBox_currentIndexChanged(int) {
-    FilterTreeWidget();
+    filterDirty_ = true;
 }
 
 void MainWindow::on_minXspinBox_valueChanged(int) {
-    rangeFilterChanged_ = true;
+    filterDirty_ = true;
 }
 
 void MainWindow::on_maxXspinBox_valueChanged(int) {
-    rangeFilterChanged_ = true;
+    filterDirty_ = true;
 }
 
 void MainWindow::on_minXspinBox_editingFinished() {
-    FilterTreeWidget();
+    filterDirty_ = true;
 }
 
 void MainWindow::on_maxXspinBox_editingFinished() {
-    FilterTreeWidget();
+    filterDirty_ = true;
 }
 
 void MainWindow::on_resetFilterPushButton_clicked() {
     ui->minXspinBox->setValue(ui->minXspinBox->minimum());
     ui->maxXspinBox->setValue(ui->maxXspinBox->maximum());
-    if (!mainTimer_->isActive()) {
-        FilterTreeWidget();
-    }
 }

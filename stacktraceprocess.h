@@ -36,7 +36,7 @@ private:
     QString execPath_;
     QVector<QStringList> stackInfo_;
     QVector<QPair<int, QString>> freeInfo_;
-    QTcpSocket* socket_;
+    QTcpSocket* socket_ = nullptr;
     bool connectingServer_ = false;
     bool serverConnected_ = false;
     quint32 packetSize_ = 0;

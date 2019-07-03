@@ -10,6 +10,7 @@
 #include <QUuid>
 
 #include "screenshotprocess.h"
+#include "meminfoprocess.h"
 #include "stacktraceprocess.h"
 #include "addressprocess.h"
 #include "startappprocess.h"
@@ -49,13 +50,11 @@ private:
     void ShowScreenshotAt(int index);
 
     void HideToolTips();
-    void UpdateStackTraceRange();
+    void UpdateMemInfoRange();
     bool GetTreeWidgetItemShouldHide(QTreeWidgetItem* item) const;
     void FilterTreeWidget();
 
     QString TryAddNewAddress(const QString& lib, const QString& addr);
-    QtCharts::QLineSeries* GetStackTraceSeries(const QString &name);
-    void SetSeriesY(QtCharts::QLineSeries* series, int x, int y);
 
 private slots:
     void FixedUpdate();
@@ -66,6 +65,8 @@ private slots:
 
     void StartAppProcessFinished(AdbProcess* process);
     void StartAppProcessErrorOccurred();
+    void MemInfoProcessFinished(AdbProcess* process);
+    void MemInfoProcessErrorOccurred();
     void ScreenshotProcessFinished(AdbProcess* process);
     void ScreenshotProcessErrorOccurred();
     void StacktraceDataReceived();
@@ -83,11 +84,8 @@ private slots:
     void on_stackTreeWidget_itemSelectionChanged();
     void on_symbloPushButton_clicked();
     void on_addr2LinePushButton_clicked();
-    void on_modeComboBox_currentIndexChanged(int index);
     void on_memSizeComboBox_currentIndexChanged(int index);
-    void on_minXspinBox_valueChanged(int arg1);
     void on_maxXspinBox_valueChanged(int arg1);
-    void on_minXspinBox_editingFinished();
     void on_maxXspinBox_editingFinished();
     void on_resetFilterPushButton_clicked();
 
@@ -113,7 +111,6 @@ private:
 
     // stacktrace process
     StackTraceProcess *stacktraceProcess_;
-    int maxStackTraceCount_ = 0;
     int stacktraceRetryCount_ = 0;
 
     // address process
@@ -123,15 +120,17 @@ private:
     // <mem address>
     QSet<QString> persistentAddrs_;
 
+    // meminfo process
+    MemInfoProcess* memInfoProcess_;
+    int maxMemInfoValue_ = 128;
+    QVector<QtCharts::QLineSeries*> memInfoSeries_;
+    QtCharts::QValueAxis *memInfoAxisX_;
+    QtCharts::QValueAxis *memInfoAxisY_;
+    QtCharts::QChart *memInfoChart_;
+    InteractiveChartView *memInfoChartView_;
+
     // charts
     FixedScrollArea* scrollArea_;
-
-    // stack trace chart
-    QMap<QString, QtCharts::QLineSeries*> stackTraceSeries_;
-    QtCharts::QValueAxis *stackTraceAxisX_;
-    QtCharts::QValueAxis *stackTraceAxisY_;
-    QtCharts::QChart *stackTraceChart_;
-    InteractiveChartView *stackTraceChartView_;
 
     bool filterDirty_ = false;
     bool isCapturing_ = false;

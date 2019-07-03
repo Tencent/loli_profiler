@@ -33,6 +33,7 @@ SOURCES += \
         lz4/lz4.c \
         main.cpp \
         mainwindow.cpp \
+        meminfoprocess.cpp \
         screenshotprocess.cpp \
         stacktraceprocess.cpp \
         startappprocess.cpp
@@ -45,6 +46,7 @@ HEADERS += \
         interactivechartview.h \
         lz4/lz4.h \
         mainwindow.h \
+        meminfoprocess.h \
         screenshotprocess.h \
         stacktraceprocess.h \
         startappprocess.h \

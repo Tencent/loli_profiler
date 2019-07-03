@@ -64,6 +64,10 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(screenshotProcess_, &ScreenshotProcess::ProcessFinished, this, &MainWindow::ScreenshotProcessFinished);
     connect(screenshotProcess_, &ScreenshotProcess::ProcessErrorOccurred, this, &MainWindow::ScreenshotProcessErrorOccurred);
 
+    memInfoProcess_ = new MemInfoProcess(this);
+    connect(memInfoProcess_, &MemInfoProcess::ProcessFinished, this, &MainWindow::MemInfoProcessFinished);
+    connect(memInfoProcess_, &MemInfoProcess::ProcessErrorOccurred, this, &MainWindow::MemInfoProcessErrorOccurred);
+
     stacktraceProcess_ = new StackTraceProcess(this);
     connect(stacktraceProcess_, &StackTraceProcess::DataReceived, this, &MainWindow::StacktraceDataReceived);
     connect(stacktraceProcess_, &StackTraceProcess::ConnectionLost, this, &MainWindow::StacktraceConnectionLost);
@@ -80,30 +84,40 @@ MainWindow::MainWindow(QWidget *parent) :
         ui->screenshotGraphicsView->scene()->addItem(item);
     }
 
-    // setup stacktrace chart
-    stackTraceChart_ = new QChart();
-    stackTraceChart_->setTitle("memory io calls");
-    stackTraceChart_->legend()->show();
-    stackTraceChart_->legend()->setAlignment(Qt::AlignBottom);
+    // setup meminfo chart
+    memInfoChart_ = new QChart();
+    memInfoChart_->setTitle("meminfo");
+    memInfoChart_->legend()->show();
+    memInfoChart_->legend()->setAlignment(Qt::AlignBottom);
 
-    stackTraceAxisX_ = new QValueAxis();
-    stackTraceAxisX_->setLabelFormat("%i");
-    stackTraceAxisX_->setTickCount(11);
-    stackTraceAxisX_->setRange(0, 100);
-    stackTraceChart_->addAxis(stackTraceAxisX_, Qt::AlignBottom);
+    memInfoAxisX_ = new QValueAxis();
+    memInfoAxisX_->setLabelFormat("%i");
+    memInfoAxisX_->setTickCount(11);
+    memInfoAxisX_->setRange(0, 100);
+    memInfoChart_->addAxis(memInfoAxisX_, Qt::AlignBottom);
 
-    stackTraceAxisY_ = new QValueAxis();
-    stackTraceAxisY_->setLabelFormat("%i");
-    stackTraceAxisY_->setRange(0, 1024);
-    stackTraceChart_->addAxis(stackTraceAxisY_, Qt::AlignLeft);
+    memInfoAxisY_ = new QValueAxis();
+    memInfoAxisY_->setLabelFormat("%i");
+    memInfoChart_->addAxis(memInfoAxisY_, Qt::AlignLeft);
+    UpdateMemInfoRange();
 
-    stackTraceChartView_ = new InteractiveChartView(stackTraceChart_);
-    stackTraceChartView_->setRenderHint(QPainter::Antialiasing);
-    stackTraceChartView_->setContentsMargins(0, 0, 0, 0);
-    stackTraceChartView_->setFixedHeight(250);
+    QVector<QString> memInfoTitles = {"Total", "NativeHeap", "GfxDev", "EGLmtrack", "GLmtrack", "Unkonw"};
+    for (int i = 0; i < memInfoTitles.size(); i++) {
+        auto series = new QLineSeries();
+        series->setName(memInfoTitles[i]);
+        memInfoSeries_.push_back(series);
+        memInfoChart_->addSeries(series);
+        series->attachAxis(memInfoAxisX_);
+        series->attachAxis(memInfoAxisY_);
+    }
 
-    connect(stackTraceChartView_, &InteractiveChartView::OnSyncScroll, this, &MainWindow::OnSyncScroll);
-    connect(stackTraceChartView_, &InteractiveChartView::OnSelectionChange, this, &MainWindow::OnTimeSelectionChange);
+    memInfoChartView_ = new InteractiveChartView(memInfoChart_);
+    memInfoChartView_->setRenderHint(QPainter::Antialiasing);
+    memInfoChartView_->setContentsMargins(0, 0, 0, 0);
+    memInfoChartView_->setFixedHeight(250);
+
+    connect(memInfoChartView_, &InteractiveChartView::OnSyncScroll, this, &MainWindow::OnSyncScroll);
+    connect(memInfoChartView_, &InteractiveChartView::OnSelectionChange, this, &MainWindow::OnTimeSelectionChange);
 
     // steup chart scroll area
     scrollArea_ = new FixedScrollArea();
@@ -115,7 +129,7 @@ MainWindow::MainWindow(QWidget *parent) :
     scrollArea_->widget()->setLayout(new QVBoxLayout());
     scrollArea_->widget()->setContentsMargins(0, 0, 0, 0);
     scrollArea_->widget()->layout()->setSpacing(0);
-    scrollArea_->widget()->layout()->addWidget(stackTraceChartView_);
+    scrollArea_->widget()->layout()->addWidget(memInfoChartView_);
     scrollArea_->widget()->setFixedSize(100, 250);
     connect(scrollArea_, &FixedScrollArea::ScaleTriggered, [this](int delta) {
         ui->chartScaleHSlider->setValue(
@@ -216,12 +230,11 @@ void MainWindow::SaveToFile(QFile *file) {
     stream << static_cast<quint32>(APP_MAGIC);
     stream << static_cast<qint32>(APP_VERSION);
     stream.setVersion(QDataStream::Qt_5_12);
-    // mem io calls
-    stream << static_cast<qint32>(maxStackTraceCount_);
-    stream << static_cast<qint32>(stackTraceSeries_.size());
-    for (auto series : stackTraceSeries_) {
+    // meminfo charts
+    stream << static_cast<qint32>(maxMemInfoValue_);
+    stream << static_cast<qint32>(memInfoSeries_.size());
+    for (auto series : memInfoSeries_) {
         auto count = static_cast<qint32>(series->count());
-        stream << series->name();
         stream << count;
         for (int i = 0; i < count; i++) {
             auto point = series->at(i);
@@ -280,29 +293,28 @@ int MainWindow::LoadFromFile(QFile *file) {
     if (version != APP_VERSION)
         return static_cast<qint32>(IOErrorCode::VERSION_MISSMATCH);
     callStackModel_->clear();
-    // mem io calls
+    // meminfo charts
     qint32 value;
     stream >> value;
-    maxStackTraceCount_ = value;
-    UpdateStackTraceRange();
-    stream >> value;
-    stackTraceChart_->removeAllSeries();
-    stackTraceSeries_.clear();
-    for (int i = 0; i < value; i++) {
-        QString seriesName;
-        stream >> seriesName;
-        qint32 pointCount;
-        stream >> pointCount;
-        auto series = GetStackTraceSeries(seriesName);
-        for (int j = 0; j < pointCount; j++) {
+    maxMemInfoValue_ = value;
+    UpdateMemInfoRange();
+    qint32 seriesCount;
+    stream >> seriesCount;
+    for (auto series : memInfoSeries_)
+        series->clear();
+    for (int i = 0 ;i < seriesCount; i++) {
+        int pointsCount;
+        stream >> pointsCount;
+        for (int j = 0; j < pointsCount; j++) {
             QPointF point;
             stream >> point;
-            series->append(point);
+            memInfoSeries_[i]->append(point);
         }
     }
     // callstack tree view
     ui->stackTreeWidget->clear();
     stream >> value;
+    QList<QTreeWidgetItem*> treeItems;
     for (int i = 0; i < value; i++) {
         QString str;
         stream >> str;
@@ -318,10 +330,10 @@ int MainWindow::LoadFromFile(QFile *file) {
         topItem->setText(3, str);
         stream >> str;
         topItem->setText(4, str);
-        auto hide = GetTreeWidgetItemShouldHide(topItem);
-        if (topItem->isHidden() != hide)
-            topItem->setHidden(hide);
+        treeItems.push_back(topItem);
     }
+    ui->stackTreeWidget->addTopLevelItems(treeItems);
+    FilterTreeWidget();
     // callstack map
     callStackMap_.clear();
     stream >> value;
@@ -446,18 +458,16 @@ void MainWindow::ShowScreenshotAt(int index) {
 }
 
 void MainWindow::HideToolTips() {
-    stackTraceChartView_->HideToolTip();
+    memInfoChartView_->HideToolTip();
 }
 
-void MainWindow::UpdateStackTraceRange() {
-    auto maxValue = std::max(maxStackTraceCount_, std::max(64, static_cast<int>(maxStackTraceCount_ * 1.2f)));
-    stackTraceAxisY_->setRange(0, maxValue);
+void MainWindow::UpdateMemInfoRange() {
+    memInfoAxisY_->setRange(0, maxMemInfoValue_);
 }
 
 bool MainWindow::GetTreeWidgetItemShouldHide(QTreeWidgetItem* item) const {
-    auto checkPersistent = ui->modeComboBox->currentIndex() == 1;
     auto time = static_cast<int>(item->data(0, 0).toInt() * 0.001f);
-    if (time < ui->minXspinBox->value() || time > ui->maxXspinBox->value())
+    if (time > ui->maxXspinBox->value())
         return true;
     auto addr = item->data(2, 0).toString();
     auto size = item->data(1, 0).toInt();
@@ -476,20 +486,23 @@ bool MainWindow::GetTreeWidgetItemShouldHide(QTreeWidgetItem* item) const {
         hide = size > 1024;
         break;
     }
-    if (!hide && checkPersistent) {
+    if (!hide)
         hide = !persistentAddrs_.contains(addr);
-    }
     return hide;
 }
 
 void MainWindow::FilterTreeWidget() {
+    int visibleCount = 0;
     for (int i = 0; i < ui->stackTreeWidget->topLevelItemCount(); i++) {
         auto item = ui->stackTreeWidget->topLevelItem(i);
         auto hide = GetTreeWidgetItemShouldHide(item);
         if (item->isHidden() != hide)
             item->setHidden(hide);
+        if (!hide)
+            visibleCount++;
     }
     filterDirty_ = false;
+    ui->recordCountLineEdit->setText(QString::number(visibleCount));
 }
 
 QString MainWindow::TryAddNewAddress(const QString& lib, const QString& addr) {
@@ -508,40 +521,6 @@ QString MainWindow::TryAddNewAddress(const QString& lib, const QString& addr) {
     return addr;
 }
 
-QLineSeries* MainWindow::GetStackTraceSeries(const QString &name) {
-    if (!stackTraceSeries_.contains(name)) {
-        auto series = new QLineSeries();
-        series->setName(name);
-        stackTraceSeries_.insert(name, series);
-        stackTraceChart_->addSeries(series);
-        series->attachAxis(stackTraceAxisX_);
-        series->attachAxis(stackTraceAxisY_);
-    }
-    return stackTraceSeries_[name];
-}
-
-void MainWindow::SetSeriesY(QtCharts::QLineSeries* series, int x, int y) {
-    if (series->count() == 0 || x > static_cast<int>(series->at(series->count() - 1).x())) {
-        series->append(x, y);
-        return;
-    }
-    for (int i = series->count() - 1; i > 0; i--) {
-        auto point = series->at(i);
-        auto cx = static_cast<int>(point.x());
-        if (cx == x) {
-            auto newY = static_cast<int>(point.y() + y);
-            maxStackTraceCount_ = std::max(maxStackTraceCount_, newY);
-            series->replace(i, x, newY);
-            return;
-        } else if (x > cx && x < static_cast<int>(series->at(i + 1).x())) {
-            series->insert(i + 1, QPointF(x, y));
-            return;
-        }
-    }
-    if (x < static_cast<int>(series->at(0).x()))
-        series->insert(0, QPointF(x, y));
-}
-
 void MainWindow::FixedUpdate() {
     if (filterDirty_)
         FilterTreeWidget();
@@ -550,6 +529,9 @@ void MainWindow::FixedUpdate() {
     if (time_ - lastScreenshotTime_ >= 5 && !screenshotProcess_->IsRunning()) {
         lastScreenshotTime_ = time_;
         screenshotProcess_->CaptureScreenshot();
+    }
+    if (!memInfoProcess_->IsRunning() && !memInfoProcess_->HasErrors()) {
+        memInfoProcess_->DumpMemInfoAsync(ui->appNameLineEdit->text());
     }
     if (!stacktraceProcess_->IsConnecting() && !stacktraceProcess_->IsConnected()) {
         static int port = 8000;
@@ -560,13 +542,7 @@ void MainWindow::FixedUpdate() {
 }
 
 void MainWindow::OnTimeSelectionChange(const QPointF& pos) {
-    if (ui->modeComboBox->currentIndex() == 0) {
-        ui->minXspinBox->setValue(static_cast<int>(pos.x() - 10.0));
-        ui->maxXspinBox->setValue(static_cast<int>(pos.x() + 10.0));
-    } else {
-        ui->minXspinBox->setValue(ui->minXspinBox->minimum());
-        ui->maxXspinBox->setValue(static_cast<int>(pos.x()));
-    }
+    ui->maxXspinBox->setValue(static_cast<int>(pos.x()));
     int index = GetScreenshotIndex(pos);
     if (index == -1)
         return;
@@ -574,7 +550,7 @@ void MainWindow::OnTimeSelectionChange(const QPointF& pos) {
 }
 
 void MainWindow::OnSyncScroll(QtCharts::QChartView* sender, int prevMouseX, int delta) {
-    stackTraceChartView_->SyncScroll(sender, prevMouseX, delta);
+    memInfoChartView_->SyncScroll(sender, prevMouseX, delta);
 }
 
 void MainWindow::OnStackTreeWidgetContextMenu(const QPoint & pos) {
@@ -622,14 +598,33 @@ void MainWindow::StartAppProcessFinished(AdbProcess* process) {
     isConnected_ = true;
     screenshotProcess_->SetExecutablePath(adbPath_);
     stacktraceProcess_->SetExecutablePath(adbPath_);
+    memInfoProcess_->SetExecutablePath(adbPath_);
     lastScreenshotTime_ = time_ = 0;
     Print("Application Started!");
     stacktraceRetryCount_ = 30;
+    memInfoProcess_->DumpMemInfoAsync(ui->appNameLineEdit->text());
 }
 
 void MainWindow::StartAppProcessErrorOccurred() {
     ConnectionFailed();
     Print("Error starting app by adb monkey!");
+}
+
+void MainWindow::MemInfoProcessFinished(AdbProcess* process) {
+    auto memInfoProcess = static_cast<MemInfoProcess*>(process);
+    auto curMemInfo = memInfoProcess->GetMemInfo();
+    maxMemInfoValue_ = std::max(maxMemInfoValue_, std::max(256, static_cast<int>(curMemInfo.Total * 1.2f)));
+    UpdateMemInfoRange();
+    memInfoSeries_[0]->append(time_, curMemInfo.Total);
+    memInfoSeries_[1]->append(time_, curMemInfo.NativeHeap);
+    memInfoSeries_[2]->append(time_, curMemInfo.GfxDev);
+    memInfoSeries_[3]->append(time_, curMemInfo.EGLmtrack);
+    memInfoSeries_[4]->append(time_, curMemInfo.GLmtrack);
+    memInfoSeries_[5]->append(time_, curMemInfo.Unkonw);
+}
+
+void MainWindow::MemInfoProcessErrorOccurred() {
+    Print("Error occurred when dumping meminfo ...");
 }
 
 void MainWindow::ScreenshotProcessFinished(AdbProcess* process) {
@@ -649,7 +644,7 @@ void MainWindow::StacktraceDataReceived() {
     stacktraceRetryCount_ = 5;
     const auto& stacks = stacktraceProcess_->GetStackInfo();
     if (stacks.size() > 0) {
-        QHash<int, QHash<QString, int>> funcMap;
+//        QHash<int, QHash<QString, int>> funcMap;
         QList<QTreeWidgetItem*> treeItems;
         for (const auto& stack : stacks) {
             if (stack.size() < 3)
@@ -671,17 +666,6 @@ void MainWindow::StacktraceDataReceived() {
             parentItem->setText(4, rootAddr);
             treeItems.push_back(parentItem);
             // setHidden is extremly slow when there's large number of items in the TreeViewWidget
-//            auto hide = GetTreeWidgetItemShouldHide(parentItem);
-//            if (parentItem->isHidden() != hide)
-//                parentItem->setHidden(hide);
-            auto castedTime = static_cast<int>(rootTime.toInt() * 0.001f);
-            if (!funcMap.contains(castedTime))
-                funcMap.insert(castedTime, QHash<QString, int>());
-            auto& timeFuncMap = funcMap[castedTime];
-            if (!timeFuncMap.contains(rootAddr))
-                timeFuncMap.insert(rootAddr, 1);
-            else
-                timeFuncMap[rootAddr]++;
             auto& callStack = callStackMap_[parentItem->Uuid()];
             for (int i = 3; i < stack.size() && i + 1 < stack.size(); i += 2) {
                 const auto& libName = stack[i];
@@ -694,41 +678,15 @@ void MainWindow::StacktraceDataReceived() {
         // batch add items to improve performance
         // and we turn off sorting during data capturing
         ui->stackTreeWidget->addTopLevelItems(treeItems);
-        for (auto it = funcMap.constBegin(); it != funcMap.constEnd(); ++it) {
-            const auto& time = it.key();
-            const auto& timeFuncMap = it.value();
-            for (auto funcIt = timeFuncMap.begin(); funcIt != timeFuncMap.end(); ++funcIt) {
-                const auto& funcName = funcIt.key();
-                const auto& count = funcIt.value();
-                if (count > maxStackTraceCount_)
-                    maxStackTraceCount_ = count;
-                SetSeriesY(GetStackTraceSeries(funcName), time, count);
-            }
-        }
     }
     // read free call infos
     const auto& frees = stacktraceProcess_->GetFreeInfo();
     if (frees.size() > 0) {
-        QMap<int, int> funcMap;
         for (const auto& free : frees) {
-            auto time = free.first;
             const auto address = free.second;
             persistentAddrs_.remove(address);
-            auto castedTime = static_cast<int>(time * 0.001f);
-            if (!funcMap.contains(castedTime))
-                funcMap[castedTime] = 1;
-            else
-                funcMap[castedTime]++;
-        }
-        for (auto it = funcMap.constBegin(); it != funcMap.constEnd(); ++it) {
-            auto time = it.key();
-            auto count = it.value();
-            if (count > maxStackTraceCount_)
-                maxStackTraceCount_ = count;
-            SetSeriesY(GetStackTraceSeries("loliFree"), time, count);
         }
     }
-    UpdateStackTraceRange();
 }
 
 void MainWindow::StacktraceConnectionLost() {
@@ -829,6 +787,9 @@ void MainWindow::on_sdkPushButton_clicked() {
 void MainWindow::on_launchPushButton_clicked() {
     if (isConnected_) {
         Print("Stoping capture ...");
+        auto count = ui->stackTreeWidget->topLevelItemCount();
+        if (count > 0)
+            Print(QString("Captured %1 records.").arg(count));
         ConnectionFailed();
         return;
     }
@@ -847,16 +808,16 @@ void MainWindow::on_launchPushButton_clicked() {
 
     ui->stackTreeWidget->clear();
     ui->stackTreeWidget->setSortingEnabled(false);
-    stackTraceChart_->removeAllSeries();
-    stackTraceSeries_.clear();
+    for (auto& series : memInfoSeries_)
+        series->clear();
     screenshots_.clear();
     symbloMap_.clear();
     persistentAddrs_.clear();
     callStackMap_.clear();
     callStackModel_->clear();
 
-    maxStackTraceCount_ = 0;
-    UpdateStackTraceRange();
+    maxMemInfoValue_ = 128;
+    UpdateMemInfoRange();
 
     startAppProcess_->SetExecutablePath(adbPath_);
     startAppProcess_->StartApp(ui->appNameLineEdit->text());
@@ -866,7 +827,7 @@ void MainWindow::on_launchPushButton_clicked() {
 }
 
 void MainWindow::on_chartScaleHSlider_valueChanged(int value) {
-    stackTraceChartView_->SetRangeScale(value);
+    memInfoChartView_->SetRangeScale(value);
     HideToolTips();
 }
 
@@ -928,23 +889,11 @@ void MainWindow::on_addr2LinePushButton_clicked() {
     ui->addr2LinePathLineEdit->setText(path);
 }
 
-void MainWindow::on_modeComboBox_currentIndexChanged(int) {
-    filterDirty_ = true;
-}
-
 void MainWindow::on_memSizeComboBox_currentIndexChanged(int) {
     filterDirty_ = true;
 }
 
-void MainWindow::on_minXspinBox_valueChanged(int) {
-    filterDirty_ = true;
-}
-
 void MainWindow::on_maxXspinBox_valueChanged(int) {
-    filterDirty_ = true;
-}
-
-void MainWindow::on_minXspinBox_editingFinished() {
     filterDirty_ = true;
 }
 
@@ -953,6 +902,5 @@ void MainWindow::on_maxXspinBox_editingFinished() {
 }
 
 void MainWindow::on_resetFilterPushButton_clicked() {
-    ui->minXspinBox->setValue(ui->minXspinBox->minimum());
     ui->maxXspinBox->setValue(ui->maxXspinBox->maximum());
 }

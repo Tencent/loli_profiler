@@ -421,23 +421,9 @@
                   <number>0</number>
                  </property>
                  <item>
-                  <widget class="QComboBox" name="modeComboBox">
-                   <item>
-                    <property name="text">
-                     <string>Allocations</string>
-                    </property>
-                   </item>
-                   <item>
-                    <property name="text">
-                     <string>Persistent</string>
-                    </property>
-                   </item>
-                  </widget>
-                 </item>
-                 <item>
                   <widget class="QComboBox" name="memSizeComboBox">
                    <property name="toolTip">
-                    <string>Filter result by size.</string>
+                    <string>Filter By Size (1KiB, 1024KiB)</string>
                    </property>
                    <item>
                     <property name="text">
@@ -462,16 +448,6 @@
                   </widget>
                  </item>
                  <item>
-                  <widget class="QSpinBox" name="minXspinBox">
-                   <property name="toolTip">
-                    <string>Chart Filter Min</string>
-                   </property>
-                   <property name="maximum">
-                    <number>999999999</number>
-                   </property>
-                  </widget>
-                 </item>
-                 <item>
                   <widget class="QSpinBox" name="maxXspinBox">
                    <property name="toolTip">
                     <string>Chart Filter Max</string>
@@ -488,6 +464,31 @@
                   <widget class="QPushButton" name="resetFilterPushButton">
                    <property name="text">
                     <string>Reset Filter</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QLineEdit" name="recordCountLineEdit">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="minimumSize">
+                    <size>
+                     <width>80</width>
+                     <height>0</height>
+                    </size>
+                   </property>
+                   <property name="toolTip">
+                    <string>Record Count</string>
+                   </property>
+                   <property name="readOnly">
+                    <bool>true</bool>
+                   </property>
+                   <property name="placeholderText">
+                    <string>Record Count</string>
                    </property>
                   </widget>
                  </item>

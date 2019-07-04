@@ -493,16 +493,19 @@ bool MainWindow::GetTreeWidgetItemShouldHide(QTreeWidgetItem* item) const {
 
 void MainWindow::FilterTreeWidget() {
     int visibleCount = 0;
+    int sizeInBytes = 0;
     for (int i = 0; i < ui->stackTreeWidget->topLevelItemCount(); i++) {
         auto item = ui->stackTreeWidget->topLevelItem(i);
         auto hide = GetTreeWidgetItemShouldHide(item);
         if (item->isHidden() != hide)
             item->setHidden(hide);
-        if (!hide)
+        if (!hide) {
             visibleCount++;
+            sizeInBytes += item->data(1, 0).toInt();
+        }
     }
     filterDirty_ = false;
-    ui->recordCountLineEdit->setText(QString::number(visibleCount));
+    ui->recordCountLineEdit->setText(QString::number(visibleCount) + "/" + SizeToString(sizeInBytes));
 }
 
 QString MainWindow::TryAddNewAddress(const QString& lib, const QString& addr) {

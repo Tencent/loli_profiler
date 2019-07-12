@@ -55,6 +55,7 @@ private:
     void FilterTreeWidget();
 
     QString TryAddNewAddress(const QString& lib, const QString& addr);
+    bool IsAddressPersistent(const QString& addr, int time) const;
 
 private slots:
     void FixedUpdate();
@@ -119,6 +120,8 @@ private:
     QHash<QString, QHash<QString, QString>> symbloMap_;
     // <mem address>
     QSet<QString> persistentAddrs_;
+    QVector<QPair<int, QSet<QString>>> persistentAddrSnapshot_;
+    int lastPersistentSnapshotTime_ = 0;
 
     // meminfo process
     MemInfoProcess* memInfoProcess_;

@@ -270,9 +270,13 @@ void MainWindow::SaveToFile(QFile *file) {
         }
     }
     // persistent addresses
-    stream << static_cast<qint32>(persistentAddrs_.count());
-    for (const auto& key : persistentAddrs_) {
-        stream << key;
+    stream << static_cast<qint32>(persistentAddrSnapshot_.count());
+    for (auto it = persistentAddrSnapshot_.begin(); it != persistentAddrSnapshot_.end(); ++it) {
+        stream << static_cast<qint32>(it->first);
+        auto& set = it->second;
+        stream << static_cast<qint32>(set.size());
+        for (auto& key : set)
+            stream << key;
     }
     // screen shots
     stream << static_cast<qint32>(screenshots_.size());
@@ -363,11 +367,19 @@ int MainWindow::LoadFromFile(QFile *file) {
     }
     // persistent addresses
     persistentAddrs_.clear();
+    persistentAddrSnapshot_.clear();
     stream >> value;
     for (int i = 0; i < value; i++) {
-        QString str;
-        stream >> str;
-        persistentAddrs_.insert(str);
+        qint32 time, size;
+        stream >> time;
+        stream >> size;
+        persistentAddrSnapshot_.push_back(qMakePair(time, QSet<QString>()));
+        auto& set = persistentAddrSnapshot_.back().second;
+        for (int j = 0; j < size; j++) {
+            QString key;
+            stream >> key;
+            set.insert(key);
+        }
     }
     // screen shots
     screenshots_.clear();
@@ -466,8 +478,9 @@ void MainWindow::UpdateMemInfoRange() {
 }
 
 bool MainWindow::GetTreeWidgetItemShouldHide(QTreeWidgetItem* item) const {
+    auto targetTime = ui->maxXspinBox->value();
     auto time = static_cast<int>(item->data(0, 0).toInt() * 0.001f);
-    if (time > ui->maxXspinBox->value())
+    if (time > targetTime)
         return true;
     auto addr = item->data(2, 0).toString();
     auto size = item->data(1, 0).toInt();
@@ -487,7 +500,7 @@ bool MainWindow::GetTreeWidgetItemShouldHide(QTreeWidgetItem* item) const {
         break;
     }
     if (!hide)
-        hide = !persistentAddrs_.contains(addr);
+        hide = !IsAddressPersistent(addr, targetTime);
     return hide;
 }
 
@@ -524,6 +537,24 @@ QString MainWindow::TryAddNewAddress(const QString& lib, const QString& addr) {
     return addr;
 }
 
+bool MainWindow::IsAddressPersistent(const QString& addr, int time) const {
+    if (persistentAddrSnapshot_.size() == 0)
+        return false;
+    if (persistentAddrSnapshot_.size() == 1)
+        return persistentAddrSnapshot_[0].second.contains(addr);
+    if (time <= persistentAddrSnapshot_[0].first)
+        return persistentAddrSnapshot_[0].second.contains(addr);
+    if (time >= persistentAddrSnapshot_[persistentAddrSnapshot_.size() - 1].first)
+        return persistentAddrSnapshot_[persistentAddrSnapshot_.size() - 1].second.contains(addr);
+    for (int i = 1; i < persistentAddrSnapshot_.size(); i++) {
+        auto& tp0 = persistentAddrSnapshot_[i - 1];
+        auto& tp1 = persistentAddrSnapshot_[i];
+        if (time > tp0.first && time <= tp1.first)
+            return tp1.second.contains(addr);
+    }
+    return false;
+}
+
 void MainWindow::FixedUpdate() {
     if (filterDirty_)
         FilterTreeWidget();
@@ -540,6 +571,11 @@ void MainWindow::FixedUpdate() {
         static int port = 8000;
         stacktraceProcess_->ConnectToServer(port++);
         Print("Connecting to application server ... ");
+    }
+    // take a snapshot of persistentAddrs_
+    if (time_ - lastPersistentSnapshotTime_ >= 5) {
+        lastPersistentSnapshotTime_ = time_;
+        persistentAddrSnapshot_.push_back(qMakePair(time_, QSet<QString>(persistentAddrs_)));
     }
     time_++;
 }
@@ -602,7 +638,7 @@ void MainWindow::StartAppProcessFinished(AdbProcess* process) {
     screenshotProcess_->SetExecutablePath(adbPath_);
     stacktraceProcess_->SetExecutablePath(adbPath_);
     memInfoProcess_->SetExecutablePath(adbPath_);
-    lastScreenshotTime_ = time_ = 0;
+    lastScreenshotTime_ = lastPersistentSnapshotTime_ = time_ = 0;
     Print("Application Started!");
     stacktraceRetryCount_ = 30;
     memInfoProcess_->DumpMemInfoAsync(ui->appNameLineEdit->text());
@@ -794,6 +830,11 @@ void MainWindow::on_launchPushButton_clicked() {
         if (count > 0)
             Print(QString("Captured %1 records.").arg(count));
         ConnectionFailed();
+        if (persistentAddrSnapshot_.size() > 0) {
+            if (time_ - persistentAddrSnapshot_[persistentAddrSnapshot_.size() - 1].first >= 1) {
+                persistentAddrSnapshot_.push_back(qMakePair(time_, QSet<QString>(persistentAddrs_)));
+            }
+        }
         return;
     }
 
@@ -815,6 +856,7 @@ void MainWindow::on_launchPushButton_clicked() {
         series->clear();
     screenshots_.clear();
     symbloMap_.clear();
+    persistentAddrSnapshot_.clear();
     persistentAddrs_.clear();
     callStackMap_.clear();
     callStackModel_->clear();

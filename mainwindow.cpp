@@ -911,6 +911,10 @@ void MainWindow::on_stackTreeWidget_itemSelectionChanged() {
 }
 
 void MainWindow::on_symbloPushButton_clicked() {
+    if (addrProcess_->IsRunning()) {
+        QMessageBox::warning(this, tr("Warning"), tr("Loading previous symbol, please try again later."));
+        return;
+    }
     auto symbloPath = QFileDialog::getOpenFileName(this, tr("Select Symblo File"),
                                                    GetLastSymbolDir(), tr("Library Files (*.sym *.sym.so *.so)"));
     if (!QFile::exists(symbloPath))

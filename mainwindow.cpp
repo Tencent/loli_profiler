@@ -507,9 +507,28 @@ bool MainWindow::GetTreeWidgetItemShouldHide(QTreeWidgetItem* item) const {
 void MainWindow::FilterTreeWidget() {
     int visibleCount = 0;
     int sizeInBytes = 0;
+    QHash<QString, QPair<int, int>> records; // addr, <time, index>, filters same addr
     for (int i = 0; i < ui->stackTreeWidget->topLevelItemCount(); i++) {
         auto item = ui->stackTreeWidget->topLevelItem(i);
         auto hide = GetTreeWidgetItemShouldHide(item);
+        if (!hide) {
+            auto time = item->data(0, 0).toInt();
+            auto addr = item->data(2, 0).toString();
+            if (records.contains(addr)) {
+                auto pair = records[addr];
+                if (time > pair.first) {
+                    auto oldItem = ui->stackTreeWidget->topLevelItem(pair.second);
+                    oldItem->setHidden(true);
+                    visibleCount--;
+                    sizeInBytes -= oldItem->data(1, 0).toInt();
+                    records[addr] = qMakePair(time, i);
+                } else {
+                    hide = true;
+                }
+            } else {
+                records.insert(addr, qMakePair(time, i));
+            }
+        }
         if (item->isHidden() != hide)
             item->setHidden(hide);
         if (!hide) {

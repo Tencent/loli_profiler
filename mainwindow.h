@@ -88,12 +88,14 @@ private slots:
     void on_memSizeComboBox_currentIndexChanged(int index);
     void on_maxXspinBox_valueChanged(int arg1);
     void on_maxXspinBox_editingFinished();
+    void on_libraryComboBox_currentIndexChanged(int index);
     void on_resetFilterPushButton_clicked();
 
 private:
     Ui::MainWindow *ui;
     QStandardItemModel *callStackModel_;
     QHash<QUuid, QVector<QString>> callStackMap_;
+    QSet<QString> libraries_;
     QString adbPath_;
     QString appPid_;
     QString lastOpenDir_;

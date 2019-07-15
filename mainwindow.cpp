@@ -316,6 +316,7 @@ int MainWindow::LoadFromFile(QFile *file) {
         }
     }
     // callstack tree view
+    QSet<QString> libraries;
     ui->stackTreeWidget->clear();
     stream >> value;
     QList<QTreeWidgetItem*> treeItems;
@@ -332,11 +333,18 @@ int MainWindow::LoadFromFile(QFile *file) {
         topItem->setText(2, str);
         stream >> str;
         topItem->setText(3, str);
+        if (!libraries.contains(str))
+            libraries.insert(str);
         stream >> str;
         topItem->setText(4, str);
         treeItems.push_back(topItem);
     }
     ui->stackTreeWidget->addTopLevelItems(treeItems);
+    ui->libraryComboBox->setCurrentIndex(0);
+    for (int i = 1; i < ui->libraryComboBox->count(); i++)
+        ui->libraryComboBox->removeItem(i);
+    for (auto& library : libraries)
+        ui->libraryComboBox->addItem(library);
     FilterTreeWidget();
     // callstack map
     callStackMap_.clear();
@@ -482,6 +490,7 @@ bool MainWindow::GetTreeWidgetItemShouldHide(QTreeWidgetItem* item) const {
     auto time = static_cast<int>(item->data(0, 0).toInt() * 0.001f);
     if (time > targetTime)
         return true;
+    auto library = item->data(3, 0).toString();
     auto addr = item->data(2, 0).toString();
     auto size = item->data(1, 0).toInt();
     auto hide = false;
@@ -498,6 +507,11 @@ bool MainWindow::GetTreeWidgetItemShouldHide(QTreeWidgetItem* item) const {
     case 3: // small
         hide = size > 1024;
         break;
+    }
+    if (!hide) {
+        if (ui->libraryComboBox->currentIndex() != 0) {
+            hide = ui->libraryComboBox->currentText() != library;
+        }
     }
     if (!hide)
         hide = !IsAddressPersistent(addr, targetTime);
@@ -720,18 +734,24 @@ void MainWindow::StacktraceDataReceived() {
             parentItem->setData(0, 0, QVariant(rootTime.toInt()));
             parentItem->setData(1, 0, QVariant(rootSize.toInt()));
             parentItem->setText(2, rootMem);
-            parentItem->setText(3, rootLib);
-            parentItem->setText(4, rootAddr);
-            treeItems.push_back(parentItem);
-            // setHidden is extremly slow when there's large number of items in the TreeViewWidget
+            // begin record full callstack, and find which lib starts this callstack
             auto& callStack = callStackMap_[parentItem->Uuid()];
+            auto callStackLib = QString();
             for (int i = 3; i < stack.size() && i + 1 < stack.size(); i += 2) {
                 const auto& libName = stack[i];
                 const auto& funcAddr = stack[i + 1];
+                callStackLib = libName;
                 TryAddNewAddress(libName, funcAddr);
                 callStack.append(libName);
                 callStack.append(funcAddr);
             }
+            // end record callstack
+            if (!libraries_.contains(callStackLib))
+                libraries_.insert(callStackLib);
+            parentItem->setText(3, callStackLib);
+            parentItem->setText(4, rootAddr);
+            treeItems.push_back(parentItem);
+            // setHidden is extremly slow when there's large number of items in the TreeViewWidget
         }
         // batch add items to improve performance
         // and we turn off sorting during data capturing
@@ -854,11 +874,17 @@ void MainWindow::on_launchPushButton_clicked() {
                 persistentAddrSnapshot_.push_back(qMakePair(time_, QSet<QString>(persistentAddrs_)));
             }
         }
+        for (auto& library : libraries_)
+            ui->libraryComboBox->addItem(library);
         return;
     }
 
     HideToolTips();
 
+    libraries_.clear();
+    ui->libraryComboBox->setCurrentIndex(0);
+    for (int i = 1; i < ui->libraryComboBox->count(); i++)
+        ui->libraryComboBox->removeItem(i);
     ui->sdkPushButton->setEnabled(true);
     ui->appNameLineEdit->setEnabled(false);
     ui->launchPushButton->setText("Stop Capture");
@@ -966,6 +992,10 @@ void MainWindow::on_maxXspinBox_valueChanged(int) {
 }
 
 void MainWindow::on_maxXspinBox_editingFinished() {
+    filterDirty_ = true;
+}
+
+void MainWindow::on_libraryComboBox_currentIndexChanged(int) {
     filterDirty_ = true;
 }
 

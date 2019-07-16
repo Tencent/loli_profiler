@@ -736,15 +736,14 @@ void MainWindow::StacktraceDataReceived() {
             parentItem->setText(2, rootMem);
             // begin record full callstack, and find which lib starts this callstack
             auto& callStack = callStackMap_[parentItem->Uuid()];
-            auto callStackLib = QString();
             for (int i = 3; i < stack.size() && i + 1 < stack.size(); i += 2) {
                 const auto& libName = stack[i];
                 const auto& funcAddr = stack[i + 1];
-                callStackLib = libName;
                 TryAddNewAddress(libName, funcAddr);
                 callStack.append(libName);
                 callStack.append(funcAddr);
             }
+            auto callStackLib = callStack.size() > 0 ? callStack[0] : rootLib;
             // end record callstack
             if (!libraries_.contains(callStackLib))
                 libraries_.insert(callStackLib);

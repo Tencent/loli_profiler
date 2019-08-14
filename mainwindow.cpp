@@ -101,7 +101,7 @@ MainWindow::MainWindow(QWidget *parent) :
     memInfoChart_->addAxis(memInfoAxisY_, Qt::AlignLeft);
     UpdateMemInfoRange();
 
-    QVector<QString> memInfoTitles = {"Total", "NativeHeap", "GfxDev", "EGLmtrack", "GLmtrack", "Unkonw"};
+    QVector<QString> memInfoTitles = {"Total", "NativeHeap", "GfxDev", "EGLmtrack", "GLmtrack", "Unknown"};
     for (int i = 0; i < memInfoTitles.size(); i++) {
         auto series = new QLineSeries();
         series->setName(memInfoTitles[i]);
@@ -692,7 +692,7 @@ void MainWindow::MemInfoProcessFinished(AdbProcess* process) {
     memInfoSeries_[2]->append(time_, curMemInfo.GfxDev);
     memInfoSeries_[3]->append(time_, curMemInfo.EGLmtrack);
     memInfoSeries_[4]->append(time_, curMemInfo.GLmtrack);
-    memInfoSeries_[5]->append(time_, curMemInfo.Unkonw);
+    memInfoSeries_[5]->append(time_, curMemInfo.Unknown);
 }
 
 void MainWindow::MemInfoProcessErrorOccurred() {

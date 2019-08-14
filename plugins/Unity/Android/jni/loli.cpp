@@ -35,21 +35,17 @@ extern "C" {
 #include "xhook.h"
 #include "lz4/lz4.h"
 
-namespace trace {
+namespace loli {
 size_t capture(void** buffer, size_t max);
 void dump(std::ostream& os, void** buffer, size_t count);
-}
-
-namespace server {
-bool started();
-void sendMessage(const std::vector<std::string>& cache);
-int start(int port);
-void shundown();
+int serverStart(int port);
+void serverShutdown();
 }
 
 std::chrono::system_clock::time_point hookTime_;
 std::mutex cacheMutex_;
 std::vector<std::string> cache_;
+int minRecSize_ = 0;
 bool hooked_ = false;
 
 enum loliFlags {
@@ -59,13 +55,15 @@ enum loliFlags {
 };
 
 void *loliMalloc(size_t size) {
+    if (size < minRecSize_)
+        return malloc(size);
     const size_t max = 30;
     void* buffer[max];
     std::ostringstream oss;
     auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - hookTime_).count();
     auto mem = malloc(size);
     oss << MALLOC_ << '\\'<< time << ',' << size << ',' << mem << '\\';
-    trace::dump(oss, buffer, trace::capture(buffer, max));
+    loli::dump(oss, buffer, loli::capture(buffer, max));
     {
         std::lock_guard<std::mutex> lock(cacheMutex_);
         cache_.emplace_back(oss.str());
@@ -87,13 +85,15 @@ void loliFree(void* ptr) {
 }
 
 void *loliCalloc(int n, int size) {
+    if (n * size < minRecSize_)
+        return calloc(n, size);
     const size_t max = 30;
     void* buffer[max];
     std::ostringstream oss;
     auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - hookTime_).count();
     auto mem = calloc(n, size);
-    oss << CALLOC_ << '\\'<< time << ',' << size << ',' << mem << '\\';
-    trace::dump(oss, buffer, trace::capture(buffer, max));
+    oss << CALLOC_ << '\\'<< time << ',' << n * size << ',' << mem << '\\';
+    loli::dump(oss, buffer, loli::capture(buffer, max));
     {
         std::lock_guard<std::mutex> lock(cacheMutex_);
         cache_.emplace_back(oss.str());
@@ -101,9 +101,10 @@ void *loliCalloc(int n, int size) {
     return mem;
 }
 
-int loliHook(const char *soNames) {
+int loliHook(int minRecSize, const char *soNames) {
     if (hooked_)
         return 0;
+    minRecSize_ = minRecSize;
     hookTime_ = std::chrono::system_clock::now();
     std::string names(soNames);
     std::string token;
@@ -131,13 +132,13 @@ int loliHook(const char *soNames) {
         names.erase(0, pos + 1);
     }
     xhook_refresh(0);
-    auto svr = server::start(7100);
-    __android_log_print(ANDROID_LOG_INFO, "Loli", "server start status %i", svr);
+    auto svr = loli::serverStart(7100);
+    __android_log_print(ANDROID_LOG_INFO, "Loli", "loli start status %i", svr);
     hooked_ = true;
     return ecode;
 }
 
-namespace trace { // begin trace
+namespace loli { // begin loli
 
 struct TraceState {
     void** current;
@@ -196,10 +197,6 @@ void dump(std::ostream& os, void** buffer, size_t count) {
     }
 }
 
-} // end back trace
-
-namespace server { // begin server
-
 char* buffer_ = NULL;
 const std::size_t bandwidth_ = 3000;
 std::atomic<bool> serverRunning_ {true};
@@ -207,7 +204,7 @@ std::atomic<bool> hasClient_ {false};
 std::thread socketThread_;
 bool started_ = false;
 
-bool started() {
+bool serverStarted() {
     return started_;
 }
 
@@ -306,7 +303,7 @@ void serverLoop(int sock) {
         close(clientSock);
 }
 
-int start(int port = 8000) {
+int serverStart(int port = 8000) {
     if (started_)
         return 0;
     // allocate buffer
@@ -350,7 +347,7 @@ int start(int port = 8000) {
     return 0;
 }
 
-void shundown() {
+void serverShutdown() {
     if (!started_)
         return;
     serverRunning_ = false;
@@ -361,7 +358,7 @@ void shundown() {
     started_ = false;
 }
 
-} // end server
+} // end loli
 
 #ifdef __cplusplus
 }

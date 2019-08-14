@@ -4,7 +4,7 @@
 extern "C" {
 #endif // __cplusplus
 
-int loliHook(const char *soNames);
+int loliHook(int minRecSize, const char *soNames);
 
 #ifdef __cplusplus
 }

@@ -10,7 +10,7 @@ struct MemInfo {
     unsigned int GfxDev = 0;
     unsigned int EGLmtrack = 0;
     unsigned int GLmtrack = 0;
-    unsigned int Unkonw = 0;
+    unsigned int Unknown = 0;
 
     void Max(const MemInfo& info) {
         Total = std::max(info.Total, Total);
@@ -18,7 +18,7 @@ struct MemInfo {
         GfxDev = std::max(info.GfxDev, GfxDev);
         EGLmtrack = std::max(info.EGLmtrack, EGLmtrack);
         GLmtrack = std::max(info.GLmtrack, GLmtrack);
-        Unkonw = std::max(info.Unkonw, Unkonw);
+        Unknown = std::max(info.Unknown, Unknown);
     }
 
     void Reset() {
@@ -27,7 +27,7 @@ struct MemInfo {
         GfxDev = 0;
         EGLmtrack = 0;
         GLmtrack = 0;
-        Unkonw = 0;
+        Unknown = 0;
     }
 };
 

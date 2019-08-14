@@ -61,7 +61,7 @@ void MemInfoProcess::OnProcessFinihed() {
             } else if (name == "GL") {
                 meminfo_.GLmtrack = list.at(2).toUInt() / 1024;
             } else if (name == "Unknown") {
-                meminfo_.Unkonw = list.at(1).toUInt() / 1024;
+                meminfo_.Unknown = list.at(1).toUInt() / 1024;
             } else if (name == "TOTAL") {
                 meminfo_.Total = list.at(1).toUInt() / 1024;
             }

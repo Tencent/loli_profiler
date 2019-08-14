@@ -8,14 +8,14 @@ public class LoliProfiler : MonoBehaviour {
 
 #if UNITY_ANDROID && !UNITY_EDITOR
     [DllImport("loli", CallingConvention = CallingConvention.Cdecl)]
-    private static extern int loliHook(string soNames);
+    private static extern int loliHook(int minRecSize, string soNames);
 #else
-    private static int loliHook(string soNames) { return 0; }
+    private static int loliHook(int minRecSize, string soNames) { return 0; }
 #endif
 
     private void Awake()
     {
-        var ecode = loliHook("libil2cpp,libunity");
+        var ecode = loliHook(1024, "libil2cpp,libunity");
         if (ecode != 0)
             Debug.Log("loliHookError: " + ecode);
     }

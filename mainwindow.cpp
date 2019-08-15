@@ -31,18 +31,52 @@ enum class IOErrorCode : qint32 {
 
 class SortableTreeWidgetItem : public QTreeWidgetItem {
 public:
-    SortableTreeWidgetItem(QUuid uuid, QTreeWidget* parent) : QTreeWidgetItem(parent), uuid_(uuid) {}
-    SortableTreeWidgetItem(QTreeWidget* parent) : QTreeWidgetItem(parent), uuid_(QUuid::createUuid()) {}
+    SortableTreeWidgetItem(QUuid uuid, int time, int size, QTreeWidget* parent) : QTreeWidgetItem(parent), uuid_(uuid) {
+        SetTime(time);
+        SetSize(size);
+    }
+    SortableTreeWidgetItem(int time, int size, QTreeWidget* parent) : QTreeWidgetItem(parent), uuid_(QUuid::createUuid()) {
+        SetTime(time);
+        SetSize(size);
+    }
     QUuid Uuid() const { return uuid_; }
+    int Time() const { return time_; }
+    void SetTime(int time) {
+        time_ = time;
+        setText(0, QString::number(time));
+    }
+    int Size() const { return size_; }
+    void SetSize(int size) {
+        size_ = size;
+        setText(1, SizeToString(size));
+    }
 private:
+    QString SizeToString(int size) {
+        int sign = size > 0 ? 1 : -1;
+        int value = std::abs(size);
+        if (value >= 1024 * 1024) {
+            return QString::number(static_cast<double>(sign * value) / 1024 / 1024, 'f', 2) + " MB";
+        } else if (value > 1024) {
+            return QString::number(static_cast<double>(sign * value) / 1024, 'f', 2) + "KB";
+        } else {
+            return QString::number(sign * value) + " Bytes";
+        }
+    }
     bool operator<(const QTreeWidgetItem &other) const {
+        auto casted = static_cast<const SortableTreeWidgetItem&>(other);
         int column = treeWidget()->sortColumn();
-        if (column < 2)
-            return data(column, 0).toInt() < other.data(column, 0).toInt();
-        else
-            return text(column) < other.text(column);
+        switch (column) {
+            case 0:
+                return time_ < casted.Time();
+            case 1:
+                return size_ < casted.Size();
+            default:
+                return text(column) < other.text(column);
+        }
     }
     QUuid uuid_;
+    int time_;
+    int size_;
 };
 
 using namespace QtCharts;
@@ -323,12 +357,12 @@ int MainWindow::LoadFromFile(QFile *file) {
     for (int i = 0; i < value; i++) {
         QString str;
         stream >> str;
-        auto topItem = new SortableTreeWidgetItem(QUuid::fromString(str), ui->stackTreeWidget);
+        auto topItem = new SortableTreeWidgetItem(QUuid::fromString(str), 0, 0, ui->stackTreeWidget);
         qint32 size;
         stream >> size;
-        topItem->setData(0, 0, size);
+        topItem->SetTime(size);
         stream >> size;
-        topItem->setData(1, 0, size);
+        topItem->SetSize(size);
         stream >> str;
         topItem->setText(2, str);
         stream >> str;
@@ -730,9 +764,9 @@ void MainWindow::StacktraceDataReceived() {
             const auto& rootLib = stack[1];
             const auto& rootAddr = TryAddNewAddress(rootLib, stack[2]);
             persistentAddrs_.insert(rootMem);
-            SortableTreeWidgetItem* parentItem = new SortableTreeWidgetItem(nullptr);
-            parentItem->setData(0, 0, QVariant(rootTime.toInt()));
-            parentItem->setData(1, 0, QVariant(rootSize.toInt()));
+            SortableTreeWidgetItem* parentItem = new SortableTreeWidgetItem(0, 0, nullptr);
+            parentItem->SetTime(rootTime.toInt());
+            parentItem->SetSize(rootSize.toInt());
             parentItem->setText(2, rootMem);
             // begin record full callstack, and find which lib starts this callstack
             auto& callStack = callStackMap_[parentItem->Uuid()];

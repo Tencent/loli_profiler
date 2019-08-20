@@ -11,7 +11,7 @@ public:
 
     int GetConvertedCount() const { return convertedCount_; }
 
-    void DumpAsync(const QString& symbloFile, QHash<QString, QString>* addrMap);
+    void DumpAsync(const QString& symbloFile, QStringList addrs, QHash<QString, QString>* addrMap);
 
 protected:
     void OnProcessFinihed() override;

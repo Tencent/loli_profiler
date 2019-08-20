@@ -7,14 +7,14 @@
 AddressProcess::AddressProcess(QObject* parent)
     : AdbProcess(parent) {}
 
-void AddressProcess::DumpAsync(const QString& symbloFile, QHash<QString, QString>* addrMap) {
+void AddressProcess::DumpAsync(const QString& symbloFile, QStringList addrs, QHash<QString, QString>* addrMap) {
     convertedCount_ = 0;
     addrMap_ = addrMap;
-    addrs_.clear();
-    for (auto it = addrMap->begin(); it != addrMap->end(); ++it) {
-        if (it.value().size() == 0)
-            addrs_.push_back(it.key());
-    }
+    addrs_ = addrs;
+//    for (auto it = addrMap->begin(); it != addrMap->end(); ++it) {
+//        if (it.value().size() == 0)
+//            addrs_.push_back(it.key());
+//    }
     QStringList arguments;
     arguments << "-f" << "-C" << "-e" << symbloFile << addrs_;
     ExecuteAsync(arguments);

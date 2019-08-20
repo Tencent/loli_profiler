@@ -21,6 +21,15 @@ namespace Ui {
 class MainWindow;
 }
 
+struct StackRecord {
+    QUuid uuid_;
+    int time_;
+    int size_;
+    QString addr_;
+    QString library_;
+    QString funcAddr_;
+};
+
 class QTreeWidgetItem;
 class QStandardItemModel;
 class QGraphicsPixmapItem;
@@ -55,7 +64,6 @@ private:
     void FilterTreeWidget();
 
     QString TryAddNewAddress(const QString& lib, const QString& addr);
-    bool IsAddressPersistent(const QString& addr, int time) const;
 
 private slots:
     void FixedUpdate();
@@ -86,10 +94,9 @@ private slots:
     void on_symbloPushButton_clicked();
     void on_addr2LinePushButton_clicked();
     void on_memSizeComboBox_currentIndexChanged(int index);
-    void on_maxXspinBox_valueChanged(int arg1);
-    void on_maxXspinBox_editingFinished();
     void on_libraryComboBox_currentIndexChanged(int index);
-    void on_resetFilterPushButton_clicked();
+
+    void on_pythonPushButton_clicked();
 
 private:
     Ui::MainWindow *ui;
@@ -115,15 +122,14 @@ private:
     // stacktrace process
     StackTraceProcess *stacktraceProcess_;
     int stacktraceRetryCount_ = 0;
+    QVector<StackRecord> stackRecords_;
 
     // address process
-    AddressProcess* addrProcess_;
+    QVector<AddressProcess*> addrProcesses_;
     // <dllname, <func address, func name>>
     QHash<QString, QHash<QString, QString>> symbloMap_;
     // <mem address>
     QSet<QString> persistentAddrs_;
-    QVector<QPair<int, QSet<QString>>> persistentAddrSnapshot_;
-    int lastPersistentSnapshotTime_ = 0;
 
     // meminfo process
     MemInfoProcess* memInfoProcess_;

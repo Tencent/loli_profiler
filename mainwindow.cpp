@@ -35,9 +35,12 @@ public:
         SetTime(time);
         SetSize(size);
     }
-    SortableTreeWidgetItem(int time, int size, QTreeWidget* parent) : QTreeWidgetItem(parent), uuid_(QUuid::createUuid()) {
-        SetTime(time);
-        SetSize(size);
+    SortableTreeWidgetItem(const StackRecord& record, QTreeWidget* parent) : QTreeWidgetItem(parent), uuid_(record.uuid_) {
+        SetTime(record.time_);
+        SetSize(record.size_);
+        setText(2, record.addr_);
+        setText(3, record.library_);
+        setText(4, record.funcAddr_);
     }
     QUuid Uuid() const { return uuid_; }
     int Time() const { return time_; }
@@ -85,8 +88,6 @@ MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::MainWindow) {
     ui->setupUi(this);
-    ui->maxXspinBox->setMaximum(std::numeric_limits<int>::max());
-    ui->maxXspinBox->setValue(ui->maxXspinBox->maximum());
     ui->stackTreeWidget->setUniformRowHeights(true);
 
     // setup adb process
@@ -105,10 +106,6 @@ MainWindow::MainWindow(QWidget *parent) :
     stacktraceProcess_ = new StackTraceProcess(this);
     connect(stacktraceProcess_, &StackTraceProcess::DataReceived, this, &MainWindow::StacktraceDataReceived);
     connect(stacktraceProcess_, &StackTraceProcess::ConnectionLost, this, &MainWindow::StacktraceConnectionLost);
-
-    addrProcess_ = new AddressProcess(this);
-    connect(addrProcess_, &AddressProcess::ProcessFinished, this, &MainWindow::AddressProcessFinished);
-    connect(addrProcess_, &AddressProcess::ProcessErrorOccurred, this, &MainWindow::AddressProcessErrorOccurred);
 
     // setup screenshot view
     ui->screenshotGraphicsView->setScene(new QGraphicsScene());
@@ -205,6 +202,7 @@ const QString SETTINGS_SCALEHSLIDER = "ChartScaleHSlider";
 const QString SETTINGS_LASTOPENDIR = "lastopen_dir";
 const QString SETTINGS_LASTSYMBOLDIR = "lastsymbol_dir";
 const QString SETTINGS_ADDR2LINEPATH = "addr2line_path";
+const QString SETTINGS_PYTHONPATH = "python_path";
 
 void MainWindow::LoadSettings() {
     QSettings settings("MoreFun", "LoliProfiler");
@@ -214,8 +212,9 @@ void MainWindow::LoadSettings() {
         this->resize(windowWidth, windowHeight);
     }
     ui->appNameLineEdit->setText(settings.value(SETTINGS_APPNAME).toString());
-    ui->sdkpathLineEdit->setText(settings.value(SETTINGS_SDKPATH).toString());
+    ui->sdkPathLineEdit->setText(settings.value(SETTINGS_SDKPATH).toString());
     ui->addr2LinePathLineEdit->setText(settings.value(SETTINGS_ADDR2LINEPATH).toString());
+    ui->pythonPathLineEdit->setText(settings.value(SETTINGS_PYTHONPATH).toString());
     ui->splitter->restoreState(settings.value(SETTINGS_SPLITER).toByteArray());
     ui->splitter_2->restoreState(settings.value(SETTINGS_SPLITER_2).toByteArray());
     ui->splitter_3->restoreState(settings.value(SETTINGS_SPLITER_3).toByteArray());
@@ -233,8 +232,9 @@ void MainWindow::SaveSettings() {
     settings.setValue(SETTINGS_WINDOW_W, this->width());
     settings.setValue(SETTINGS_WINDOW_H, this->height());
     settings.setValue(SETTINGS_APPNAME, ui->appNameLineEdit->text());
-    settings.setValue(SETTINGS_SDKPATH, ui->sdkpathLineEdit->text());
+    settings.setValue(SETTINGS_SDKPATH, ui->sdkPathLineEdit->text());
     settings.setValue(SETTINGS_ADDR2LINEPATH, ui->addr2LinePathLineEdit->text());
+    settings.setValue(SETTINGS_PYTHONPATH, ui->pythonPathLineEdit->text());
     settings.setValue(SETTINGS_SPLITER, ui->splitter->saveState());
     settings.setValue(SETTINGS_SPLITER_2, ui->splitter_2->saveState());
     settings.setValue(SETTINGS_SPLITER_3, ui->splitter_3->saveState());
@@ -279,10 +279,10 @@ void MainWindow::SaveToFile(QFile *file) {
     qint32 count = static_cast<qint32>(ui->stackTreeWidget->topLevelItemCount());
     stream << count;
     for (int i = 0; i < count; i++) {
-        auto topItem = ui->stackTreeWidget->topLevelItem(i);
-        stream << static_cast<SortableTreeWidgetItem*>(topItem)->Uuid().toString();
-        stream << static_cast<qint32>(topItem->data(0, 0).toInt());
-        stream << static_cast<qint32>(topItem->data(1, 0).toInt());
+        auto topItem = static_cast<SortableTreeWidgetItem*>(ui->stackTreeWidget->topLevelItem(i));
+        stream << topItem->Uuid().toString();
+        stream << static_cast<qint32>(topItem->Time());
+        stream << static_cast<qint32>(topItem->Size());
         stream << topItem->text(2);
         stream << topItem->text(3);
         stream << topItem->text(4);
@@ -302,15 +302,6 @@ void MainWindow::SaveToFile(QFile *file) {
             stream << it1.key();
             stream << it1.value();
         }
-    }
-    // persistent addresses
-    stream << static_cast<qint32>(persistentAddrSnapshot_.count());
-    for (auto it = persistentAddrSnapshot_.begin(); it != persistentAddrSnapshot_.end(); ++it) {
-        stream << static_cast<qint32>(it->first);
-        auto& set = it->second;
-        stream << static_cast<qint32>(set.size());
-        for (auto& key : set)
-            stream << key;
     }
     // screen shots
     stream << static_cast<qint32>(screenshots_.size());
@@ -407,22 +398,6 @@ int MainWindow::LoadFromFile(QFile *file) {
             map[key] = value;
         }
     }
-    // persistent addresses
-    persistentAddrs_.clear();
-    persistentAddrSnapshot_.clear();
-    stream >> value;
-    for (int i = 0; i < value; i++) {
-        qint32 time, size;
-        stream >> time;
-        stream >> size;
-        persistentAddrSnapshot_.push_back(qMakePair(time, QSet<QString>()));
-        auto& set = persistentAddrSnapshot_.back().second;
-        for (int j = 0; j < size; j++) {
-            QString key;
-            stream >> key;
-            set.insert(key);
-        }
-    }
     // screen shots
     screenshots_.clear();
     stream >> value;
@@ -434,6 +409,8 @@ int MainWindow::LoadFromFile(QFile *file) {
         stream >> ba;
         screenshots_.push_back(qMakePair(time, ba));
     }
+    persistentAddrs_.clear();
+    stackRecords_.clear();
     return static_cast<qint32>(IOErrorCode::NONE);
 }
 
@@ -520,13 +497,10 @@ void MainWindow::UpdateMemInfoRange() {
 }
 
 bool MainWindow::GetTreeWidgetItemShouldHide(QTreeWidgetItem* item) const {
-    auto targetTime = ui->maxXspinBox->value();
-    auto time = static_cast<int>(item->data(0, 0).toInt() * 0.001f);
-    if (time > targetTime)
-        return true;
-    auto library = item->data(3, 0).toString();
-    auto addr = item->data(2, 0).toString();
-    auto size = item->data(1, 0).toInt();
+    auto casted = static_cast<SortableTreeWidgetItem*>(item);
+    auto library = casted->data(3, 0).toString();
+    auto addr = casted->data(2, 0).toString();
+    auto size = casted->Size();
     auto hide = false;
     switch(ui->memSizeComboBox->currentIndex()) {
     case 0: // all allocations
@@ -547,41 +521,20 @@ bool MainWindow::GetTreeWidgetItemShouldHide(QTreeWidgetItem* item) const {
             hide = ui->libraryComboBox->currentText() != library;
         }
     }
-    if (!hide)
-        hide = !IsAddressPersistent(addr, targetTime);
     return hide;
 }
 
 void MainWindow::FilterTreeWidget() {
     int visibleCount = 0;
     int sizeInBytes = 0;
-    QHash<QString, QPair<int, int>> records; // addr, <time, index>, filters same addr
     for (int i = 0; i < ui->stackTreeWidget->topLevelItemCount(); i++) {
         auto item = ui->stackTreeWidget->topLevelItem(i);
         auto hide = GetTreeWidgetItemShouldHide(item);
-        if (!hide) {
-            auto time = item->data(0, 0).toInt();
-            auto addr = item->data(2, 0).toString();
-            if (records.contains(addr)) {
-                auto pair = records[addr];
-                if (time > pair.first) {
-                    auto oldItem = ui->stackTreeWidget->topLevelItem(pair.second);
-                    oldItem->setHidden(true);
-                    visibleCount--;
-                    sizeInBytes -= oldItem->data(1, 0).toInt();
-                    records[addr] = qMakePair(time, i);
-                } else {
-                    hide = true;
-                }
-            } else {
-                records.insert(addr, qMakePair(time, i));
-            }
-        }
         if (item->isHidden() != hide)
             item->setHidden(hide);
         if (!hide) {
             visibleCount++;
-            sizeInBytes += item->data(1, 0).toInt();
+            sizeInBytes += static_cast<SortableTreeWidgetItem*>(item)->Size();
         }
     }
     filterDirty_ = false;
@@ -604,24 +557,6 @@ QString MainWindow::TryAddNewAddress(const QString& lib, const QString& addr) {
     return addr;
 }
 
-bool MainWindow::IsAddressPersistent(const QString& addr, int time) const {
-    if (persistentAddrSnapshot_.size() == 0)
-        return false;
-    if (persistentAddrSnapshot_.size() == 1)
-        return persistentAddrSnapshot_[0].second.contains(addr);
-    if (time <= persistentAddrSnapshot_[0].first)
-        return persistentAddrSnapshot_[0].second.contains(addr);
-    if (time >= persistentAddrSnapshot_[persistentAddrSnapshot_.size() - 1].first)
-        return persistentAddrSnapshot_[persistentAddrSnapshot_.size() - 1].second.contains(addr);
-    for (int i = 1; i < persistentAddrSnapshot_.size(); i++) {
-        auto& tp0 = persistentAddrSnapshot_[i - 1];
-        auto& tp1 = persistentAddrSnapshot_[i];
-        if (time > tp0.first && time <= tp1.first)
-            return tp1.second.contains(addr);
-    }
-    return false;
-}
-
 void MainWindow::FixedUpdate() {
     if (filterDirty_)
         FilterTreeWidget();
@@ -639,16 +574,10 @@ void MainWindow::FixedUpdate() {
         stacktraceProcess_->ConnectToServer(port++);
         Print("Connecting to application server ... ");
     }
-    // take a snapshot of persistentAddrs_
-    if (time_ - lastPersistentSnapshotTime_ >= 5) {
-        lastPersistentSnapshotTime_ = time_;
-        persistentAddrSnapshot_.push_back(qMakePair(time_, QSet<QString>(persistentAddrs_)));
-    }
     time_++;
 }
 
 void MainWindow::OnTimeSelectionChange(const QPointF& pos) {
-    ui->maxXspinBox->setValue(static_cast<int>(pos.x()));
     int index = GetScreenshotIndex(pos);
     if (index == -1)
         return;
@@ -705,7 +634,7 @@ void MainWindow::StartAppProcessFinished(AdbProcess* process) {
     screenshotProcess_->SetExecutablePath(adbPath_);
     stacktraceProcess_->SetExecutablePath(adbPath_);
     memInfoProcess_->SetExecutablePath(adbPath_);
-    lastScreenshotTime_ = lastPersistentSnapshotTime_ = time_ = 0;
+    lastScreenshotTime_ = time_ = 0;
     Print("Application Started!");
     stacktraceRetryCount_ = 30;
     memInfoProcess_->DumpMemInfoAsync(ui->appNameLineEdit->text());
@@ -713,7 +642,7 @@ void MainWindow::StartAppProcessFinished(AdbProcess* process) {
 
 void MainWindow::StartAppProcessErrorOccurred() {
     ConnectionFailed();
-    Print("Error starting app by adb monkey!");
+    Print("Error starting app: " + startAppProcess_->ErrorStr());
 }
 
 void MainWindow::MemInfoProcessFinished(AdbProcess* process) {
@@ -750,8 +679,6 @@ void MainWindow::StacktraceDataReceived() {
     stacktraceRetryCount_ = 5;
     const auto& stacks = stacktraceProcess_->GetStackInfo();
     if (stacks.size() > 0) {
-//        QHash<int, QHash<QString, int>> funcMap;
-        QList<QTreeWidgetItem*> treeItems;
         for (const auto& stack : stacks) {
             if (stack.size() < 3)
                 continue;
@@ -760,16 +687,17 @@ void MainWindow::StacktraceDataReceived() {
                 continue;
             const auto& rootTime = root[0];
             const auto& rootSize = root[1];
-            const auto& rootMem = root[2];
-            const auto& rootLib = stack[1];
-            const auto& rootAddr = TryAddNewAddress(rootLib, stack[2]);
-            persistentAddrs_.insert(rootMem);
-            SortableTreeWidgetItem* parentItem = new SortableTreeWidgetItem(0, 0, nullptr);
-            parentItem->SetTime(rootTime.toInt());
-            parentItem->SetSize(rootSize.toInt());
-            parentItem->setText(2, rootMem);
+            const auto& rootMemAddr = root[2];
+            const auto& rootLibrary = stack[1];
+            const auto& rootFuncAddr = TryAddNewAddress(rootLibrary, stack[2]);
+            persistentAddrs_.insert(rootMemAddr);
+            StackRecord record;
+            record.uuid_ = QUuid::createUuid();
+            record.time_ = rootTime.toInt();
+            record.size_ = rootSize.toInt();
+            record.addr_ = rootMemAddr;
             // begin record full callstack, and find which lib starts this callstack
-            auto& callStack = callStackMap_[parentItem->Uuid()];
+            auto& callStack = callStackMap_[record.uuid_];
             for (int i = 3; i < stack.size() && i + 1 < stack.size(); i += 2) {
                 const auto& libName = stack[i];
                 const auto& funcAddr = stack[i + 1];
@@ -777,18 +705,14 @@ void MainWindow::StacktraceDataReceived() {
                 callStack.append(libName);
                 callStack.append(funcAddr);
             }
-            auto callStackLib = callStack.size() > 0 ? callStack[0] : rootLib;
+            auto callStackLib = callStack.size() > 0 ? callStack[0] : rootLibrary;
             // end record callstack
             if (!libraries_.contains(callStackLib))
                 libraries_.insert(callStackLib);
-            parentItem->setText(3, callStackLib);
-            parentItem->setText(4, rootAddr);
-            treeItems.push_back(parentItem);
-            // setHidden is extremly slow when there's large number of items in the TreeViewWidget
+            record.library_ = callStackLib;
+            record.funcAddr_ = rootFuncAddr;
+            stackRecords_.push_back(record);
         }
-        // batch add items to improve performance
-        // and we turn off sorting during data capturing
-        ui->stackTreeWidget->addTopLevelItems(treeItems);
     }
     // read free call infos
     const auto& frees = stacktraceProcess_->GetFreeInfo();
@@ -810,6 +734,7 @@ void MainWindow::StacktraceConnectionLost() {
 }
 
 void MainWindow::AddressProcessFinished(AdbProcess* process) {
+    Print("One address process finished!");
     auto addrProcess = static_cast<AddressProcess*>(process);
     if (addrProcess->GetConvertedCount() == 0)
         return;
@@ -892,26 +817,37 @@ void MainWindow::on_actionAbout_triggered() {
 void MainWindow::on_sdkPushButton_clicked() {
     auto path = QFileDialog::getExistingDirectory(this, tr("Select Directory"), "",
                                       QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
-    ui->sdkpathLineEdit->setText(path);
+    ui->sdkPathLineEdit->setText(path);
 }
 
 void MainWindow::on_launchPushButton_clicked() {
     if (isConnected_) {
         Print("Stoping capture ...");
-        auto count = ui->stackTreeWidget->topLevelItemCount();
+        auto count = stackRecords_.count();
         if (count > 0)
             Print(QString("Captured %1 records.").arg(count));
         ConnectionFailed();
-        if (persistentAddrSnapshot_.size() > 0) {
-            if (time_ - persistentAddrSnapshot_[persistentAddrSnapshot_.size() - 1].first >= 1) {
-                persistentAddrSnapshot_.push_back(qMakePair(time_, QSet<QString>(persistentAddrs_)));
-            }
+        int sizeInBytes = 0;
+        QList<QTreeWidgetItem*> topLevelItems;
+        for (auto& record : stackRecords_) {
+            auto item = new SortableTreeWidgetItem(record, nullptr);
+            sizeInBytes += item->Size();
+            topLevelItems.append(item);
         }
+        ui->stackTreeWidget->addTopLevelItems(topLevelItems);
+        ui->recordCountLineEdit->setText(QString::number(topLevelItems.size()) + "/" + SizeToString(sizeInBytes));
         for (auto& library : libraries_)
             ui->libraryComboBox->addItem(library);
         return;
     }
 
+    auto pythonPath = ui->pythonPathLineEdit->text();
+    if (!QFile::exists(pythonPath)) {
+        QMessageBox::warning(this, "Warning", "Please select python path first.");
+        return;
+    }
+
+    ui->statusBar->showMessage("Launch process may take serval seconds to finish, please wait ...", 5000);
     HideToolTips();
 
     libraries_.clear();
@@ -923,18 +859,17 @@ void MainWindow::on_launchPushButton_clicked() {
     ui->launchPushButton->setText("Stop Capture");
     ui->actionOpen->setEnabled(false);
     ui->statusBar->clearMessage();
-    on_resetFilterPushButton_clicked();
 
-    adbPath_ = ui->sdkpathLineEdit->text();
+    adbPath_ = ui->sdkPathLineEdit->text();
     adbPath_ = adbPath_.size() == 0 ? "adb" : adbPath_ + "/platform-tools/adb";
 
     ui->stackTreeWidget->clear();
     ui->stackTreeWidget->setSortingEnabled(false);
     for (auto& series : memInfoSeries_)
         series->clear();
+    stackRecords_.clear();
     screenshots_.clear();
     symbloMap_.clear();
-    persistentAddrSnapshot_.clear();
     persistentAddrs_.clear();
     callStackMap_.clear();
     callStackModel_->clear();
@@ -942,6 +877,7 @@ void MainWindow::on_launchPushButton_clicked() {
     maxMemInfoValue_ = 128;
     UpdateMemInfoRange();
 
+    startAppProcess_->SetPythonPath(pythonPath);
     startAppProcess_->SetExecutablePath(adbPath_);
     startAppProcess_->StartApp(ui->appNameLineEdit->text());
 
@@ -989,10 +925,6 @@ void MainWindow::on_stackTreeWidget_itemSelectionChanged() {
 }
 
 void MainWindow::on_symbloPushButton_clicked() {
-    if (addrProcess_->IsRunning()) {
-        QMessageBox::warning(this, tr("Warning"), tr("Loading previous symbol, please try again later."));
-        return;
-    }
     auto symbloPath = QFileDialog::getOpenFileName(this, tr("Select Symblo File"),
                                                    GetLastSymbolDir(), tr("Library Files (*.sym *.sym.so *.so)"));
     if (!QFile::exists(symbloPath))
@@ -1007,8 +939,45 @@ void MainWindow::on_symbloPushButton_clicked() {
     auto it = symbloMap_.find(soName);
     if (it == symbloMap_.end())
         return;
-    addrProcess_->SetExecutablePath(addr2linePath);
-    addrProcess_->DumpAsync(symbloPath, &it.value());
+    auto& addrMap = it.value();
+    int requiredProcessCount = static_cast<int>(std::ceil(static_cast<float>(addrMap.size()) / 2000));
+    QVector<AddressProcess*> avaliableProcesses;
+    for (auto& process : addrProcesses_) {
+        if (requiredProcessCount <= 0)
+            break;
+        if (!process->IsRunning()) {
+            requiredProcessCount--;
+            avaliableProcesses.push_back(process);
+        }
+    }
+    for (int i = 0; i < requiredProcessCount; i++) {
+        auto process = new AddressProcess(this);
+        connect(process, &AddressProcess::ProcessFinished, this, &MainWindow::AddressProcessFinished);
+        connect(process, &AddressProcess::ProcessErrorOccurred, this, &MainWindow::AddressProcessErrorOccurred);
+        addrProcesses_.push_back(process);
+        avaliableProcesses.push_back(process);
+    }
+    auto addrMapIt = addrMap.begin();
+    for (auto& process : avaliableProcesses) {
+        QStringList addrs;
+        int count = 0;
+        for (; addrMapIt != addrMap.end(); ++addrMapIt) {
+            if (addrMapIt.value().size() == 0) {
+                addrs.push_back(addrMapIt.key());
+                count++;
+            }
+            if (count >= 2000)
+                break;
+        }
+        process->SetExecutablePath(addr2linePath);
+        process->DumpAsync(symbloPath, addrs, &addrMap);
+    }
+    ui->statusBar->showMessage(QString("Loading symbols for %1 addresses by %2 processes").arg(addrMap.size()).arg(avaliableProcesses.size()), 8000);
+}
+
+void MainWindow::on_pythonPushButton_clicked() {
+    auto path = QFileDialog::getOpenFileName(this, tr("Select Executable Python"), QDir::homePath());
+    ui->pythonPathLineEdit->setText(path);
 }
 
 void MainWindow::on_addr2LinePushButton_clicked() {
@@ -1020,18 +989,7 @@ void MainWindow::on_memSizeComboBox_currentIndexChanged(int) {
     filterDirty_ = true;
 }
 
-void MainWindow::on_maxXspinBox_valueChanged(int) {
-    filterDirty_ = true;
-}
-
-void MainWindow::on_maxXspinBox_editingFinished() {
-    filterDirty_ = true;
-}
-
 void MainWindow::on_libraryComboBox_currentIndexChanged(int) {
     filterDirty_ = true;
 }
 
-void MainWindow::on_resetFilterPushButton_clicked() {
-    ui->maxXspinBox->setValue(ui->maxXspinBox->maximum());
-}

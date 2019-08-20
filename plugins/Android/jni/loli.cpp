@@ -24,6 +24,7 @@ extern "C" {
 #include <stdlib.h>
 #include <string.h>
 #include <unwind.h>
+#include <jni.h>
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -55,7 +56,7 @@ enum loliFlags {
 };
 
 void *loliMalloc(size_t size) {
-    if (size < minRecSize_)
+    if (size < static_cast<size_t>(minRecSize_))
         return malloc(size);
     const size_t max = 30;
     void* buffer[max];
@@ -111,9 +112,11 @@ int loliHook(int minRecSize, const char *soNames) {
     char delimiter = ',';
     std::size_t pos = 0;
     int ecode = 0;
+    xhook_enable_debug(1);
     while ((pos = names.find(delimiter)) != std::string::npos) {
         token = names.substr(0, pos);
         auto soName = ".*/" + token + "\\.so$";
+        __android_log_print(ANDROID_LOG_INFO, "Loli", "hooking %s", token.c_str());
         ecode = xhook_register(soName.c_str(), "malloc", (void*)loliMalloc, nullptr);
         if (ecode != 0) {
             __android_log_print(ANDROID_LOG_INFO, "Loli", "error hooking %s's malloc()", token.c_str());
@@ -136,6 +139,42 @@ int loliHook(int minRecSize, const char *soNames) {
     __android_log_print(ANDROID_LOG_INFO, "Loli", "loli start status %i", svr);
     hooked_ = true;
     return ecode;
+}
+
+JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
+    __android_log_print(ANDROID_LOG_INFO, "Loli", "JNI_OnLoad");
+    JNIEnv* env;
+    if (vm->GetEnv((void**)&env, JNI_VERSION_1_6) != JNI_OK) {
+        return JNI_ERR; // JNI version not supported.
+    }
+    std::ifstream infile("/data/local/tmp/loli.conf");
+    std::string line;
+    int count = 0;
+    int delaySeconds = 5;
+    int minRecSize = 512;
+    std::string hookLibraries = "libil2cpp,libunity,";
+    while (std::getline(infile, line)) {
+        if (count == 0) {
+            std::istringstream iss(line);
+            iss >> delaySeconds;
+        } else if (count == 1) {
+            std::istringstream iss(line);
+            iss >> minRecSize;
+        } else if (count == 2) {
+            hookLibraries = line;
+        }
+        count++;
+    }
+    __android_log_print(ANDROID_LOG_INFO, "Loli", "hookDelay: %i, minRecSize:: %i, hookLibs: %s", 
+        delaySeconds, minRecSize, hookLibraries.c_str());
+    // not a perfect solution right now, but it will work
+    // wait for serval seconds for unity or other engine to load all the .so libraries 
+    std::thread thread([=](){
+        std::this_thread::sleep_for(std::chrono::seconds(delaySeconds));
+        loliHook(minRecSize, hookLibraries.c_str());
+    });
+    thread.detach();
+    return JNI_VERSION_1_6;
 }
 
 namespace loli { // begin loli
@@ -218,7 +257,6 @@ void serverLoop(int sock) {
     fd_set fds;
     int clientSock = -1;
     auto lastTickTime = std::chrono::steady_clock::now();
-    int count = 0;
     while (serverRunning_) {
         if (!serverRunning_)
             break;
@@ -343,7 +381,7 @@ int serverStart(int port = 8000) {
     started_ = true;
     serverRunning_ = true;
     hasClient_ = false;
-    socketThread_ = std::move(std::thread(serverLoop, sock));
+    socketThread_ = std::thread(serverLoop, sock);
     return 0;
 }
 

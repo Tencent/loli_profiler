@@ -7,8 +7,16 @@ class StartAppProcess : public AdbProcess {
 public:
     StartAppProcess(QObject* parent = nullptr);
 
+    void SetPythonPath(const QString& path) {
+        pythonPath_ = path;
+    }
+
     bool Result() const {
         return startResult_;
+    }
+
+    QString ErrorStr() const {
+        return errorStr_;
     }
 
     void StartApp(const QString& appName);
@@ -18,6 +26,8 @@ protected:
 
 private:
     bool startResult_ = false;
+    QString errorStr_;
+    QString pythonPath_;
 };
 
 #endif // STARTAPPPROCESS_H

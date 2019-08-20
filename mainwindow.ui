@@ -192,7 +192,7 @@
               <string>Select SDK</string>
              </property>
             </widget>
-            <widget class="QLineEdit" name="sdkpathLineEdit">
+            <widget class="QLineEdit" name="sdkPathLineEdit">
              <property name="geometry">
               <rect>
                <x>10</x>
@@ -237,7 +237,7 @@
              <property name="geometry">
               <rect>
                <x>10</x>
-               <y>100</y>
+               <y>130</y>
                <width>151</width>
                <height>20</height>
               </rect>
@@ -253,7 +253,7 @@
              <property name="geometry">
               <rect>
                <x>10</x>
-               <y>70</y>
+               <y>100</y>
                <width>151</width>
                <height>20</height>
               </rect>
@@ -269,13 +269,45 @@
              <property name="geometry">
               <rect>
                <x>170</x>
-               <y>70</y>
+               <y>100</y>
                <width>81</width>
                <height>20</height>
               </rect>
              </property>
              <property name="text">
               <string>Addr2line</string>
+             </property>
+            </widget>
+            <widget class="QPushButton" name="pythonPushButton">
+             <property name="geometry">
+              <rect>
+               <x>170</x>
+               <y>70</y>
+               <width>81</width>
+               <height>20</height>
+              </rect>
+             </property>
+             <property name="toolTip">
+              <string>Select the root path of Android SDK</string>
+             </property>
+             <property name="text">
+              <string>Python</string>
+             </property>
+            </widget>
+            <widget class="QLineEdit" name="pythonPathLineEdit">
+             <property name="geometry">
+              <rect>
+               <x>10</x>
+               <y>70</y>
+               <width>151</width>
+               <height>20</height>
+              </rect>
+             </property>
+             <property name="readOnly">
+              <bool>true</bool>
+             </property>
+             <property name="placeholderText">
+              <string>path to python</string>
              </property>
             </widget>
            </widget>
@@ -400,7 +432,7 @@
                 </property>
                 <property name="minimumSize">
                  <size>
-                  <width>600</width>
+                  <width>350</width>
                   <height>25</height>
                  </size>
                 </property>
@@ -466,26 +498,6 @@
                      <string>All Libraries</string>
                     </property>
                    </item>
-                  </widget>
-                 </item>
-                 <item>
-                  <widget class="QSpinBox" name="maxXspinBox">
-                   <property name="toolTip">
-                    <string>Chart Filter Max</string>
-                   </property>
-                   <property name="maximum">
-                    <number>999999999</number>
-                   </property>
-                   <property name="value">
-                    <number>999999999</number>
-                   </property>
-                  </widget>
-                 </item>
-                 <item>
-                  <widget class="QPushButton" name="resetFilterPushButton">
-                   <property name="text">
-                    <string>Reset Filter</string>
-                   </property>
                   </widget>
                  </item>
                  <item>

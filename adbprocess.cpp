@@ -43,8 +43,10 @@ void AdbProcess::AdbProcessFinished(int exitCode, QProcess::ExitStatus exitStatu
     running_ = false;
 }
 
-void AdbProcess::AdbProcessErrorOccurred(QProcess::ProcessError) {
+void AdbProcess::AdbProcessErrorOccurred(QProcess::ProcessError error) {
     emit ProcessErrorOccurred();
+    qDebug() << error;
+    qDebug() << process_->readAll();
     running_ = false;
     hasErrors_ =  true;
 }

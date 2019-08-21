@@ -20,7 +20,7 @@
 * 从手机端实时获取内存相关函数的堆栈信息（通过TCP Socket）
 * 网络包使用LZ4压缩以加快收发速度
 * 运行流畅（使用C++与QT开发）
-* 同时支持Windows与Mac OSX（Mojave+）操作系统
+* 同时支持Windows 10与Mac OSX（Mojave+）操作系统
 
 ## 计划
 

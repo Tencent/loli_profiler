@@ -20,7 +20,7 @@ Install debuggable apk to your mobile device. Open LoliProfiler, select Python's
 * Transfer memory related function's call-stack in real-time (by TCP Socket)
 * Network packet is compressed using lz4 to speed-up sending & receiving process
 * Fast and portable (Developed in c++ and QT framework)
-* Support Windows & Max OSX (Mojave+)
+* Support Windows 10 & Max OSX (Mojave+)
 
 ## Plan
 

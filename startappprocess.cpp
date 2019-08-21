@@ -2,6 +2,7 @@
 #include <QCoreApplication>
 #include <QTextStream>
 #include <QRegularExpression>
+#include <QProgressDialog>
 #include <QDebug>
 
 StartAppProcess::StartAppProcess(QObject* parent)
@@ -9,12 +10,13 @@ StartAppProcess::StartAppProcess(QObject* parent)
 
 }
 
-void StartAppProcess::StartApp(const QString& appName) {
+void StartAppProcess::StartApp(const QString& appName, QProgressDialog* dialog) {
     startResult_ = false;
     errorStr_ = QString();
     auto execPath = GetExecutablePath();
     QStringList arguments;
     { // push remote folder to /data/local/tmp
+        dialog->setLabelText("Pushing libloli.so to device.");
         arguments << "push" << "remote/libloli.so" << "/data/local/tmp";
         QProcess process;
         process.setWorkingDirectory(QCoreApplication::applicationDirPath());
@@ -29,8 +31,10 @@ void StartAppProcess::StartApp(const QString& appName) {
             emit ProcessErrorOccurred();
             return;
         }
+        dialog->setValue(dialog->value() + 1);
     }
     { // push remote folder to /data/local/tmp
+        dialog->setLabelText("Pushing loli.conf to device.");
         arguments.clear();
         arguments << "push" << "remote/loli.conf" << "/data/local/tmp";
         QProcess process;
@@ -46,8 +50,10 @@ void StartAppProcess::StartApp(const QString& appName) {
             emit ProcessErrorOccurred();
             return;
         }
+        dialog->setValue(dialog->value() + 1);
     }
     { // set app as debugable for next launch
+        dialog->setLabelText("Marking apk debugable for next launch.");
         arguments.clear();
         arguments << "shell" << "am" << "set-debug-app" << "-w" << appName;
         QProcess process;
@@ -62,8 +68,10 @@ void StartAppProcess::StartApp(const QString& appName) {
             emit ProcessErrorOccurred();
             return;
         }
+        dialog->setValue(dialog->value() + 1);
     }
     { // launch the app
+        dialog->setLabelText("Launching apk.");
         arguments.clear();
         arguments << "shell" << "monkey -p" << appName << "-c android.intent.category.LAUNCHER 1";
         QProcess process;
@@ -78,9 +86,11 @@ void StartAppProcess::StartApp(const QString& appName) {
             emit ProcessErrorOccurred();
             return;
         }
+        dialog->setValue(dialog->value() + 1);
     }
     unsigned int pid = 0;
     { // adb jdwp
+        dialog->setLabelText("Gettting jdwp id.");
         arguments.clear();
         arguments << "jdwp";
         QProcess process;
@@ -101,8 +111,10 @@ void StartAppProcess::StartApp(const QString& appName) {
             }
             pid = lines[lines.count() - 1].trimmed().toUInt();
         }
+        dialog->setValue(dialog->value() + 1);
     }
     { // adb forward
+        dialog->setLabelText("Forwadring tcp port.");
         arguments.clear();
         arguments << "forward" << "tcp:8700" << ("jdwp:" + QString::number(pid));
         QProcess process;
@@ -117,8 +129,10 @@ void StartAppProcess::StartApp(const QString& appName) {
             emit ProcessErrorOccurred();
             return;
         }
+        dialog->setValue(dialog->value() + 1);
     }
     // python jdwp-shellifier.py
+    dialog->setLabelText("Injecting libloli.so to target application.");
     process_->setWorkingDirectory(QCoreApplication::applicationDirPath());
     ExecuteAsync(pythonPath_ + " jdwp-shellifier.py --target 127.0.0.1 --port 8700 --break-on android.app.Activity.onResume --loadlib libloli.so");
 }

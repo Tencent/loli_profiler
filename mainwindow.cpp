@@ -14,13 +14,14 @@
 #include <QStandardItemModel>
 #include <QTemporaryFile>
 #include <QTextStream>
+#include <QProgressDialog>
 
 #include <algorithm>
 #include <cmath>
 #include <vector>
 
 #define APP_MAGIC 0xA4B3C2D1
-#define APP_VERSION 100
+#define APP_VERSION 101
 
 enum class IOErrorCode : qint32 {
     NONE = 0,
@@ -89,6 +90,12 @@ MainWindow::MainWindow(QWidget *parent) :
     ui(new Ui::MainWindow) {
     ui->setupUi(this);
     ui->stackTreeWidget->setUniformRowHeights(true);
+
+    progressDialog_ = new QProgressDialog(this, Qt::WindowTitleHint | Qt::CustomizeWindowHint);
+    progressDialog_->setWindowModality(Qt::WindowModal);
+    progressDialog_->setAutoClose(true);
+    progressDialog_->setCancelButton(nullptr);
+    progressDialog_->close();
 
     // setup adb process
     startAppProcess_ = new StartAppProcess(this);
@@ -624,6 +631,8 @@ void MainWindow::OnStackTreeWidgetContextMenu(const QPoint & pos) {
 }
 
 void MainWindow::StartAppProcessFinished(AdbProcess* process) {
+    progressDialog_->setValue(progressDialog_->maximum());
+    progressDialog_->close();
     auto startAppProcess = static_cast<StartAppProcess*>(process);
     if (!startAppProcess->Result()) {
         ConnectionFailed();
@@ -642,6 +651,8 @@ void MainWindow::StartAppProcessFinished(AdbProcess* process) {
 
 void MainWindow::StartAppProcessErrorOccurred() {
     ConnectionFailed();
+    progressDialog_->setValue(progressDialog_->maximum());
+    progressDialog_->close();
     Print("Error starting app: " + startAppProcess_->ErrorStr());
 }
 
@@ -734,7 +745,7 @@ void MainWindow::StacktraceConnectionLost() {
 }
 
 void MainWindow::AddressProcessFinished(AdbProcess* process) {
-    Print("One address process finished!");
+    progressDialog_->setValue(progressDialog_->value() + 1);
     auto addrProcess = static_cast<AddressProcess*>(process);
     if (addrProcess->GetConvertedCount() == 0)
         return;
@@ -760,6 +771,7 @@ void MainWindow::AddressProcessFinished(AdbProcess* process) {
 }
 
 void MainWindow::AddressProcessErrorOccurred() {
+    progressDialog_->close();
     Print("Error occurred when reading address info ...");
 }
 
@@ -847,7 +859,13 @@ void MainWindow::on_launchPushButton_clicked() {
         return;
     }
 
-    ui->statusBar->showMessage("Launch process may take serval seconds to finish, please wait ...", 5000);
+    progressDialog_->setWindowTitle("Launch Progress");
+    progressDialog_->setLabelText("Preparing ...");
+    progressDialog_->setMinimum(0);
+    progressDialog_->setMaximum(7);
+    progressDialog_->setValue(0);
+    progressDialog_->show();
+
     HideToolTips();
 
     libraries_.clear();
@@ -879,7 +897,7 @@ void MainWindow::on_launchPushButton_clicked() {
 
     startAppProcess_->SetPythonPath(pythonPath);
     startAppProcess_->SetExecutablePath(adbPath_);
-    startAppProcess_->StartApp(ui->appNameLineEdit->text());
+    startAppProcess_->StartApp(ui->appNameLineEdit->text(), progressDialog_);
 
     isCapturing_ = true;
     Print("Starting application ...");
@@ -972,7 +990,12 @@ void MainWindow::on_symbloPushButton_clicked() {
         process->SetExecutablePath(addr2linePath);
         process->DumpAsync(symbloPath, addrs, &addrMap);
     }
-    ui->statusBar->showMessage(QString("Loading symbols for %1 addresses by %2 processes").arg(addrMap.size()).arg(avaliableProcesses.size()), 8000);
+    progressDialog_->setWindowTitle("Symbol Load Progress");
+    progressDialog_->setLabelText(QString("Loading symbols for %1 addresses by %2 process").arg(addrMap.size()).arg(avaliableProcesses.size()));
+    progressDialog_->setMinimum(0);
+    progressDialog_->setMaximum(avaliableProcesses.size());
+    progressDialog_->setValue(0);
+    progressDialog_->show();
 }
 
 void MainWindow::on_pythonPushButton_clicked() {
@@ -985,6 +1008,31 @@ void MainWindow::on_addr2LinePushButton_clicked() {
     ui->addr2LinePathLineEdit->setText(path);
 }
 
+void MainWindow::on_configPushButton_clicked() {
+    QDialog editDialog(this, Qt::WindowTitleHint | Qt::WindowCloseButtonHint);
+    auto layout = new QHBoxLayout();
+    auto textEdit = new QTextEdit(nullptr);
+    QFile file(QApplication::applicationDirPath() + "/remote/loli.conf");
+    if (!file.open(QIODevice::ReadOnly)) {
+        textEdit->setText("5\n256\nlibunity,libil2cpp,");
+    } else {
+        textEdit->setText(file.readAll());
+    }
+    file.close();
+    layout->setMargin(0);
+    layout->addWidget(textEdit);
+    editDialog.setLayout(layout);
+    editDialog.setWindowModality(Qt::WindowModal);
+    editDialog.setWindowTitle("Edit Configuration");
+    editDialog.setMinimumSize(400, 300);
+    editDialog.resize(400, 300);
+    editDialog.exec();
+    if (file.open(QIODevice::ReadWrite | QIODevice::Truncate | QIODevice::Text)) {
+        QTextStream stream(&file);
+        stream << textEdit->toPlainText();
+    }
+}
+
 void MainWindow::on_memSizeComboBox_currentIndexChanged(int) {
     filterDirty_ = true;
 }
@@ -992,4 +1040,3 @@ void MainWindow::on_memSizeComboBox_currentIndexChanged(int) {
 void MainWindow::on_libraryComboBox_currentIndexChanged(int) {
     filterDirty_ = true;
 }
-

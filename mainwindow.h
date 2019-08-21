@@ -33,6 +33,7 @@ struct StackRecord {
 class QTreeWidgetItem;
 class QStandardItemModel;
 class QGraphicsPixmapItem;
+class QProgressDialog;
 class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
@@ -93,13 +94,14 @@ private slots:
     void on_stackTreeWidget_itemSelectionChanged();
     void on_symbloPushButton_clicked();
     void on_addr2LinePushButton_clicked();
+    void on_pythonPushButton_clicked();
+    void on_configPushButton_clicked();
     void on_memSizeComboBox_currentIndexChanged(int index);
     void on_libraryComboBox_currentIndexChanged(int index);
 
-    void on_pythonPushButton_clicked();
-
 private:
     Ui::MainWindow *ui;
+    QProgressDialog *progressDialog_;
     QStandardItemModel *callStackModel_;
     QHash<QUuid, QVector<QString>> callStackMap_;
     QSet<QString> libraries_;

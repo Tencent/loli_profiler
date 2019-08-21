@@ -6,37 +6,28 @@
 
 ## 简介
 
-首先整合对应（Unity、Unreal）插件至游戏apk中，打开LoliProfiler，输入apk程序名称如：com.company.name，点击Launch即可。一般情况下堆栈数据会包含函数地址信息，你需要提供安卓NDK工具链中的addr2line可执行程序的路径给LoliProfiler。接着就可以选择Load Symbol来加载符号表数据，当翻译完成后，StackTrace中的数据就会被翻译为真正的函数名称。
+首先在移动设备上安装debuggable的apk程序，打开LoliProfiler，首先选择Python的路径，接着输入apk程序名称如：com.company.name，最后点击Launch即可。采集一段时间数据后，点击Stop Capture，即可完成采集。完成采集后LoliProfiler会分析获取的数据，并将采集结束前未释放的内存数据展示在StackTrace页签中。一般情况下堆栈数据会包含函数地址信息，你需要提供安卓NDK工具链中的addr2line可执行程序的路径给LoliProfiler。接着就可以选择Load Symbol来加载符号表数据，当翻译完成后，StackTrace中的数据就会被翻译为真正的函数名称。
 
 ![](images/screenshot.gif)
 
 ## 特性
 
+* 可以Profile所有Debuggable的程序（Root后的设备可Profile所有程序）
 * 可hook目标APK中任意so库
 * 可将函数地址自动批量转换为函数名称
-* 可过滤常驻内存
+* 自动分析数据展示常驻内存
 * 每5s自动截图一次
-* 基于时间线的过滤交互操作
 * 从手机端实时获取内存相关函数的堆栈信息（通过TCP Socket）
 * 网络包使用LZ4压缩以加快收发速度
 * 运行流畅（使用C++与QT开发）
 * 同时支持Windows与Mac OSX（Mojave+）操作系统
-* 支持且建议使用Release版本的apk测试
-
-## Unity整合
-
-首先将plugins/Unity/LoliProfiler拷贝到你的Unity工程下，接着需要用NDK（如r10e）来编译 plugins/Android下的Unity安卓native插件，并将编译出的插件放到LoliProfiler/Android目录下。最后将LoliProfiler.cs中的Component挂载到一个常驻游戏的GameObject上即可。
-
-## Unreal整合
-
-WIP
 
 ## 计划
 
 **短期计划**
 
 * hook 更多的内存相关函数 realloc/etc ... 
-* 制作Unreal插件
+* 尝试同时支持 PLT hook 与 Inline hook
 * 计划中 ... 
 
 ## 编译
@@ -47,6 +38,7 @@ WIP
 * 安装QtCharts插件
 * QT Creater 4.8 或更高
 * C++11 编译器
+* Android NDK r16b 或更高
 
 ## 链接
 
@@ -54,4 +46,4 @@ WIP
 * KM介绍文章 http://km.oa.com/articles/show/408991
 * xHook https://github.com/iqiyi/xHook
 * 图标 https://www.flaticon.com/authors/smashicons
-* 定期预编译的程序（包含UnityNative插件） https://git.code.oa.com/xinhou/loli_profiler/wikis/home
+* 定期预编译的程序 https://git.code.oa.com/xinhou/loli_profiler/wikis/home

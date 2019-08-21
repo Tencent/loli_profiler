@@ -243,7 +243,7 @@
               </rect>
              </property>
              <property name="toolTip">
-              <string>Prefer load symbols when capture is finished.</string>
+              <string>Load symbols after capture is done</string>
              </property>
              <property name="text">
               <string>Load Symblos</string>
@@ -288,7 +288,7 @@
               </rect>
              </property>
              <property name="toolTip">
-              <string>Select the root path of Android SDK</string>
+              <string>Select the path of python executable</string>
              </property>
              <property name="text">
               <string>Python</string>
@@ -308,6 +308,22 @@
              </property>
              <property name="placeholderText">
               <string>path to python</string>
+             </property>
+            </widget>
+            <widget class="QPushButton" name="configPushButton">
+             <property name="geometry">
+              <rect>
+               <x>170</x>
+               <y>130</y>
+               <width>80</width>
+               <height>20</height>
+              </rect>
+             </property>
+             <property name="toolTip">
+              <string>Configure injecting behaviour</string>
+             </property>
+             <property name="text">
+              <string>Configure</string>
              </property>
             </widget>
            </widget>

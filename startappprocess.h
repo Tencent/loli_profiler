@@ -3,6 +3,7 @@
 
 #include "adbprocess.h"
 
+class QProgressDialog;
 class StartAppProcess : public AdbProcess {
 public:
     StartAppProcess(QObject* parent = nullptr);
@@ -19,7 +20,7 @@ public:
         return errorStr_;
     }
 
-    void StartApp(const QString& appName);
+    void StartApp(const QString& appName, QProgressDialog* dialog);
 
 protected:
     void OnProcessFinihed() override;

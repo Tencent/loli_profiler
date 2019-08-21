@@ -98,6 +98,7 @@ private slots:
     void on_configPushButton_clicked();
     void on_memSizeComboBox_currentIndexChanged(int index);
     void on_libraryComboBox_currentIndexChanged(int index);
+    void on_allocComboBox_currentIndexChanged(int index);
 
 private:
     Ui::MainWindow *ui;
@@ -130,8 +131,8 @@ private:
     QVector<AddressProcess*> addrProcesses_;
     // <dllname, <func address, func name>>
     QHash<QString, QHash<QString, QString>> symbloMap_;
-    // <mem address>
-    QSet<QString> persistentAddrs_;
+    // <mem address, time>
+    QHash<QString, int> freeAddrMap_;
 
     // meminfo process
     MemInfoProcess* memInfoProcess_;

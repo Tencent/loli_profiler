@@ -21,7 +21,7 @@
 #include <vector>
 
 #define APP_MAGIC 0xA4B3C2D1
-#define APP_VERSION 101
+#define APP_VERSION 102
 
 enum class IOErrorCode : qint32 {
     NONE = 0,
@@ -310,6 +310,12 @@ void MainWindow::SaveToFile(QFile *file) {
             stream << it1.value();
         }
     }
+    // freeaddr map
+    stream << static_cast<qint32>(freeAddrMap_.size());
+    for (auto it = freeAddrMap_.begin(); it != freeAddrMap_.end(); ++it) {
+        stream << it.key();
+        stream << static_cast<qint32>(it.value());
+    }
     // screen shots
     stream << static_cast<qint32>(screenshots_.size());
     for (auto& pair : screenshots_) {
@@ -377,7 +383,6 @@ int MainWindow::LoadFromFile(QFile *file) {
         ui->libraryComboBox->removeItem(i);
     for (auto& library : libraries)
         ui->libraryComboBox->addItem(library);
-    FilterTreeWidget();
     // callstack map
     callStackMap_.clear();
     stream >> value;
@@ -405,6 +410,17 @@ int MainWindow::LoadFromFile(QFile *file) {
             map[key] = value;
         }
     }
+    // freeaddr map
+    freeAddrMap_.clear();
+    stream >> value;
+    for (int i = 0; i < value; i++) {
+        QString str;
+        stream >> str;
+        qint32 time;
+        stream >> time;
+        freeAddrMap_.insert(str, time);
+    }
+    FilterTreeWidget();
     // screen shots
     screenshots_.clear();
     stream >> value;
@@ -416,7 +432,6 @@ int MainWindow::LoadFromFile(QFile *file) {
         stream >> ba;
         screenshots_.push_back(qMakePair(time, ba));
     }
-    persistentAddrs_.clear();
     stackRecords_.clear();
     return static_cast<qint32>(IOErrorCode::NONE);
 }
@@ -526,6 +541,16 @@ bool MainWindow::GetTreeWidgetItemShouldHide(QTreeWidgetItem* item) const {
     if (!hide) {
         if (ui->libraryComboBox->currentIndex() != 0) {
             hide = ui->libraryComboBox->currentText() != library;
+        }
+    }
+    bool persistent = ui->allocComboBox->currentIndex() == 1;
+    if (!hide && persistent) {
+        auto time = casted->Time();
+        auto it = freeAddrMap_.find(addr);
+        if (it != freeAddrMap_.end()) {
+            if (time <= it.value()) {
+                hide = true;
+            }
         }
     }
     return hide;
@@ -701,7 +726,6 @@ void MainWindow::StacktraceDataReceived() {
             const auto& rootMemAddr = root[2];
             const auto& rootLibrary = stack[1];
             const auto& rootFuncAddr = TryAddNewAddress(rootLibrary, stack[2]);
-            persistentAddrs_.insert(rootMemAddr);
             StackRecord record;
             record.uuid_ = QUuid::createUuid();
             record.time_ = rootTime.toInt();
@@ -730,7 +754,10 @@ void MainWindow::StacktraceDataReceived() {
     if (frees.size() > 0) {
         for (const auto& free : frees) {
             const auto address = free.second;
-            persistentAddrs_.remove(address);
+            auto curTime = freeAddrMap_[address];
+            if (free.first > curTime) {
+                freeAddrMap_[address] = free.first;
+            }
         }
     }
 }
@@ -839,17 +866,14 @@ void MainWindow::on_launchPushButton_clicked() {
         if (count > 0)
             Print(QString("Captured %1 records.").arg(count));
         ConnectionFailed();
-        int sizeInBytes = 0;
         QList<QTreeWidgetItem*> topLevelItems;
         for (auto& record : stackRecords_) {
-            auto item = new SortableTreeWidgetItem(record, nullptr);
-            sizeInBytes += item->Size();
-            topLevelItems.append(item);
+            topLevelItems.append(new SortableTreeWidgetItem(record, nullptr));
         }
         ui->stackTreeWidget->addTopLevelItems(topLevelItems);
-        ui->recordCountLineEdit->setText(QString::number(topLevelItems.size()) + "/" + SizeToString(sizeInBytes));
         for (auto& library : libraries_)
             ui->libraryComboBox->addItem(library);
+        FilterTreeWidget();
         return;
     }
 
@@ -888,7 +912,7 @@ void MainWindow::on_launchPushButton_clicked() {
     stackRecords_.clear();
     screenshots_.clear();
     symbloMap_.clear();
-    persistentAddrs_.clear();
+    freeAddrMap_.clear();
     callStackMap_.clear();
     callStackModel_->clear();
 
@@ -1038,5 +1062,9 @@ void MainWindow::on_memSizeComboBox_currentIndexChanged(int) {
 }
 
 void MainWindow::on_libraryComboBox_currentIndexChanged(int) {
+    filterDirty_ = true;
+}
+
+void MainWindow::on_allocComboBox_currentIndexChanged(int) {
     filterDirty_ = true;
 }

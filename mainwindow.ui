@@ -448,7 +448,7 @@
                 </property>
                 <property name="minimumSize">
                  <size>
-                  <width>350</width>
+                  <width>450</width>
                   <height>25</height>
                  </size>
                 </property>
@@ -479,9 +479,12 @@
                    <property name="toolTip">
                     <string>Filter By Size (1KiB, 1024KiB)</string>
                    </property>
+                   <property name="currentText">
+                    <string>All Sizes</string>
+                   </property>
                    <item>
                     <property name="text">
-                     <string>All Allocations</string>
+                     <string>All Sizes</string>
                     </property>
                    </item>
                    <item>
@@ -497,6 +500,20 @@
                    <item>
                     <property name="text">
                      <string>Small</string>
+                    </property>
+                   </item>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QComboBox" name="allocComboBox">
+                   <item>
+                    <property name="text">
+                     <string>All Allocations</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>Persistent</string>
                     </property>
                    </item>
                   </widget>

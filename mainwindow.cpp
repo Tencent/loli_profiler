@@ -30,6 +30,29 @@ enum class IOErrorCode : qint32 {
     CORRUPTED_DATA,
 };
 
+QString SizeToString(int size) {
+    if (size >= 1024 * 1024) {
+        return QString::number(static_cast<double>(size) / 1024 / 1024, 'f', 2) + " MB";
+    } else if (size > 1024) {
+        return QString::number(static_cast<double>(size) / 1024, 'f', 2) + " KB";
+    } else {
+        return QString::number(size) + " Bytes";
+    }
+}
+
+QString TimeToString(int ms) {
+    int seconds = ms / 1000;
+    int minutes = seconds / 60;
+    int hours = minutes / 60;
+    if (seconds < 60) {
+        return QString::number(seconds);
+    } else if (seconds < 3600) {
+        return QString("%1:%2").arg(int(minutes % 60)).arg(int(seconds % 60));
+    } else {
+        return QString("%1:%2:%3").arg(int(hours)).arg(int(minutes % 60)).arg(int(seconds % 60));
+    }
+}
+
 class SortableTreeWidgetItem : public QTreeWidgetItem {
 public:
     SortableTreeWidgetItem(QUuid uuid, int time, int size, QTreeWidget* parent) : QTreeWidgetItem(parent), uuid_(uuid) {
@@ -47,7 +70,7 @@ public:
     int Time() const { return time_; }
     void SetTime(int time) {
         time_ = time;
-        setText(0, QString::number(time));
+        setText(0, TimeToString(time));
     }
     int Size() const { return size_; }
     void SetSize(int size) {
@@ -55,17 +78,6 @@ public:
         setText(1, SizeToString(size));
     }
 private:
-    QString SizeToString(int size) {
-        int sign = size > 0 ? 1 : -1;
-        int value = std::abs(size);
-        if (value >= 1024 * 1024) {
-            return QString::number(static_cast<double>(sign * value) / 1024 / 1024, 'f', 2) + " MB";
-        } else if (value > 1024) {
-            return QString::number(static_cast<double>(sign * value) / 1024, 'f', 2) + "KB";
-        } else {
-            return QString::number(sign * value) + " Bytes";
-        }
-    }
     bool operator<(const QTreeWidgetItem &other) const {
         auto casted = static_cast<const SortableTreeWidgetItem&>(other);
         int column = treeWidget()->sortColumn();
@@ -442,15 +454,6 @@ QString MainWindow::GetLastOpenDir() const {
 
 QString MainWindow::GetLastSymbolDir() const {
     return QDir(lastSymbolDir_).exists() ? lastSymbolDir_ : QDir::homePath();
-}
-
-QString MainWindow::SizeToString(int size) const {
-    if (size < 1024)
-        return QString("%1 Byte").arg(size);
-    else if (size < 1024 * 1024)
-        return QString("%1 KiB").arg(QString::number(static_cast<double>(size) / 1024, 'G', 6));
-    else
-        return QString("%1 MiB").arg(QString::number(static_cast<double>(size) / 1024 / 1024, 'G', 6));
 }
 
 void MainWindow::ConnectionFailed() {

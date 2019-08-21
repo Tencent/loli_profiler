@@ -52,7 +52,6 @@ private:
     int LoadFromFile(QFile *file);
     QString GetLastOpenDir() const;
     QString GetLastSymbolDir() const;
-    QString SizeToString(int size) const;
 
     void ConnectionFailed();
 

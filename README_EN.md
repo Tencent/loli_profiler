@@ -2,25 +2,27 @@
 
 Lightweight Opensource profiLing Instrument
 
+![](images/macos.png)
+
 **Please Note: this project is still in early stage**
+
+## Features
+
+- Can profiler all debuggable apps (No limit on rooted devices)
+- Collect any so library within your apk
+- Translates function address to human readable format
+- Filtering persistent memory allocations
+- Take screen-shot every 5 second
+- Transfer memory related function's call-stack in real-time (by TCP Socket)
+- Network packet is compressed using lz4 to speed-up sending & receiving process
+- Fast and portable (Developed in c++ and QT framework)
+- Support Windows 10 & Max OSX (Mojave+)
 
 ## Intro
 
 Install debuggable apk to your mobile device. Open LoliProfiler, select Python's path, text your app's name com.compnay.app, then press launch and you're done. After capturing data for a while, press Stop Capture to stop. After that, LoliProfiler will analyze received data and show those not freed memory allocations in Stacktrace tab. Normally the stack trace data includes function addresses, you will need to provide addr2line's path by clicking Addr2line button and select the correct executable in your ndk path. Then click Load Symblos to select the correct symblo for target .so library, then those address will be translated to human readable format.
 
 ![](images/screenshot.gif)
-
-## Features
-
-* Can profiler all debuggable apps (No limit on rooted devices)
-* Collect any so library within your apk
-* Translates function address to human readable format
-* Filtering persistent memory allocations
-* Take screen-shot every 5 second
-* Transfer memory related function's call-stack in real-time (by TCP Socket)
-* Network packet is compressed using lz4 to speed-up sending & receiving process
-* Fast and portable (Developed in c++ and QT framework)
-* Support Windows 10 & Max OSX (Mojave+)
 
 ## Plan
 

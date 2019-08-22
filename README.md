@@ -9,7 +9,8 @@
 ## 特性
 
 - 可以Profile所有Debuggable的程序（Root后的设备可Profile所有程序）
-- 可hook目标APK中任意so库
+- 可Hook目标APK中任意so库
+- Hook上的内存函数malloc、calloc、realloc、memalign、free
 - 可将函数地址自动批量转换为函数名称
 - 自动分析数据展示常驻内存
 - 每5s自动截图一次
@@ -50,7 +51,6 @@ FMalloc* FAndroidPlatformMemory::BaseAllocator() {
 
 **短期计划**
 
-* hook 更多的内存相关函数 realloc/etc ... 
 * 尝试同时支持 PLT hook 与 Inline hook
 * 计划中 ... 
 

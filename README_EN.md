@@ -10,6 +10,7 @@ Lightweight Opensource profiLing Instrument
 
 - Can profiler all debuggable apps (No limit on rooted devices)
 - Collect any so library within your apk
+- Hooked memory functions: malloc、calloc、realloc、memalign、free
 - Translates function address to human readable format
 - Filtering persistent memory allocations
 - Take screen-shot every 5 second
@@ -50,7 +51,6 @@ FMalloc* FAndroidPlatformMemory::BaseAllocator() {
 
 **Future plans**
 
-* hook more memory functions realloc/free/etc ...
 * try support both PLT hook and Inline hook
 * and more ... 
 

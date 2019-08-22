@@ -53,6 +53,8 @@ enum loliFlags {
     FREE_ = 0, 
     MALLOC_ = 1, 
     CALLOC_ = 2, 
+    MEMALIGN_ = 3, 
+    REALLOC_ = 4, 
 };
 
 void *loliMalloc(size_t size) {
@@ -102,6 +104,40 @@ void *loliCalloc(int n, int size) {
     return mem;
 }
 
+void *loliMemalign(size_t alignment, size_t size) {
+    if (size < static_cast<size_t>(minRecSize_))
+        return memalign(alignment, size);
+    const size_t max = 30;
+    void* buffer[max];
+    std::ostringstream oss;
+    auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - hookTime_).count();
+    auto mem = memalign(alignment, size);
+    oss << MEMALIGN_ << '\\'<< time << ',' << size << ',' << mem << '\\';
+    loli::dump(oss, buffer, loli::capture(buffer, max));
+    {
+        std::lock_guard<std::mutex> lock(cacheMutex_);
+        cache_.emplace_back(oss.str());
+    }
+    return mem;
+}
+
+void *loliRealloc(void *ptr, size_t new_size) {
+    if (new_size < static_cast<size_t>(minRecSize_))
+        return realloc(ptr, new_size);
+    const size_t max = 30;
+    void* buffer[max];
+    std::ostringstream oss;
+    auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - hookTime_).count();
+    auto mem = realloc(ptr, new_size);
+    oss << REALLOC_ << '\\'<< time << ',' << new_size << ',' << mem << ',' << (ptr == mem ? 1 : 0) << '\\';
+    loli::dump(oss, buffer, loli::capture(buffer, max));
+    {
+        std::lock_guard<std::mutex> lock(cacheMutex_);
+        cache_.emplace_back(oss.str());
+    }
+    return mem;
+}
+
 int loliHook(int minRecSize, const char *soNames) {
     if (hooked_)
         return 0;
@@ -130,6 +166,16 @@ int loliHook(int minRecSize, const char *soNames) {
         ecode = xhook_register(soName.c_str(), "calloc", (void*)loliCalloc, nullptr);
         if (ecode != 0) {
             __android_log_print(ANDROID_LOG_INFO, "Loli", "error hooking %s's calloc()", token.c_str());
+            return ecode;
+        }
+        ecode = xhook_register(soName.c_str(), "memalign", (void*)loliMemalign, nullptr);
+        if (ecode != 0) {
+            __android_log_print(ANDROID_LOG_INFO, "Loli", "error hooking %s's memalign()", token.c_str());
+            return ecode;
+        }
+        ecode = xhook_register(soName.c_str(), "realloc", (void*)loliRealloc, nullptr);
+        if (ecode != 0) {
+            __android_log_print(ANDROID_LOG_INFO, "Loli", "error hooking %s's realloc()", token.c_str());
             return ecode;
         }
         names.erase(0, pos + 1);

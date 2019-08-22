@@ -554,7 +554,7 @@ bool MainWindow::GetTreeWidgetItemShouldHide(QTreeWidgetItem* item) const {
         auto time = casted->Time();
         auto it = freeAddrMap_.find(addr);
         if (it != freeAddrMap_.end()) {
-            if (time <= it.value()) {
+            if (time < it.value()) {
                 hide = true;
             }
         }

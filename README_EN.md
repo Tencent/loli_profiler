@@ -24,6 +24,28 @@ Install debuggable apk to your mobile device. Open LoliProfiler, select Python's
 
 ![](images/screenshot.gif)
 
+For engines like Unity or UE4, we can use below methods to force them to use malloc instead of internal memory pool. 
+
+### Unity
+
+```java
+protected String updateUnityCommandLineArguments(String cmdLine) {
+    return "-systemallocator";
+}
+```
+
+### UE4
+
+```c++
+FMalloc* FAndroidPlatformMemory::BaseAllocator() {
+#if USE_MALLOC
+    return new FMallocAnsi();
+#else
+    return new FMallocBinned(MemoryConstants.PageSize, MemoryLimit);
+#endif
+}
+```
+
 ## Plan
 
 **Future plans**

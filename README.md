@@ -24,6 +24,28 @@
 
 ![](images/screenshot.gif)
 
+对于Unity于UE4，可使用如下选项让引擎使用malloc进行内存分配，便于定位真正的问题
+
+### Unity
+
+```java
+protected String updateUnityCommandLineArguments(String cmdLine) {
+    return "-systemallocator";
+}
+```
+
+### UE4
+
+```c++
+FMalloc* FAndroidPlatformMemory::BaseAllocator() {
+#if USE_MALLOC
+    return new FMallocAnsi();
+#else
+    return new FMallocBinned(MemoryConstants.PageSize, MemoryLimit);
+#endif
+}
+```
+
 ## 计划
 
 **短期计划**

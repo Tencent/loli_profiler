@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 #include "timeprofiler.h"
+#include "customgraphicsview.h"
 
 #include <QClipboard>
 #include <QDataStream>
@@ -15,6 +16,8 @@
 #include <QTemporaryFile>
 #include <QTextStream>
 #include <QProgressDialog>
+#include <QScrollBar>
+#include <QGLWidget>
 
 #include <algorithm>
 #include <cmath>
@@ -850,6 +853,52 @@ void MainWindow::on_actionSave_triggered() {
 
 void MainWindow::on_actionExit_triggered() {
     this->close();
+}
+
+void MainWindow::on_actionMemory_Fragmentation_triggered() {
+    qint32 count = static_cast<qint32>(ui->stackTreeWidget->topLevelItemCount());
+    if (count == 0) {
+        QMessageBox::warning(this, "Warning", "Record or open some data first!", QMessageBox::StandardButton::Ok);
+        return;
+    }
+    ui->allocComboBox->setCurrentIndex(1);
+    quint64 minAddr = 0xffffffff, maxAddr = 0;
+    for (int i = 0; i < count; i++) {
+        auto topItem = static_cast<SortableTreeWidgetItem*>(ui->stackTreeWidget->topLevelItem(i));
+        auto addr = topItem->text(2).toULong(nullptr, 0);
+        if (addr > maxAddr)
+            maxAddr = addr;
+        if (addr < minAddr)
+            minAddr = addr;
+    }
+    quint32 sizeInMb = static_cast<quint32>(static_cast<double>(maxAddr - minAddr) / 1024 / 1024);
+    QDialog fragDialog(this);
+    auto layout = new QHBoxLayout();
+    fragDialog.setLayout(layout);
+    CustomGraphicsView* fragView = new CustomGraphicsView();
+    QGraphicsScene* fragScene = new QGraphicsScene();
+    QPen pen(QBrush(), 0.0);
+    QBrush brush(QColor::fromRgb(200, 50, 50, 255));
+    fragScene->addRect(0, 0, 200, sizeInMb, pen, QBrush(QColor::fromRgb(50, 200, 50, 255)));
+    for (int i = 0; i < count; i++) {
+        auto topItem = static_cast<SortableTreeWidgetItem*>(ui->stackTreeWidget->topLevelItem(i));
+        if (topItem->isHidden())
+            continue;
+        auto addr = topItem->text(2).toULong(nullptr, 0) - minAddr;
+        auto size = topItem->Size();
+        auto addrInMb = static_cast<double>(addr) / 1024 / 1024;
+        auto sizeInMb = static_cast<double>(size) / 1024 / 1024;
+        fragScene->addRect(0, addrInMb, 200, sizeInMb, pen, brush);
+    }
+    fragView->setScene(fragScene);
+    fragView->setViewport(new QGLWidget(QGLFormat(QGL::SampleBuffers)));
+    fragView->setInteractive(false);
+    fragView->show();
+    layout->addWidget(fragView);
+    layout->setMargin(0);
+    fragDialog.setWindowTitle("Memory Fragmentation Viewer");
+    fragDialog.resize(500, 400);
+    fragDialog.exec();
 }
 
 void MainWindow::on_actionAbout_triggered() {

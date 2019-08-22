@@ -86,6 +86,7 @@ private slots:
     void on_actionOpen_triggered();
     void on_actionSave_triggered();
     void on_actionExit_triggered();
+    void on_actionMemory_Fragmentation_triggered();
     void on_actionAbout_triggered();
     void on_sdkPushButton_clicked();
     void on_launchPushButton_clicked();

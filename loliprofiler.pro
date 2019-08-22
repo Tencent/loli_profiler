@@ -4,7 +4,7 @@
 #
 #-------------------------------------------------
 
-QT       += core gui charts network
+QT       += core gui opengl charts network
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
@@ -28,6 +28,7 @@ SOURCES += \
         adbprocess.cpp \
         addressprocess.cpp \
         charttooltipitem.cpp \
+        customgraphicsview.cpp \
         fixedscrollarea.cpp \
         interactivechartview.cpp \
         lz4/lz4.c \
@@ -42,6 +43,7 @@ HEADERS += \
         adbprocess.h \
         addressprocess.h \
         charttooltipitem.h \
+        customgraphicsview.h \
         fixedscrollarea.h \
         interactivechartview.h \
         lz4/lz4.h \

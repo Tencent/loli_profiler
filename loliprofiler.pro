@@ -24,6 +24,8 @@ DEFINES += QT_DEPRECATED_WARNINGS
 
 CONFIG += c++11
 
+INCLUDEPATH += $$PWD/include $$PWD/src/lz4
+
 SOURCES += \
         src/adbprocess.cpp \
         src/addressprocess.cpp \

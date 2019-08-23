@@ -8,7 +8,7 @@
 #include <QHeaderView>
 #include <QDebug>
 
-#include <algorithm>
+#include <cmath>
 
 CustomGraphicsView::CustomGraphicsView(QWidget *parent)
     : QGraphicsView (parent) {

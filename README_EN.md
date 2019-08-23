@@ -2,7 +2,7 @@
 
 Lightweight Opensource profiLing Instrument
 
-![](images/macos.png)
+![](res/images/macos.png)
 
 **Please Note: this project is still in early stage**
 
@@ -23,7 +23,7 @@ Lightweight Opensource profiLing Instrument
 
 Install debuggable apk to your mobile device. Open LoliProfiler, select Python's path, text your app's name com.compnay.app, then press launch and you're done. After capturing data for a while, press Stop Capture to stop. After that, LoliProfiler will analyze received data and show those not freed memory allocations in Stacktrace tab. Normally the stack trace data includes function addresses, you will need to provide addr2line's path by clicking Addr2line button and select the correct executable in your ndk path. Then click Load Symblos to select the correct symblo for target .so library, then those address will be translated to human readable format.
 
-![](images/screenshot.gif)
+![](res/images/screenshot.gif)
 
 For engines like Unity or UE4, we can use below methods to force them to use malloc instead of internal memory pool. 
 

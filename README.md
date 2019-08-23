@@ -2,7 +2,7 @@
 
 轻量开源内存分析工具（Lightweight Opensource profiLing Instrument）
 
-![](images/macos.png)
+![](res/images/macos.png)
 
 **注意：此程序仍处于初级研发阶段**
 
@@ -23,7 +23,7 @@
 
 首先在移动设备上安装debuggable的apk程序，打开LoliProfiler，首先选择Python的路径，接着输入apk程序名称如：com.company.name，最后点击Launch即可。采集一段时间数据后，点击Stop Capture，即可完成采集。完成采集后LoliProfiler会分析获取的数据，并将采集结束前未释放的内存数据展示在StackTrace页签中。一般情况下堆栈数据会包含函数地址信息，你需要提供安卓NDK工具链中的addr2line可执行程序的路径给LoliProfiler。接着就可以选择Load Symbol来加载符号表数据，当翻译完成后，StackTrace中的数据就会被翻译为真正的函数名称。
 
-![](images/screenshot.gif)
+![](res/images/screenshot.gif)
 
 对于Unity于UE4，可使用如下选项让引擎使用malloc进行内存分配，便于定位真正的问题
 

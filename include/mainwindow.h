@@ -12,6 +12,8 @@
 #include "screenshotprocess.h"
 #include "meminfoprocess.h"
 #include "stacktraceprocess.h"
+#include "stacktracemodel.h"
+#include "stacktraceproxymodel.h"
 #include "addressprocess.h"
 #include "startappprocess.h"
 #include "fixedscrollarea.h"
@@ -20,15 +22,6 @@
 namespace Ui {
 class MainWindow;
 }
-
-struct StackRecord {
-    QUuid uuid_;
-    int time_;
-    int size_;
-    QString addr_;
-    QString library_;
-    QString funcAddr_;
-};
 
 class QTreeWidgetItem;
 class QStandardItemModel;
@@ -57,20 +50,19 @@ private:
 
     int GetScreenshotIndex(const QPointF& pos) const;
     void ShowScreenshotAt(int index);
-
     void HideToolTips();
     void UpdateMemInfoRange();
-    bool GetTreeWidgetItemShouldHide(QTreeWidgetItem* item) const;
-    void FilterTreeWidget();
-
     QString TryAddNewAddress(const QString& lib, const QString& addr);
+    void ShowCallStack(const QModelIndex& index);
+    void ShowSummary();
 
 private slots:
     void FixedUpdate();
 
     void OnTimeSelectionChange(const QPointF& pos);
     void OnSyncScroll(QtCharts::QChartView* sender, int prevMouseX, int delta);
-    void OnStackTreeWidgetContextMenu(const QPoint & pos);
+    void OnStackTableViewContextMenu(const QPoint & pos);
+    void OnStackTableViewSelectionChanged(const QItemSelection &selected, const QItemSelection &deselected);
 
     void StartAppProcessFinished(AdbProcess* process);
     void StartAppProcessErrorOccurred();
@@ -91,7 +83,6 @@ private slots:
     void on_sdkPushButton_clicked();
     void on_launchPushButton_clicked();
     void on_chartScaleHSlider_valueChanged(int value);
-    void on_stackTreeWidget_itemSelectionChanged();
     void on_symbloPushButton_clicked();
     void on_addr2LinePushButton_clicked();
     void on_pythonPushButton_clicked();
@@ -104,6 +95,8 @@ private:
     Ui::MainWindow *ui;
     QProgressDialog *progressDialog_;
     QStandardItemModel *callStackModel_;
+    StackTraceModel *stacktraceModel_;
+    StackTraceProxyModel *stacktraceProxyModel_;
     QHash<QUuid, QVector<QString>> callStackMap_;
     QSet<QString> libraries_;
     QString adbPath_;
@@ -125,7 +118,6 @@ private:
     // stacktrace process
     StackTraceProcess *stacktraceProcess_;
     int stacktraceRetryCount_ = 0;
-    QVector<StackRecord> stackRecords_;
 
     // address process
     QVector<AddressProcess*> addrProcesses_;
@@ -146,7 +138,6 @@ private:
     // charts
     FixedScrollArea* scrollArea_;
 
-    bool filterDirty_ = false;
     bool isCapturing_ = false;
     bool isConnected_ = false;
 };

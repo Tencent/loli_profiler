@@ -33,78 +33,19 @@ enum class IOErrorCode : qint32 {
     CORRUPTED_DATA,
 };
 
-QString SizeToString(int size) {
-    if (size >= 1024 * 1024) {
-        return QString::number(static_cast<double>(size) / 1024 / 1024, 'f', 2) + " MB";
-    } else if (size > 1024) {
-        return QString::number(static_cast<double>(size) / 1024, 'f', 2) + " KB";
-    } else {
-        return QString::number(size) + " Bytes";
-    }
-}
-
-QString TimeToString(int ms) {
-    int seconds = ms / 1000;
-    int minutes = seconds / 60;
-    int hours = minutes / 60;
-    if (seconds < 60) {
-        return QString::number(seconds);
-    } else if (seconds < 3600) {
-        return QString("%1:%2").arg(int(minutes % 60)).arg(int(seconds % 60));
-    } else {
-        return QString("%1:%2:%3").arg(int(hours)).arg(int(minutes % 60)).arg(int(seconds % 60));
-    }
-}
-
-class SortableTreeWidgetItem : public QTreeWidgetItem {
-public:
-    SortableTreeWidgetItem(QUuid uuid, int time, int size, QTreeWidget* parent) : QTreeWidgetItem(parent), uuid_(uuid) {
-        SetTime(time);
-        SetSize(size);
-    }
-    SortableTreeWidgetItem(const StackRecord& record, QTreeWidget* parent) : QTreeWidgetItem(parent), uuid_(record.uuid_) {
-        SetTime(record.time_);
-        SetSize(record.size_);
-        setText(2, record.addr_);
-        setText(3, record.library_);
-        setText(4, record.funcAddr_);
-    }
-    QUuid Uuid() const { return uuid_; }
-    int Time() const { return time_; }
-    void SetTime(int time) {
-        time_ = time;
-        setText(0, TimeToString(time));
-    }
-    int Size() const { return size_; }
-    void SetSize(int size) {
-        size_ = size;
-        setText(1, SizeToString(size));
-    }
-private:
-    bool operator<(const QTreeWidgetItem &other) const {
-        auto casted = static_cast<const SortableTreeWidgetItem&>(other);
-        int column = treeWidget()->sortColumn();
-        switch (column) {
-            case 0:
-                return time_ < casted.Time();
-            case 1:
-                return size_ < casted.Size();
-            default:
-                return text(column) < other.text(column);
-        }
-    }
-    QUuid uuid_;
-    int time_;
-    int size_;
-};
-
 using namespace QtCharts;
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::MainWindow) {
     ui->setupUi(this);
-    ui->stackTreeWidget->setUniformRowHeights(true);
+
+    stacktraceModel_ = new StackTraceModel(this);
+    stacktraceProxyModel_ = new StackTraceProxyModel(freeAddrMap_, stacktraceModel_, this);
+    stacktraceProxyModel_->setSizeFilter(ui->memSizeComboBox->currentIndex());
+    stacktraceProxyModel_->setLibraryFilter(QString());
+    stacktraceProxyModel_->setPersistentFilter(ui->allocComboBox->currentIndex() == 1);
+    ui->stackTableView->setModel(stacktraceProxyModel_);
 
     progressDialog_ = new QProgressDialog(this, Qt::WindowTitleHint | Qt::CustomizeWindowHint);
     progressDialog_->setWindowModality(Qt::WindowModal);
@@ -202,7 +143,8 @@ MainWindow::MainWindow(QWidget *parent) :
 
     LoadSettings();
 
-    connect(ui->stackTreeWidget, &QTreeWidget::customContextMenuRequested, this, &MainWindow::OnStackTreeWidgetContextMenu);
+    connect(ui->stackTableView, &QTableView::customContextMenuRequested, this, &MainWindow::OnStackTableViewContextMenu);
+    connect(ui->stackTableView->selectionModel(), &QItemSelectionModel::selectionChanged, this, &MainWindow::OnStackTableViewSelectionChanged);
 
     mainTimer_ = new QTimer(this);
     connect(mainTimer_, SIGNAL(timeout()), this, SLOT(FixedUpdate()));
@@ -298,16 +240,16 @@ void MainWindow::SaveToFile(QFile *file) {
         }
     }
     // callstack tree view
-    qint32 count = static_cast<qint32>(ui->stackTreeWidget->topLevelItemCount());
+    qint32 count = stacktraceModel_->rowCount();
     stream << count;
     for (int i = 0; i < count; i++) {
-        auto topItem = static_cast<SortableTreeWidgetItem*>(ui->stackTreeWidget->topLevelItem(i));
-        stream << topItem->Uuid().toString();
-        stream << static_cast<qint32>(topItem->Time());
-        stream << static_cast<qint32>(topItem->Size());
-        stream << topItem->text(2);
-        stream << topItem->text(3);
-        stream << topItem->text(4);
+        auto& record = stacktraceModel_->recordAt(i);
+        stream << record.uuid_.toString();
+        stream << static_cast<qint32>(record.time_);
+        stream << static_cast<qint32>(record.size_);
+        stream << record.addr_;
+        stream << record.library_;
+        stream << record.funcAddr_;
     }
     // callstack map
     stream << static_cast<qint32>(callStackMap_.size());
@@ -370,29 +312,29 @@ int MainWindow::LoadFromFile(QFile *file) {
     }
     // callstack tree view
     QSet<QString> libraries;
-    ui->stackTreeWidget->clear();
+    stacktraceModel_->clear();
     stream >> value;
-    QList<QTreeWidgetItem*> treeItems;
+    QVector<StackRecord> records;
     for (int i = 0; i < value; i++) {
+        StackRecord record;
         QString str;
         stream >> str;
-        auto topItem = new SortableTreeWidgetItem(QUuid::fromString(str), 0, 0, ui->stackTreeWidget);
+        record.uuid_ = QUuid::fromString(str);
         qint32 size;
         stream >> size;
-        topItem->SetTime(size);
+        record.time_ = size;
         stream >> size;
-        topItem->SetSize(size);
+        record.size_ = size;
         stream >> str;
-        topItem->setText(2, str);
+        record.addr_ = str;
         stream >> str;
-        topItem->setText(3, str);
+        record.library_ = str;
         if (!libraries.contains(str))
             libraries.insert(str);
         stream >> str;
-        topItem->setText(4, str);
-        treeItems.push_back(topItem);
+        record.funcAddr_ = str;
+        records.push_back(record);
     }
-    ui->stackTreeWidget->addTopLevelItems(treeItems);
     ui->libraryComboBox->setCurrentIndex(0);
     for (int i = 1; i < ui->libraryComboBox->count(); i++)
         ui->libraryComboBox->removeItem(i);
@@ -435,7 +377,7 @@ int MainWindow::LoadFromFile(QFile *file) {
         stream >> time;
         freeAddrMap_.insert(str, time);
     }
-    FilterTreeWidget();
+    stacktraceModel_->append(records);
     // screen shots
     screenshots_.clear();
     stream >> value;
@@ -447,7 +389,7 @@ int MainWindow::LoadFromFile(QFile *file) {
         stream >> ba;
         screenshots_.push_back(qMakePair(time, ba));
     }
-    stackRecords_.clear();
+    ShowSummary();
     return static_cast<qint32>(IOErrorCode::NONE);
 }
 
@@ -469,7 +411,7 @@ void MainWindow::ConnectionFailed() {
     ui->launchPushButton->setText("Launch");
     ui->sdkPushButton->setEnabled(true);
     ui->actionOpen->setEnabled(true);
-    ui->stackTreeWidget->setSortingEnabled(true);
+    ui->stackTableView->setSortingEnabled(true);
 }
 
 int MainWindow::GetScreenshotIndex(const QPointF& pos) const { // TODO: optimize with binary search
@@ -524,61 +466,6 @@ void MainWindow::UpdateMemInfoRange() {
     memInfoAxisY_->setRange(0, maxMemInfoValue_);
 }
 
-bool MainWindow::GetTreeWidgetItemShouldHide(QTreeWidgetItem* item) const {
-    auto casted = static_cast<SortableTreeWidgetItem*>(item);
-    auto library = casted->data(3, 0).toString();
-    auto addr = casted->data(2, 0).toString();
-    auto size = casted->Size();
-    auto hide = false;
-    switch(ui->memSizeComboBox->currentIndex()) {
-    case 0: // all allocations
-        hide = false;
-        break;
-    case 1: // large
-        hide = size < 1048576;
-        break;
-    case 2: // medium
-        hide = size >= 1048576 || size <= 1024;
-        break;
-    case 3: // small
-        hide = size > 1024;
-        break;
-    }
-    if (!hide) {
-        if (ui->libraryComboBox->currentIndex() != 0) {
-            hide = ui->libraryComboBox->currentText() != library;
-        }
-    }
-    bool persistent = ui->allocComboBox->currentIndex() == 1;
-    if (!hide && persistent) {
-        auto time = casted->Time();
-        auto it = freeAddrMap_.find(addr);
-        if (it != freeAddrMap_.end()) {
-            if (time < it.value()) {
-                hide = true;
-            }
-        }
-    }
-    return hide;
-}
-
-void MainWindow::FilterTreeWidget() {
-    int visibleCount = 0;
-    int sizeInBytes = 0;
-    for (int i = 0; i < ui->stackTreeWidget->topLevelItemCount(); i++) {
-        auto item = ui->stackTreeWidget->topLevelItem(i);
-        auto hide = GetTreeWidgetItemShouldHide(item);
-        if (item->isHidden() != hide)
-            item->setHidden(hide);
-        if (!hide) {
-            visibleCount++;
-            sizeInBytes += static_cast<SortableTreeWidgetItem*>(item)->Size();
-        }
-    }
-    filterDirty_ = false;
-    ui->recordCountLineEdit->setText(QString::number(visibleCount) + "/" + SizeToString(sizeInBytes));
-}
-
 QString MainWindow::TryAddNewAddress(const QString& lib, const QString& addr) {
     if (!addr.startsWith("0x"))
         return addr;
@@ -595,9 +482,30 @@ QString MainWindow::TryAddNewAddress(const QString& lib, const QString& addr) {
     return addr;
 }
 
+void MainWindow::ShowCallStack(const QModelIndex& index) {
+    if (!index.isValid())
+        return;
+    auto& selectedRecord = stacktraceModel_->recordAt(index.row());
+    auto& callStack = callStackMap_[selectedRecord.uuid_];
+    for (int i = 0, row = 0; i < callStack.size(); i += 2, row++) {
+        const auto& libName = callStack[i];
+        const auto& funcAddr = callStack[i + 1];
+        const auto& funcName = TryAddNewAddress(libName, funcAddr);
+        callStackModel_->setItem(row, 0, new QStandardItem(libName));
+        callStackModel_->setItem(row, 1, new QStandardItem(funcName));
+    }
+}
+
+void MainWindow::ShowSummary() {
+    auto rowCount = stacktraceProxyModel_->rowCount();
+    int size = 0;
+    for (int i = 0; i < rowCount; i++) {
+        size += stacktraceProxyModel_->data(stacktraceProxyModel_->index(i, 1), Qt::UserRole).toInt();
+    }
+    ui->recordCountLineEdit->setText(QString("%1 / %2").arg(rowCount).arg(sizeToString(size)));
+}
+
 void MainWindow::FixedUpdate() {
-    if (filterDirty_)
-        FilterTreeWidget();
     if (!isConnected_)
         return;
     if (time_ - lastScreenshotTime_ >= 5 && !screenshotProcess_->IsRunning()) {
@@ -626,39 +534,40 @@ void MainWindow::OnSyncScroll(QtCharts::QChartView* sender, int prevMouseX, int 
     memInfoChartView_->SyncScroll(sender, prevMouseX, delta);
 }
 
-void MainWindow::OnStackTreeWidgetContextMenu(const QPoint & pos) {
+void MainWindow::OnStackTableViewContextMenu(const QPoint & pos) {
     QMenu menu(this);
-    auto actionCollapse = new QAction("Expand");
-    menu.addAction(actionCollapse);
-    connect(actionCollapse, &QAction::triggered, [this]() {
-        const auto& selections = ui->stackTreeWidget->selectedItems();
-        for (auto selection : selections) {
-            if (!selection->isExpanded()) {
-                auto child = selection;
-                while (child) {
-                    child->setExpanded(true);
-                    child = child->childCount() > 0 ? child->child(0) : nullptr;
-                }
-            }
-        }
-    });
     auto actionCopy = new QAction("Copy to Clipboard");
+    actionCopy->setShortcut(QKeySequence::Copy);
     menu.addAction(actionCopy);
     connect(actionCopy, &QAction::triggered, this, [this]() {
-        const auto& selections = ui->stackTreeWidget->selectedItems();
+        const auto& indexes = ui->stackTableView->selectionModel()->selection().indexes();
+        if (indexes.size() == 0)
+            return;
         QString output;
         QTextStream stream(&output);
-        for (auto selection : selections) {
-            auto child = selection;
-            while (child) {
-                stream << child->text(3) << ", " << child->text(4) << endl;
-                child = child->childCount() > 0 ? child->child(0) : nullptr;
-            }
+        auto selectedIndex = indexes.front();
+        if (!selectedIndex.isValid())
+            return;
+        auto& selectedRecord = stacktraceModel_->recordAt(selectedIndex.row());
+        auto& callStack = callStackMap_[selectedRecord.uuid_];
+        for (int i = 0, row = 0; i < callStack.size(); i += 2, row++) {
+            const auto& libName = callStack[i];
+            const auto& funcAddr = callStack[i + 1];
+            const auto& funcName = TryAddNewAddress(libName, funcAddr);
+            stream << libName << ", " << funcName << endl;
         }
         stream.flush();
         QApplication::clipboard()->setText(output);
     });
-    menu.exec(ui->stackTreeWidget->viewport()->mapToGlobal(pos));
+    menu.exec(ui->stackTableView->viewport()->mapToGlobal(pos));
+}
+
+void MainWindow::OnStackTableViewSelectionChanged(const QItemSelection &selected, const QItemSelection &) {
+    callStackModel_->clear();
+    callStackModel_->setHorizontalHeaderLabels(QStringList() << "Library" << "Function");
+    if (selected.indexes().size() == 0)
+        return;
+    ShowCallStack(selected.indexes().front());
 }
 
 void MainWindow::StartAppProcessFinished(AdbProcess* process) {
@@ -721,6 +630,7 @@ void MainWindow::StacktraceDataReceived() {
     stacktraceRetryCount_ = 5;
     const auto& stacks = stacktraceProcess_->GetStackInfo();
     if (stacks.size() > 0) {
+        QVector<StackRecord> records;
         for (const auto& stack : stacks) {
             if (stack.size() < 3)
                 continue;
@@ -752,8 +662,9 @@ void MainWindow::StacktraceDataReceived() {
                 libraries_.insert(callStackLib);
             record.library_ = callStackLib;
             record.funcAddr_ = rootFuncAddr;
-            stackRecords_.push_back(record);
+            records.push_back(record);
         }
+        stacktraceModel_->append(records);
     }
     // read free call infos
     const auto& frees = stacktraceProcess_->GetFreeInfo();
@@ -782,25 +693,9 @@ void MainWindow::AddressProcessFinished(AdbProcess* process) {
     auto addrProcess = static_cast<AddressProcess*>(process);
     if (addrProcess->GetConvertedCount() == 0)
         return;
-    QTreeWidgetItemIterator it(ui->stackTreeWidget);
-    while (*it) {
-        auto item = *it;
-        const auto& libName = item->text(3);
-        const auto& funcAddr = item->text(4);
-        if (funcAddr.startsWith("0x")) {
-            auto mapIt = symbloMap_.find(libName);
-            if (mapIt != symbloMap_.end()) {
-                auto addrIt = mapIt->find(funcAddr);
-                if (addrIt != mapIt->end()) {
-                    auto name = addrIt.value();
-                    if (name.size() > 0)
-                        item->setText(4, name);
-                }
-            }
-        }
-        ++it;
-    }
-    on_stackTreeWidget_itemSelectionChanged();
+    auto selectedIndexes = ui->stackTableView->selectionModel()->selection().indexes();
+    if (selectedIndexes.size() > 0)
+        ShowCallStack(selectedIndexes.front());
 }
 
 void MainWindow::AddressProcessErrorOccurred() {
@@ -856,49 +751,49 @@ void MainWindow::on_actionExit_triggered() {
 }
 
 void MainWindow::on_actionMemory_Fragmentation_triggered() {
-    qint32 count = static_cast<qint32>(ui->stackTreeWidget->topLevelItemCount());
-    if (count == 0) {
-        QMessageBox::warning(this, "Warning", "Record or open some data first!", QMessageBox::StandardButton::Ok);
-        return;
-    }
-    ui->allocComboBox->setCurrentIndex(1);
-    quint64 minAddr = 0xffffffff, maxAddr = 0;
-    for (int i = 0; i < count; i++) {
-        auto topItem = static_cast<SortableTreeWidgetItem*>(ui->stackTreeWidget->topLevelItem(i));
-        auto addr = topItem->text(2).toULong(nullptr, 0);
-        if (addr > maxAddr)
-            maxAddr = addr;
-        if (addr < minAddr)
-            minAddr = addr;
-    }
-    quint32 sizeInMb = static_cast<quint32>(static_cast<double>(maxAddr - minAddr) / 1024 / 1024);
-    QDialog fragDialog(this);
-    auto layout = new QHBoxLayout();
-    fragDialog.setLayout(layout);
-    CustomGraphicsView* fragView = new CustomGraphicsView();
-    QGraphicsScene* fragScene = new QGraphicsScene();
-    QPen pen(QBrush(), 0.0);
-    QBrush brush(QColor::fromRgb(200, 50, 50, 255));
-    fragScene->addRect(0, 0, 200, sizeInMb, pen, QBrush(QColor::fromRgb(50, 200, 50, 255)));
-    for (int i = 0; i < count; i++) {
-        auto topItem = static_cast<SortableTreeWidgetItem*>(ui->stackTreeWidget->topLevelItem(i));
-        if (topItem->isHidden())
-            continue;
-        auto addr = topItem->text(2).toULong(nullptr, 0) - minAddr;
-        auto size = topItem->Size();
-        auto addrInMb = static_cast<double>(addr) / 1024 / 1024;
-        auto sizeInMb = static_cast<double>(size) / 1024 / 1024;
-        fragScene->addRect(0, addrInMb, 200, sizeInMb, pen, brush);
-    }
-    fragView->setScene(fragScene);
-    fragView->setViewport(new QGLWidget(QGLFormat(QGL::SampleBuffers)));
-    fragView->setInteractive(false);
-    fragView->show();
-    layout->addWidget(fragView);
-    layout->setMargin(0);
-    fragDialog.setWindowTitle("Memory Fragmentation Viewer");
-    fragDialog.resize(500, 400);
-    fragDialog.exec();
+//    qint32 count = static_cast<qint32>(ui->stackTreeWidget->topLevelItemCount());
+//    if (count == 0) {
+//        QMessageBox::warning(this, "Warning", "Record or open some data first!", QMessageBox::StandardButton::Ok);
+//        return;
+//    }
+//    ui->allocComboBox->setCurrentIndex(1);
+//    quint64 minAddr = 0xffffffff, maxAddr = 0;
+//    for (int i = 0; i < count; i++) {
+//        auto topItem = static_cast<SortableTreeWidgetItem*>(ui->stackTreeWidget->topLevelItem(i));
+//        auto addr = topItem->text(2).toULong(nullptr, 0);
+//        if (addr > maxAddr)
+//            maxAddr = addr;
+//        if (addr < minAddr)
+//            minAddr = addr;
+//    }
+//    quint32 sizeInMb = static_cast<quint32>(static_cast<double>(maxAddr - minAddr) / 1024 / 1024);
+//    QDialog fragDialog(this);
+//    auto layout = new QHBoxLayout();
+//    fragDialog.setLayout(layout);
+//    CustomGraphicsView* fragView = new CustomGraphicsView();
+//    QGraphicsScene* fragScene = new QGraphicsScene();
+//    QPen pen(QBrush(), 0.0);
+//    QBrush brush(QColor::fromRgb(200, 50, 50, 255));
+//    fragScene->addRect(0, 0, 200, sizeInMb, pen, QBrush(QColor::fromRgb(50, 200, 50, 255)));
+//    for (int i = 0; i < count; i++) {
+//        auto topItem = static_cast<SortableTreeWidgetItem*>(ui->stackTreeWidget->topLevelItem(i));
+//        if (topItem->isHidden())
+//            continue;
+//        auto addr = topItem->text(2).toULong(nullptr, 0) - minAddr;
+//        auto size = topItem->Size();
+//        auto addrInMb = static_cast<double>(addr) / 1024 / 1024;
+//        auto sizeInMb = static_cast<double>(size) / 1024 / 1024;
+//        fragScene->addRect(0, addrInMb, 200, sizeInMb, pen, brush);
+//    }
+//    fragView->setScene(fragScene);
+//    fragView->setViewport(new QGLWidget(QGLFormat(QGL::SampleBuffers)));
+//    fragView->setInteractive(false);
+//    fragView->show();
+//    layout->addWidget(fragView);
+//    layout->setMargin(0);
+//    fragDialog.setWindowTitle("Memory Fragmentation Viewer");
+//    fragDialog.resize(500, 400);
+//    fragDialog.exec();
 }
 
 void MainWindow::on_actionAbout_triggered() {
@@ -914,18 +809,13 @@ void MainWindow::on_sdkPushButton_clicked() {
 void MainWindow::on_launchPushButton_clicked() {
     if (isConnected_) {
         Print("Stoping capture ...");
-        auto count = stackRecords_.count();
+        auto count = stacktraceModel_->rowCount();
         if (count > 0)
             Print(QString("Captured %1 records.").arg(count));
         ConnectionFailed();
-        QList<QTreeWidgetItem*> topLevelItems;
-        for (auto& record : stackRecords_) {
-            topLevelItems.append(new SortableTreeWidgetItem(record, nullptr));
-        }
-        ui->stackTreeWidget->addTopLevelItems(topLevelItems);
         for (auto& library : libraries_)
             ui->libraryComboBox->addItem(library);
-        FilterTreeWidget();
+        ShowSummary();
         return;
     }
 
@@ -945,6 +835,9 @@ void MainWindow::on_launchPushButton_clicked() {
     HideToolTips();
 
     libraries_.clear();
+    stacktraceModel_->clear();
+    ui->memSizeComboBox->setCurrentIndex(0);
+    ui->allocComboBox->setCurrentIndex(0);
     ui->libraryComboBox->setCurrentIndex(0);
     for (int i = 1; i < ui->libraryComboBox->count(); i++)
         ui->libraryComboBox->removeItem(i);
@@ -957,11 +850,9 @@ void MainWindow::on_launchPushButton_clicked() {
     adbPath_ = ui->sdkPathLineEdit->text();
     adbPath_ = adbPath_.size() == 0 ? "adb" : adbPath_ + "/platform-tools/adb";
 
-    ui->stackTreeWidget->clear();
-    ui->stackTreeWidget->setSortingEnabled(false);
+    ui->stackTableView->setSortingEnabled(false);
     for (auto& series : memInfoSeries_)
         series->clear();
-    stackRecords_.clear();
     screenshots_.clear();
     symbloMap_.clear();
     freeAddrMap_.clear();
@@ -982,40 +873,6 @@ void MainWindow::on_launchPushButton_clicked() {
 void MainWindow::on_chartScaleHSlider_valueChanged(int value) {
     memInfoChartView_->SetRangeScale(value);
     HideToolTips();
-}
-
-void MainWindow::on_stackTreeWidget_itemSelectionChanged() {
-    callStackModel_->clear();
-    callStackModel_->setHorizontalHeaderLabels(QStringList() << "Library" << "Function");
-    auto selectedItems = ui->stackTreeWidget->selectedItems();
-    if (selectedItems.size() == 0)
-        return;
-    auto selected = selectedItems.front();
-    if (selected->childCount() == 0 && selected->parent() == nullptr) {
-        auto& callStack = callStackMap_[static_cast<SortableTreeWidgetItem*>(selected)->Uuid()];
-        auto parent = selected;
-        for (int i = 0; i < callStack.size(); i += 2) {
-            const auto& libName = callStack[i];
-            const auto& funcAddr = callStack[i + 1];
-            const auto& funcName = TryAddNewAddress(libName, funcAddr);
-            auto item = new QTreeWidgetItem();
-            item->setText(3, libName);
-            item->setText(4, funcName);
-            parent->addChild(item);
-            parent = item;
-        }
-    }
-    auto row = 0;
-    while (selected != nullptr) {
-        callStackModel_->setItem(row, 0, new QStandardItem(selected->text(3)));
-        callStackModel_->setItem(row, 1, new QStandardItem(selected->text(4)));
-        row++;
-        if (selected->childCount() > 0) {
-            selected = selected->child(0);
-        } else {
-            break;
-        }
-    }
 }
 
 void MainWindow::on_symbloPushButton_clicked() {
@@ -1109,14 +966,17 @@ void MainWindow::on_configPushButton_clicked() {
     }
 }
 
-void MainWindow::on_memSizeComboBox_currentIndexChanged(int) {
-    filterDirty_ = true;
+void MainWindow::on_memSizeComboBox_currentIndexChanged(int index) {
+    stacktraceProxyModel_->setSizeFilter(index);
+    ShowSummary();
 }
 
-void MainWindow::on_libraryComboBox_currentIndexChanged(int) {
-    filterDirty_ = true;
+void MainWindow::on_libraryComboBox_currentIndexChanged(int index) {
+    stacktraceProxyModel_->setLibraryFilter(index == 0 ? QString() : ui->libraryComboBox->currentText());
+    ShowSummary();
 }
 
-void MainWindow::on_allocComboBox_currentIndexChanged(int) {
-    filterDirty_ = true;
+void MainWindow::on_allocComboBox_currentIndexChanged(int index) {
+    stacktraceProxyModel_->setPersistentFilter(index == 1);
+    ShowSummary();
 }

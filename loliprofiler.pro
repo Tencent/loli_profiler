@@ -25,34 +25,38 @@ DEFINES += QT_DEPRECATED_WARNINGS
 CONFIG += c++11
 
 SOURCES += \
-        adbprocess.cpp \
-        addressprocess.cpp \
-        charttooltipitem.cpp \
-        customgraphicsview.cpp \
-        fixedscrollarea.cpp \
-        interactivechartview.cpp \
-        lz4/lz4.c \
-        main.cpp \
-        mainwindow.cpp \
-        meminfoprocess.cpp \
-        screenshotprocess.cpp \
-        stacktraceprocess.cpp \
-        startappprocess.cpp
+        src/adbprocess.cpp \
+        src/addressprocess.cpp \
+        src/charttooltipitem.cpp \
+        src/customgraphicsview.cpp \
+        src/fixedscrollarea.cpp \
+        src/interactivechartview.cpp \
+        src/lz4/lz4.c \
+        src/main.cpp \
+        src/mainwindow.cpp \
+        src/meminfoprocess.cpp \
+        src/screenshotprocess.cpp \
+        src/stacktracemodel.cpp \
+        src/stacktraceprocess.cpp \
+        src/stacktraceproxymodel.cpp \
+        src/startappprocess.cpp
 
 HEADERS += \
-        adbprocess.h \
-        addressprocess.h \
-        charttooltipitem.h \
-        customgraphicsview.h \
-        fixedscrollarea.h \
-        interactivechartview.h \
-        lz4/lz4.h \
-        mainwindow.h \
-        meminfoprocess.h \
-        screenshotprocess.h \
-        stacktraceprocess.h \
-        startappprocess.h \
-        timeprofiler.h
+        include/adbprocess.h \
+        include/addressprocess.h \
+        include/charttooltipitem.h \
+        include/customgraphicsview.h \
+        include/fixedscrollarea.h \
+        include/interactivechartview.h \
+        src/lz4/lz4.h \
+        include/mainwindow.h \
+        include/meminfoprocess.h \
+        include/screenshotprocess.h \
+        include/stacktracemodel.h \
+        include/stacktraceprocess.h \
+        include/stacktraceproxymodel.h \
+        include/startappprocess.h \
+        include/timeprofiler.h
 
 FORMS += \
         mainwindow.ui

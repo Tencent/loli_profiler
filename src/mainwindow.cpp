@@ -15,9 +15,11 @@
 #include <QStandardItemModel>
 #include <QTemporaryFile>
 #include <QTextStream>
+#include <QTableWidget>
 #include <QProgressDialog>
 #include <QScrollBar>
 #include <QGLWidget>
+#include <QStatusBar>
 
 #include <algorithm>
 #include <cmath>
@@ -279,6 +281,19 @@ void MainWindow::SaveToFile(QFile *file) {
         stream << static_cast<qint32>(pair.first);
         stream << pair.second;
     }
+    // smaps
+    stream << static_cast<qint32>(sMapsSections_.size());
+    for (auto it = sMapsSections_.begin(); it != sMapsSections_.end(); ++it) {
+        stream << it.key();
+        auto& section = it.value();
+        stream << section.VMSize;
+        stream << section.RSS;
+        stream << section.PSS;
+        stream << section.PrivateClean;
+        stream << section.PrivateDirty;
+        stream << section.SharedClean;
+        stream << section.SharedDirty;
+    }
 }
 
 int MainWindow::LoadFromFile(QFile *file) {
@@ -388,6 +403,23 @@ int MainWindow::LoadFromFile(QFile *file) {
         QByteArray ba;
         stream >> ba;
         screenshots_.push_back(qMakePair(time, ba));
+    }
+    // smaps
+    sMapsSections_.clear();
+    stream >> value;
+    sMapsSections_.reserve(value);
+    for (int i = 0; i < value; i++) {
+        QString name;
+        stream >> name;
+        SMapsSection section;
+        stream >> section.VMSize;
+        stream >> section.RSS;
+        stream >> section.PSS;
+        stream >> section.PrivateClean;
+        stream >> section.PrivateDirty;
+        stream >> section.SharedClean;
+        stream >> section.SharedDirty;
+        sMapsSections_.insert(name, section);
     }
     ShowSummary();
     return static_cast<qint32>(IOErrorCode::NONE);
@@ -503,6 +535,48 @@ void MainWindow::ShowSummary() {
         size += stacktraceProxyModel_->data(stacktraceProxyModel_->index(i, 1), Qt::UserRole).toInt();
     }
     ui->recordCountLineEdit->setText(QString("%1 / %2").arg(rowCount).arg(sizeToString(size)));
+}
+
+void MainWindow::ReadSMapsFile(QFile* file) {
+    QTextStream stream(file);
+    SMapsSection total;
+    SMapsSection* curSection = nullptr;
+    while (!stream.atEnd()) {
+        auto line = stream.readLine();
+        if (line.isEmpty())
+            continue;
+        auto strList = line.split(' ', QString::SplitBehavior::SkipEmptyParts);
+        if (strList.size() >= 6) {
+            curSection = &sMapsSections_[strList[5]];
+        } else if (strList.size() >= 2) {
+            if (curSection == nullptr)
+                continue;
+            auto word = strList[0];
+            auto value = strList[1].toInt();
+            if (word == "Size:") {
+                curSection->VMSize += value;
+                total.VMSize += value;
+            } else if (word == "Rss:") {
+                curSection->RSS += value;
+                total.RSS += value;
+            } else if (word == "Pss:") {
+                curSection->PSS += value;
+                total.PSS += value;
+            } else if (word == "Shared_Clean:") {
+                curSection->SharedClean += value;
+                total.SharedClean += value;
+            } else if (word == "Shared_Dirty:") {
+                curSection->SharedDirty += value;
+                total.SharedDirty += value;
+            } else if (word == "Private_Dirty:") {
+                curSection->PrivateDirty += value;
+                total.PrivateDirty += value;
+            } else if (word == "Private_Clean:") {
+                curSection->PrivateClean += value;
+                total.PrivateClean += value;
+            }
+        }
+    }
 }
 
 void MainWindow::FixedUpdate() {
@@ -750,50 +824,97 @@ void MainWindow::on_actionExit_triggered() {
     this->close();
 }
 
-void MainWindow::on_actionMemory_Fragmentation_triggered() {
-//    qint32 count = static_cast<qint32>(ui->stackTreeWidget->topLevelItemCount());
-//    if (count == 0) {
-//        QMessageBox::warning(this, "Warning", "Record or open some data first!", QMessageBox::StandardButton::Ok);
-//        return;
-//    }
-//    ui->allocComboBox->setCurrentIndex(1);
-//    quint64 minAddr = 0xffffffff, maxAddr = 0;
-//    for (int i = 0; i < count; i++) {
-//        auto topItem = static_cast<SortableTreeWidgetItem*>(ui->stackTreeWidget->topLevelItem(i));
-//        auto addr = topItem->text(2).toULong(nullptr, 0);
-//        if (addr > maxAddr)
-//            maxAddr = addr;
-//        if (addr < minAddr)
-//            minAddr = addr;
-//    }
-//    quint32 sizeInMb = static_cast<quint32>(static_cast<double>(maxAddr - minAddr) / 1024 / 1024);
-//    QDialog fragDialog(this);
-//    auto layout = new QHBoxLayout();
-//    fragDialog.setLayout(layout);
-//    CustomGraphicsView* fragView = new CustomGraphicsView();
-//    QGraphicsScene* fragScene = new QGraphicsScene();
-//    QPen pen(QBrush(), 0.0);
-//    QBrush brush(QColor::fromRgb(200, 50, 50, 255));
-//    fragScene->addRect(0, 0, 200, sizeInMb, pen, QBrush(QColor::fromRgb(50, 200, 50, 255)));
-//    for (int i = 0; i < count; i++) {
-//        auto topItem = static_cast<SortableTreeWidgetItem*>(ui->stackTreeWidget->topLevelItem(i));
-//        if (topItem->isHidden())
-//            continue;
-//        auto addr = topItem->text(2).toULong(nullptr, 0) - minAddr;
-//        auto size = topItem->Size();
-//        auto addrInMb = static_cast<double>(addr) / 1024 / 1024;
-//        auto sizeInMb = static_cast<double>(size) / 1024 / 1024;
-//        fragScene->addRect(0, addrInMb, 200, sizeInMb, pen, brush);
-//    }
-//    fragView->setScene(fragScene);
-//    fragView->setViewport(new QGLWidget(QGLFormat(QGL::SampleBuffers)));
-//    fragView->setInteractive(false);
-//    fragView->show();
-//    layout->addWidget(fragView);
-//    layout->setMargin(0);
-//    fragDialog.setWindowTitle("Memory Fragmentation Viewer");
-//    fragDialog.resize(500, 400);
-//    fragDialog.exec();
+class MemoryTableWidgetItem : public QTableWidgetItem {
+public:
+    MemoryTableWidgetItem(int size) : QTableWidgetItem(), size_(size) { setText(sizeToString(size)); }
+    bool operator< (const QTableWidgetItem &other) const { return size_ < static_cast<const MemoryTableWidgetItem&>(other).size_; }
+    int size_ = 0;
+};
+
+class MemoryTableWidget : public QTableWidget {
+public:
+    MemoryTableWidget(int rows, int columns, QWidget* parent) : QTableWidget(rows, columns, parent) {}
+    void keyPressEvent(QKeyEvent *event) override {
+        if (event == QKeySequence::Copy) {
+            QString output;
+            QTextStream stream(&output);
+            stream << "Name, Virtual Memory, Rss, Pss, Private Clean, Private Dirty, Shared Clean, Shared Dirty" << endl;
+            auto ranges = selectedRanges();
+            for (auto& range : ranges) {
+                int top = range.topRow();
+                int bottom = range.bottomRow();
+                for (int row = top; row <= bottom; row++) {
+                    stream << item(row, 0)->text() << ", " << item(row, 1)->text() << ", " << item(row, 2)->text() << ", " <<
+                              item(row, 3)->text() << ", " << item(row, 4)->text() << ", " << item(row, 5)->text() << ", " <<
+                              item(row, 6)->text() << ", " << item(row, 7)->text() << endl;
+                }
+            }
+            stream.flush();
+            QApplication::clipboard()->setText(output);
+            event->accept();
+            return;
+        }
+        QTableWidget::keyPressEvent(event);
+    }
+};
+
+void MainWindow::on_actionStat_SMaps_triggered() {
+    if (callStackMap_.size() == 0) {
+        QMessageBox::warning(this, "Warning", "Record or open some data first!", QMessageBox::StandardButton::Ok);
+        return;
+    }
+    if (sMapsSections_.size() == 0) {
+        QMessageBox::warning(this, "Warning", "No smaps data found!", QMessageBox::StandardButton::Ok);
+        return;
+    }
+    QDialog fragDialog(this, Qt::WindowTitleHint | Qt::WindowCloseButtonHint);
+    auto layout = new QVBoxLayout();
+    fragDialog.setLayout(layout);
+    auto tableWidget = new MemoryTableWidget(sMapsSections_.size(), 8, &fragDialog);
+    tableWidget->setEditTriggers(QTableWidget::EditTrigger::NoEditTriggers);
+    tableWidget->setSelectionMode(QTableWidget::SelectionMode::ExtendedSelection);
+    tableWidget->setSelectionBehavior(QTableWidget::SelectionBehavior::SelectRows);
+    tableWidget->setWordWrap(false);
+    tableWidget->setHorizontalHeaderLabels(
+                QStringList() << "Name" << "Virtual Memory" << "Rss" << "Pss" <<
+                "Private Clean" << "Private Dirty" << "Shared Clean" << "Shared Dirty");
+    int row = 0;
+    SMapsSection total;
+    for (auto it = sMapsSections_.begin(); it != sMapsSections_.end(); ++it) {
+        auto& name = it.key();
+        auto& data = it.value();
+        tableWidget->setItem(row, 0, new QTableWidgetItem(name));
+        tableWidget->setItem(row, 1, new MemoryTableWidgetItem(data.VMSize));
+        tableWidget->setItem(row, 2, new MemoryTableWidgetItem(data.RSS));
+        tableWidget->setItem(row, 3, new MemoryTableWidgetItem(data.PSS));
+        tableWidget->setItem(row, 4, new MemoryTableWidgetItem(data.PrivateClean));
+        tableWidget->setItem(row, 5, new MemoryTableWidgetItem(data.PrivateDirty));
+        tableWidget->setItem(row, 6, new MemoryTableWidgetItem(data.SharedClean));
+        tableWidget->setItem(row, 7, new MemoryTableWidgetItem(data.SharedDirty));
+        total.VMSize += data.VMSize;
+        total.RSS += data.RSS;
+        total.PSS += data.PSS;
+        total.PrivateClean += data.PrivateClean;
+        total.PrivateDirty += data.PrivateDirty;
+        total.SharedClean += data.SharedClean;
+        total.SharedDirty += data.SharedDirty;
+        row++;
+    }
+    tableWidget->setSortingEnabled(true);
+    tableWidget->setTextElideMode(Qt::TextElideMode::ElideLeft);
+    tableWidget->sortByColumn(3, Qt::SortOrder::DescendingOrder);
+    tableWidget->show();
+    auto statusBar = new QStatusBar(&fragDialog);
+    statusBar->showMessage(QString("VM: %1, Rss: %2, Pss: %3, PC: %4, PD: %5, SC: %6, SD: %7")
+                             .arg(sizeToString(total.VMSize), sizeToString(total.RSS), sizeToString(total.PSS), sizeToString(total.PrivateClean),
+                                  sizeToString(total.PrivateDirty), sizeToString(total.SharedClean), sizeToString(total.SharedDirty)));
+    layout->addWidget(tableWidget);
+    layout->addWidget(statusBar);
+    layout->setMargin(0);
+    fragDialog.setWindowTitle("Stat proc/pid/smaps");
+    fragDialog.resize(900, 400);
+    fragDialog.setMinimumSize(900, 400);
+    fragDialog.exec();
 }
 
 void MainWindow::on_actionAbout_triggered() {
@@ -807,15 +928,50 @@ void MainWindow::on_sdkPushButton_clicked() {
 }
 
 void MainWindow::on_launchPushButton_clicked() {
+    adbPath_ = ui->sdkPathLineEdit->text();
+    adbPath_ = adbPath_.size() == 0 ? "adb" : adbPath_ + "/platform-tools/adb";
+
     if (isConnected_) {
-        Print("Stoping capture ...");
-        auto count = stacktraceModel_->rowCount();
-        if (count > 0)
-            Print(QString("Captured %1 records.").arg(count));
+        progressDialog_->setWindowTitle("Stop Capture Progress");
+        progressDialog_->setLabelText(QString("Stopping capture ..."));
+        progressDialog_->setMinimum(0);
+        progressDialog_->setMaximum(2);
+        progressDialog_->setValue(0);
+        progressDialog_->show();
+        Print(QString("Captured %1 records.").arg(stacktraceModel_->rowCount()));
         ConnectionFailed();
         for (auto& library : libraries_)
             ui->libraryComboBox->addItem(library);
         ShowSummary();
+        progressDialog_->setValue(1);
+        progressDialog_->setLabelText("Requesting smaps info from device.");
+        QProcess process;
+        process.start(adbPath_ + " shell run-as " + ui->appNameLineEdit->text() +
+                      " \"cat /proc/" + memInfoProcess_->GetAppPid() + "/smaps > /data/local/tmp/smaps.txt\"");
+        auto readSMaps = false;
+        if (process.waitForStarted()) {
+            if (process.waitForFinished()) {
+                if (process.readAll().size() == 0) {
+                    process.close();
+                    auto smapsPath = QCoreApplication::applicationDirPath() + "/smaps.txt";
+                    process.start(adbPath_ + " pull /data/local/tmp/smaps.txt " + smapsPath);
+                    process.waitForStarted();
+                    process.waitForFinished();
+                    QFile file(smapsPath);
+                    if (file.exists()) {
+                        if (file.open(QFile::OpenModeFlag::ReadOnly)) {
+                            ReadSMapsFile(&file);
+                            readSMaps = true;
+                        }
+                        file.remove();
+                    }
+                }
+            }
+        }
+        if (!readSMaps) {
+            Print("Failed to cat proc/pid/smaps");
+        }
+        progressDialog_->setValue(2);
         return;
     }
 
@@ -836,6 +992,7 @@ void MainWindow::on_launchPushButton_clicked() {
 
     libraries_.clear();
     stacktraceModel_->clear();
+    sMapsSections_.clear();
     ui->memSizeComboBox->setCurrentIndex(0);
     ui->allocComboBox->setCurrentIndex(0);
     ui->libraryComboBox->setCurrentIndex(0);
@@ -846,9 +1003,6 @@ void MainWindow::on_launchPushButton_clicked() {
     ui->launchPushButton->setText("Stop Capture");
     ui->actionOpen->setEnabled(false);
     ui->statusBar->clearMessage();
-
-    adbPath_ = ui->sdkPathLineEdit->text();
-    adbPath_ = adbPath_.size() == 0 ? "adb" : adbPath_ + "/platform-tools/adb";
 
     ui->stackTableView->setSortingEnabled(false);
     for (auto& series : memInfoSeries_)

@@ -642,7 +642,7 @@
     <property name="title">
      <string>Tools</string>
     </property>
-    <addaction name="actionMemory_Fragmentation"/>
+    <addaction name="actionStat_SMaps"/>
    </widget>
    <addaction name="menuFile"/>
    <addaction name="menuTools"/>
@@ -678,9 +678,9 @@
     <string>About</string>
    </property>
   </action>
-  <action name="actionMemory_Fragmentation">
+  <action name="actionStat_SMaps">
    <property name="text">
-    <string>Memory Fragmentation</string>
+    <string>Stat proc/pid/smaps</string>
    </property>
   </action>
  </widget>

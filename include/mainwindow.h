@@ -55,6 +55,7 @@ private:
     QString TryAddNewAddress(const QString& lib, const QString& addr);
     void ShowCallStack(const QModelIndex& index);
     void ShowSummary();
+    void ReadSMapsFile(QFile* file);
 
 private slots:
     void FixedUpdate();
@@ -78,7 +79,7 @@ private slots:
     void on_actionOpen_triggered();
     void on_actionSave_triggered();
     void on_actionExit_triggered();
-    void on_actionMemory_Fragmentation_triggered();
+    void on_actionStat_SMaps_triggered();
     void on_actionAbout_triggered();
     void on_sdkPushButton_clicked();
     void on_launchPushButton_clicked();
@@ -137,6 +138,17 @@ private:
 
     // charts
     FixedScrollArea* scrollArea_;
+
+    struct SMapsSection {
+        qint32 VMSize = 0;
+        qint32 RSS = 0;
+        qint32 PSS = 0;
+        qint32 SharedClean = 0;
+        qint32 SharedDirty = 0;
+        qint32 PrivateClean = 0;
+        qint32 PrivateDirty = 0;
+    };
+    QHash<QString, SMapsSection> sMapsSections_;
 
     bool isCapturing_ = false;
     bool isConnected_ = false;

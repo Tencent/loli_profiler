@@ -52,7 +52,6 @@ FMalloc* FAndroidPlatformMemory::BaseAllocator() {
 
 **短期计划**
 
-* 检查为何UE4项目仍无法注入
 * 尝试同时支持 PLT hook 与 Inline hook
 * 计划中 ... 
 

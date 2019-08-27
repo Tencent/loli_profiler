@@ -265,18 +265,19 @@ void dump(std::ostream& os, void** buffer, size_t count) {
                 os << (shortdlname ? shortdlname + 1 : dlname) << '\\';
                 if (demangled != nullptr) free(demangled);
             }
-            if (info.dli_sname != nullptr) {
-                auto demangled = __cxxabiv1::__cxa_demangle(info.dli_sname, 0, 0, &status);
-                if (status == 0 && demangled != nullptr) {
-                    os << demangled << '\\';
-                } else {
-                    os << info.dli_sname << '\\';
-                }
-                if (demangled != nullptr) free(demangled);
-            } else {
+            // don't demangle function names, because they might be very loooooong
+            // if (info.dli_sname != nullptr) {
+            //     auto demangled = __cxxabiv1::__cxa_demangle(info.dli_sname, 0, 0, &status);
+            //     if (status == 0 && demangled != nullptr) {
+            //         os << demangled << '\\';
+            //     } else {
+            //         os << info.dli_sname << '\\';
+            //     }
+            //     if (demangled != nullptr) free(demangled);
+            // } else {
                 const void* reladdr = (void*)((_Unwind_Word)addr - (_Unwind_Word)info.dli_fbase);
                 os << reladdr << '\\';
-            }
+            // }
         }
         prevAddr = addr;
     }

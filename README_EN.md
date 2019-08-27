@@ -13,6 +13,7 @@ Lightweight Opensource profiLing Instrument
 - Hooked memory functions: malloc、calloc、realloc、memalign、free
 - Translates function address to human readable format
 - Filtering persistent memory allocations
+- Query smaps info to get an memory overview of different so or modules
 - Take screen-shot every 5 second
 - Transfer memory related function's call-stack in real-time (by TCP Socket)
 - Network packet is compressed using lz4 to speed-up sending & receiving process
@@ -69,5 +70,6 @@ FMalloc* FAndroidPlatformMemory::BaseAllocator() {
 * FAQ https://git.code.oa.com/xinhou/loli_profiler/wikis/faq
 * xHook https://github.com/iqiyi/xHook
 * KM Intro http://km.oa.com/articles/show/408991
+* KM Step by step Manual http://km.oa.com/articles/show/421944
 * App Icon https://www.flaticon.com/authors/smashicons
 * Prebuild Binaries https://git.code.oa.com/xinhou/loli_profiler/wikis/home

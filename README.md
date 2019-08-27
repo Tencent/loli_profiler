@@ -13,6 +13,7 @@
 - Hook上的内存函数malloc、calloc、realloc、memalign、free
 - 可将函数地址自动批量转换为函数名称
 - 自动分析数据展示常驻内存
+- 获取并分析smaps数据，得到不同so、模块的内存总分配情况
 - 每5s自动截图一次
 - 从手机端实时获取内存相关函数的堆栈信息（通过TCP Socket）
 - 网络包使用LZ4压缩以加快收发速度
@@ -51,6 +52,7 @@ FMalloc* FAndroidPlatformMemory::BaseAllocator() {
 
 **短期计划**
 
+* 检查为何UE4项目仍无法注入
 * 尝试同时支持 PLT hook 与 Inline hook
 * 计划中 ... 
 
@@ -68,6 +70,7 @@ FMalloc* FAndroidPlatformMemory::BaseAllocator() {
 
 * FAQ https://git.code.oa.com/xinhou/loli_profiler/wikis/faq
 * KM介绍文章 http://km.oa.com/articles/show/408991
+* KM使用手册文章 http://km.oa.com/articles/show/421944
 * xHook https://github.com/iqiyi/xHook
 * 图标 https://www.flaticon.com/authors/smashicons
 * 定期预编译的程序 https://git.code.oa.com/xinhou/loli_profiler/wikis/home

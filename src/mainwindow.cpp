@@ -602,6 +602,27 @@ void MainWindow::ReadSMapsFile(QFile* file) {
     }
 }
 
+bool MainWindow::CreateIfNoConfigFile() {
+    auto cfgPath = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).first();
+    QFile file(cfgPath + "/loli.conf");
+    if (!file.exists()) {
+        if (!QDir(cfgPath).mkpath(cfgPath)) {
+            QMessageBox::warning(this, "Warning", "Can't create application data path: " + cfgPath);
+            return false;
+        }
+        file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+        if (file.open(QIODevice::ReadWrite | QIODevice::Truncate | QIODevice::Text)) {
+            QTextStream stream(&file);
+            stream << "5\n256\nlibunity,libil2cpp,";
+            stream.flush();
+            return true;
+        } else {
+            return false;
+        }
+    }
+    return true;
+}
+
 void MainWindow::FixedUpdate() {
     if (!isConnected_)
         return;
@@ -1212,27 +1233,6 @@ void MainWindow::on_pythonPushButton_clicked() {
 void MainWindow::on_addr2LinePushButton_clicked() {
     auto path = QFileDialog::getOpenFileName(this, tr("Select Executable Addr2line"), QDir::homePath());
     ui->addr2LinePathLineEdit->setText(path);
-}
-
-bool MainWindow::CreateIfNoConfigFile() {
-    auto cfgPath = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).first();
-    QFile file(cfgPath + "/loli.conf");
-    if (!file.exists()) {
-        if (!QDir(cfgPath).mkpath(cfgPath)) {
-            QMessageBox::warning(this, "Warning", "Can't create application data path: " + cfgPath);
-            return false;
-        }
-        file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
-        if (file.open(QIODevice::ReadWrite | QIODevice::Truncate | QIODevice::Text)) {
-            QTextStream stream(&file);
-            stream << "5\n256\nlibunity,libil2cpp,";
-            stream.flush();
-            return true;
-        } else {
-            return false;
-        }
-    }
-    return true;
 }
 
 void MainWindow::on_configPushButton_clicked() {

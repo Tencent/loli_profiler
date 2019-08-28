@@ -643,6 +643,7 @@
      <string>Tools</string>
     </property>
     <addaction name="actionStat_SMaps"/>
+    <addaction name="actionVisualize_SMaps"/>
    </widget>
    <addaction name="menuFile"/>
    <addaction name="menuTools"/>
@@ -681,6 +682,11 @@
   <action name="actionStat_SMaps">
    <property name="text">
     <string>Stat proc/pid/smaps</string>
+   </property>
+  </action>
+  <action name="actionVisualize_SMaps">
+   <property name="text">
+    <string>Visualize proc/pid/smaps</string>
    </property>
   </action>
  </widget>

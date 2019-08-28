@@ -80,6 +80,7 @@ private slots:
     void on_actionSave_triggered();
     void on_actionExit_triggered();
     void on_actionStat_SMaps_triggered();
+    void on_actionVisualize_SMaps_triggered();
     void on_actionAbout_triggered();
     void on_sdkPushButton_clicked();
     void on_launchPushButton_clicked();
@@ -139,14 +140,21 @@ private:
     // charts
     FixedScrollArea* scrollArea_;
 
+    struct SMapsSectionAddr {
+        quint64 start_ = 0, end_ = 0, offset_ = 0;
+        SMapsSectionAddr() = default;
+        SMapsSectionAddr(quint64 start, quint64 end, quint64 offset) :
+            start_(start), end_(end), offset_(offset) {}
+    };
     struct SMapsSection {
-        qint32 VMSize = 0;
-        qint32 RSS = 0;
-        qint32 PSS = 0;
-        qint32 SharedClean = 0;
-        qint32 SharedDirty = 0;
-        qint32 PrivateClean = 0;
-        qint32 PrivateDirty = 0;
+        QVector<SMapsSectionAddr> addrs_;
+        qint32 virtual_ = 0;
+        qint32 rss_ = 0;
+        qint32 pss_ = 0;
+        qint32 sharedClean_ = 0;
+        qint32 sharedDirty_ = 0;
+        qint32 privateClean_ = 0;
+        qint32 privateDirty_ = 0;
     };
     QHash<QString, SMapsSection> sMapsSections_;
 

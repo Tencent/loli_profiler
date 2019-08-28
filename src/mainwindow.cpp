@@ -26,7 +26,7 @@
 #include <vector>
 
 #define APP_MAGIC 0xA4B3C2D1
-#define APP_VERSION 102
+#define APP_VERSION 103
 
 enum class IOErrorCode : qint32 {
     NONE = 0,
@@ -286,13 +286,19 @@ void MainWindow::SaveToFile(QFile *file) {
     for (auto it = sMapsSections_.begin(); it != sMapsSections_.end(); ++it) {
         stream << it.key();
         auto& section = it.value();
-        stream << section.VMSize;
-        stream << section.RSS;
-        stream << section.PSS;
-        stream << section.PrivateClean;
-        stream << section.PrivateDirty;
-        stream << section.SharedClean;
-        stream << section.SharedDirty;
+        stream << static_cast<qint32>(section.addrs_.size());
+        for (auto& addr : section.addrs_) {
+            stream << addr.start_;
+            stream << addr.end_;
+            stream << addr.offset_;
+        }
+        stream << section.virtual_;
+        stream << section.rss_;
+        stream << section.pss_;
+        stream << section.privateClean_;
+        stream << section.privateDirty_;
+        stream << section.sharedClean_;
+        stream << section.sharedDirty_;
     }
 }
 
@@ -412,13 +418,22 @@ int MainWindow::LoadFromFile(QFile *file) {
         QString name;
         stream >> name;
         SMapsSection section;
-        stream >> section.VMSize;
-        stream >> section.RSS;
-        stream >> section.PSS;
-        stream >> section.PrivateClean;
-        stream >> section.PrivateDirty;
-        stream >> section.SharedClean;
-        stream >> section.SharedDirty;
+        qint32 size;
+        stream >> size;
+        quint64 start, end, offset;
+        for (int i = 0; i < size; i++) {
+            stream >> start;
+            stream >> end;
+            stream >> offset;
+            section.addrs_.push_back(SMapsSectionAddr(start, end, offset));
+        }
+        stream >> section.virtual_;
+        stream >> section.rss_;
+        stream >> section.pss_;
+        stream >> section.privateClean_;
+        stream >> section.privateDirty_;
+        stream >> section.sharedClean_;
+        stream >> section.sharedDirty_;
         sMapsSections_.insert(name, section);
     }
     ShowSummary();
@@ -548,32 +563,39 @@ void MainWindow::ReadSMapsFile(QFile* file) {
         auto strList = line.split(' ', QString::SplitBehavior::SkipEmptyParts);
         if (strList.size() >= 6) {
             curSection = &sMapsSections_[strList[5]];
+            auto addrs = strList[0].split('-');
+            if (addrs.size() > 1) {
+                auto start = addrs[0].toULongLong(nullptr, 16);
+                auto end = addrs[1].toULongLong(nullptr, 16);
+                auto offset = strList[2].toULongLong(nullptr, 16);
+                curSection->addrs_.push_back(SMapsSectionAddr(start, end, offset));
+            }
         } else if (strList.size() >= 2) {
             if (curSection == nullptr)
                 continue;
             auto word = strList[0];
             auto value = strList[1].toInt();
             if (word == "Size:") {
-                curSection->VMSize += value;
-                total.VMSize += value;
+                curSection->virtual_ += value;
+                total.virtual_ += value;
             } else if (word == "Rss:") {
-                curSection->RSS += value;
-                total.RSS += value;
+                curSection->rss_ += value;
+                total.rss_ += value;
             } else if (word == "Pss:") {
-                curSection->PSS += value;
-                total.PSS += value;
+                curSection->pss_ += value;
+                total.pss_ += value;
             } else if (word == "Shared_Clean:") {
-                curSection->SharedClean += value;
-                total.SharedClean += value;
+                curSection->sharedClean_ += value;
+                total.sharedClean_ += value;
             } else if (word == "Shared_Dirty:") {
-                curSection->SharedDirty += value;
-                total.SharedDirty += value;
+                curSection->sharedDirty_ += value;
+                total.sharedDirty_ += value;
             } else if (word == "Private_Dirty:") {
-                curSection->PrivateDirty += value;
-                total.PrivateDirty += value;
+                curSection->privateDirty_ += value;
+                total.privateDirty_ += value;
             } else if (word == "Private_Clean:") {
-                curSection->PrivateClean += value;
-                total.PrivateClean += value;
+                curSection->privateClean_ += value;
+                total.privateClean_ += value;
             }
         }
     }
@@ -859,10 +881,6 @@ public:
 };
 
 void MainWindow::on_actionStat_SMaps_triggered() {
-    if (callStackMap_.size() == 0) {
-        QMessageBox::warning(this, "Warning", "Record or open some data first!", QMessageBox::StandardButton::Ok);
-        return;
-    }
     if (sMapsSections_.size() == 0) {
         QMessageBox::warning(this, "Warning", "No smaps data found!", QMessageBox::StandardButton::Ok);
         return;
@@ -884,20 +902,20 @@ void MainWindow::on_actionStat_SMaps_triggered() {
         auto& name = it.key();
         auto& data = it.value();
         tableWidget->setItem(row, 0, new QTableWidgetItem(name));
-        tableWidget->setItem(row, 1, new MemoryTableWidgetItem(data.VMSize));
-        tableWidget->setItem(row, 2, new MemoryTableWidgetItem(data.RSS));
-        tableWidget->setItem(row, 3, new MemoryTableWidgetItem(data.PSS));
-        tableWidget->setItem(row, 4, new MemoryTableWidgetItem(data.PrivateClean));
-        tableWidget->setItem(row, 5, new MemoryTableWidgetItem(data.PrivateDirty));
-        tableWidget->setItem(row, 6, new MemoryTableWidgetItem(data.SharedClean));
-        tableWidget->setItem(row, 7, new MemoryTableWidgetItem(data.SharedDirty));
-        total.VMSize += data.VMSize;
-        total.RSS += data.RSS;
-        total.PSS += data.PSS;
-        total.PrivateClean += data.PrivateClean;
-        total.PrivateDirty += data.PrivateDirty;
-        total.SharedClean += data.SharedClean;
-        total.SharedDirty += data.SharedDirty;
+        tableWidget->setItem(row, 1, new MemoryTableWidgetItem(data.virtual_));
+        tableWidget->setItem(row, 2, new MemoryTableWidgetItem(data.rss_));
+        tableWidget->setItem(row, 3, new MemoryTableWidgetItem(data.pss_));
+        tableWidget->setItem(row, 4, new MemoryTableWidgetItem(data.privateClean_));
+        tableWidget->setItem(row, 5, new MemoryTableWidgetItem(data.privateDirty_));
+        tableWidget->setItem(row, 6, new MemoryTableWidgetItem(data.sharedClean_));
+        tableWidget->setItem(row, 7, new MemoryTableWidgetItem(data.sharedDirty_));
+        total.virtual_ += data.virtual_;
+        total.rss_ += data.rss_;
+        total.pss_ += data.pss_;
+        total.privateClean_ += data.privateClean_;
+        total.privateDirty_ += data.privateDirty_;
+        total.sharedClean_ += data.sharedClean_;
+        total.sharedDirty_ += data.sharedDirty_;
         row++;
     }
     tableWidget->setSortingEnabled(true);
@@ -906,12 +924,109 @@ void MainWindow::on_actionStat_SMaps_triggered() {
     tableWidget->show();
     auto statusBar = new QStatusBar(&fragDialog);
     statusBar->showMessage(QString("VM: %1, Rss: %2, Pss: %3, PC: %4, PD: %5, SC: %6, SD: %7")
-                             .arg(sizeToString(total.VMSize), sizeToString(total.RSS), sizeToString(total.PSS), sizeToString(total.PrivateClean),
-                                  sizeToString(total.PrivateDirty), sizeToString(total.SharedClean), sizeToString(total.SharedDirty)));
+                             .arg(sizeToString(total.virtual_), sizeToString(total.rss_), sizeToString(total.pss_), sizeToString(total.privateClean_),
+                                  sizeToString(total.privateDirty_), sizeToString(total.sharedClean_), sizeToString(total.sharedDirty_)));
     layout->addWidget(tableWidget);
     layout->addWidget(statusBar);
     layout->setMargin(0);
     fragDialog.setWindowTitle("Stat proc/pid/smaps");
+    fragDialog.resize(900, 400);
+    fragDialog.setMinimumSize(900, 400);
+    fragDialog.exec();
+}
+
+void MainWindow::on_actionVisualize_SMaps_triggered() {
+    if (sMapsSections_.size() == 0) {
+        QMessageBox::warning(this, "Warning", "No smaps data found!", QMessageBox::StandardButton::Ok);
+        return;
+    }
+    if (ui->libraryComboBox->currentIndex() != 0 || ui->allocComboBox->currentIndex() != 1) {
+        if (QMessageBox::warning(this,
+                                 "Warning", "Visualizing smaps requires filter changes (All Libraries, Persistent), are you sure?",
+                                 QMessageBox::StandardButton::Yes | QMessageBox::StandardButton::No) == QMessageBox::StandardButton::No) {
+            return;
+        }
+    }
+    ui->libraryComboBox->setCurrentIndex(0); // show all libraries
+    ui->allocComboBox->setCurrentIndex(1); // show only persisient
+    // show dialog
+    QDialog fragDialog(this, Qt::WindowTitleHint | Qt::WindowCloseButtonHint);
+    auto layout = new QVBoxLayout();
+    layout->setSpacing(2);
+    fragDialog.setLayout(layout);
+    auto statusBar = new QStatusBar();
+    auto fragView = new CustomGraphicsView();
+    auto fragScene = new QGraphicsScene();
+    auto sectionComboBox = new QComboBox();
+    connect(sectionComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), [&](int index){
+        fragScene->clear();
+        auto sectionit = sMapsSections_.find(sectionComboBox->itemText(index));
+        if (sectionit == sMapsSections_.end()) {
+            return;
+        }
+        QPen pen(QBrush(), 0.0);
+        QBrush allocBrush(QColor::fromRgb(200, 50, 50, 255));
+        QBrush bgBrush(QColor::fromRgb(50, 200, 50, 255));
+        auto& section = *sectionit;
+        auto sectionsCount = section.addrs_.size();
+        auto recordsCount = 0;
+        for (int i = 0; i < sectionsCount; i++) {
+            auto& addr = section.addrs_[i];
+            auto offset = addr.offset_;
+            auto start = addr.start_ - offset;
+            auto end = addr.end_ - offset;
+            auto size = end - start;
+            auto sizeInKb = static_cast<double>(size) / 1024;
+            auto y = i * 35;
+            auto height = 30;
+            fragScene->addRect(0, y, sizeInKb, height, pen, bgBrush)->setToolTip(QString("Size: %1").arg(sizeToString(static_cast<int>(size))));
+            auto recordCount = stacktraceProxyModel_->rowCount();
+            for (int i = 0; i < recordCount; i++) {
+                auto recSize = stacktraceProxyModel_->data(stacktraceProxyModel_->index(i, 1), Qt::UserRole).toInt();
+                auto recAddr = stacktraceProxyModel_->data(stacktraceProxyModel_->index(i, 2)).toString().toULongLong(nullptr, 0);
+                if (recAddr >= start && recAddr < end) {
+                    auto recAddrInKb = (recAddr - start) / 1024;
+                    auto recSizeInKb = recSize / 1024;
+                    fragScene->addRect(recAddrInKb, y, recSizeInKb, height, pen, allocBrush)->setToolTip(QString("Size: %1").arg(sizeToString(recSize)));
+                    recordsCount++;
+                }
+            }
+        }
+        statusBar->showMessage(QString("%1 sections with %2 allocation records").arg(sectionsCount).arg(recordsCount));
+    });
+    QSet<QString> visibleSections;
+    auto recordCount = stacktraceProxyModel_->rowCount();
+    for (int i = 0; i < recordCount; i++) {
+        auto recAddr = stacktraceProxyModel_->data(stacktraceProxyModel_->index(i, 2)).toString().toULongLong(nullptr, 0);
+        for (auto it = sMapsSections_.begin(); it != sMapsSections_.end(); ++it) {
+            auto& section = *it;
+            if (visibleSections.contains(it.key()))
+                continue;
+            for (int i = 0; i < section.addrs_.size(); i++) {
+                auto& addr = section.addrs_[i];
+                auto start = addr.start_ - addr.offset_;
+                auto end = addr.end_ - addr.offset_;
+                if (recAddr >= start && recAddr < end) {
+                    visibleSections.insert(it.key());
+                    break;
+                }
+            }
+        }
+        if (visibleSections.count() == sMapsSections_.count())
+            break;
+    }
+    auto sectionNames = visibleSections.toList();
+    sectionNames.sort(Qt::CaseSensitivity::CaseInsensitive);
+    sectionComboBox->addItems(sectionNames);
+    fragView->setScene(fragScene);
+    fragView->setViewport(new QGLWidget(QGLFormat(QGL::SampleBuffers)));
+    fragView->setInteractive(false);
+    fragView->show();
+    layout->addWidget(sectionComboBox);
+    layout->addWidget(fragView);
+    layout->addWidget(statusBar);
+    layout->setMargin(0);
+    fragDialog.setWindowTitle("Visualize proc/pid/smaps");
     fragDialog.resize(900, 400);
     fragDialog.setMinimumSize(900, 400);
     fragDialog.exec();
@@ -1100,6 +1215,7 @@ void MainWindow::on_configPushButton_clicked() {
     auto layout = new QHBoxLayout();
     auto textEdit = new QTextEdit(nullptr);
     QFile file(QApplication::applicationDirPath() + "/remote/loli.conf");
+    file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
     if (!file.open(QIODevice::ReadOnly)) {
         textEdit->setText("5\n256\nlibunity,libil2cpp,");
     } else {
@@ -1117,6 +1233,7 @@ void MainWindow::on_configPushButton_clicked() {
     if (file.open(QIODevice::ReadWrite | QIODevice::Truncate | QIODevice::Text)) {
         QTextStream stream(&file);
         stream << textEdit->toPlainText();
+        stream.flush();
     }
 }
 

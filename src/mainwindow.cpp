@@ -20,6 +20,7 @@
 #include <QScrollBar>
 #include <QGLWidget>
 #include <QStatusBar>
+#include <QStandardPaths>
 
 #include <algorithm>
 #include <cmath>
@@ -886,7 +887,7 @@ void MainWindow::on_actionStat_SMaps_triggered() {
         return;
     }
     QDialog fragDialog(this, Qt::WindowTitleHint | Qt::WindowCloseButtonHint);
-    auto layout = new QVBoxLayout();
+    auto layout = new QVBoxLayout(&fragDialog);
     fragDialog.setLayout(layout);
     auto tableWidget = new MemoryTableWidget(sMapsSections_.size(), 8, &fragDialog);
     tableWidget->setEditTriggers(QTableWidget::EditTrigger::NoEditTriggers);
@@ -951,13 +952,13 @@ void MainWindow::on_actionVisualize_SMaps_triggered() {
     ui->allocComboBox->setCurrentIndex(1); // show only persisient
     // show dialog
     QDialog fragDialog(this, Qt::WindowTitleHint | Qt::WindowCloseButtonHint);
-    auto layout = new QVBoxLayout();
+    auto layout = new QVBoxLayout(&fragDialog);
     layout->setSpacing(2);
     fragDialog.setLayout(layout);
-    auto statusBar = new QStatusBar();
-    auto fragView = new CustomGraphicsView();
-    auto fragScene = new QGraphicsScene();
-    auto sectionComboBox = new QComboBox();
+    auto statusBar = new QStatusBar(&fragDialog);
+    auto fragView = new CustomGraphicsView(&fragDialog);
+    auto fragScene = new QGraphicsScene(&fragDialog);
+    auto sectionComboBox = new QComboBox(&fragDialog);
     connect(sectionComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), [&](int index){
         fragScene->clear();
         auto sectionit = sMapsSections_.find(sectionComboBox->itemText(index));
@@ -1096,6 +1097,9 @@ void MainWindow::on_launchPushButton_clicked() {
         return;
     }
 
+    if (!CreateIfNoConfigFile())
+        return;
+
     progressDialog_->setWindowTitle("Launch Progress");
     progressDialog_->setLabelText("Preparing ...");
     progressDialog_->setMinimum(0);
@@ -1210,11 +1214,35 @@ void MainWindow::on_addr2LinePushButton_clicked() {
     ui->addr2LinePathLineEdit->setText(path);
 }
 
+bool MainWindow::CreateIfNoConfigFile() {
+    auto cfgPath = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).first();
+    QFile file(cfgPath + "/loli.conf");
+    if (!file.exists()) {
+        if (!QDir(cfgPath).mkpath(cfgPath)) {
+            QMessageBox::warning(this, "Warning", "Can't create application data path: " + cfgPath);
+            return false;
+        }
+        file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+        if (file.open(QIODevice::ReadWrite | QIODevice::Truncate | QIODevice::Text)) {
+            QTextStream stream(&file);
+            stream << "5\n256\nlibunity,libil2cpp,";
+            stream.flush();
+            return true;
+        } else {
+            return false;
+        }
+    }
+    return true;
+}
+
 void MainWindow::on_configPushButton_clicked() {
     QDialog editDialog(this, Qt::WindowTitleHint | Qt::WindowCloseButtonHint);
     auto layout = new QHBoxLayout();
     auto textEdit = new QTextEdit(nullptr);
-    QFile file(QApplication::applicationDirPath() + "/remote/loli.conf");
+    auto cfgPath = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).first();
+    if (!CreateIfNoConfigFile())
+        return;
+    QFile file(cfgPath + "/loli.conf");
     file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
     if (!file.open(QIODevice::ReadOnly)) {
         textEdit->setText("5\n256\nlibunity,libil2cpp,");

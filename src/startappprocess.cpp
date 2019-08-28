@@ -3,6 +3,7 @@
 #include <QTextStream>
 #include <QRegularExpression>
 #include <QProgressDialog>
+#include <QStandardPaths>
 #include <QDebug>
 
 StartAppProcess::StartAppProcess(QObject* parent)
@@ -36,17 +37,17 @@ void StartAppProcess::StartApp(const QString& appName, QProgressDialog* dialog) 
     { // push remote folder to /data/local/tmp
         dialog->setLabelText("Pushing loli.conf to device.");
         arguments.clear();
-        arguments << "push" << "remote/loli.conf" << "/data/local/tmp";
+        arguments << "push" << "loli.conf" << "/data/local/tmp";
         QProcess process;
-        process.setWorkingDirectory(QCoreApplication::applicationDirPath());
+        process.setWorkingDirectory(QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).first());
         process.start(execPath, arguments);
         if (!process.waitForStarted()) {
-            errorStr_ = "erro starting: adb push remote/loli.conf /data/local/tmp";
+            errorStr_ = "erro starting: adb push loli.conf /data/local/tmp";
             emit ProcessErrorOccurred();
             return;
         }
         if (!process.waitForFinished()) {
-            errorStr_ = "erro finishing: adb push remote/loli.conf /data/local/tmp";
+            errorStr_ = "erro finishing: adb push loli.conf /data/local/tmp";
             emit ProcessErrorOccurred();
             return;
         }

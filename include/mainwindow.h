@@ -56,6 +56,7 @@ private:
     void ShowCallStack(const QModelIndex& index);
     void ShowSummary();
     void ReadSMapsFile(QFile* file);
+    bool CreateIfNoConfigFile();
 
 private slots:
     void FixedUpdate();

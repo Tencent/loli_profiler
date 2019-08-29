@@ -114,7 +114,7 @@ private:
 
     // screenshot
     ScreenshotProcess *screenshotProcess_;
-    QVector<QGraphicsPixmapItem*> screenshotItems_;
+    QGraphicsPixmapItem* screenshotItem_;
     int lastScreenshotTime_ = 0;
     QVector<QPair<int, QByteArray>> screenshots_;
 

@@ -75,11 +75,8 @@ MainWindow::MainWindow(QWidget *parent) :
 
     // setup screenshot view
     ui->screenshotGraphicsView->setScene(new QGraphicsScene());
-    for (int i = 0; i < 5; i++) {
-        auto item = new QGraphicsPixmapItem();
-        screenshotItems_.push_back(item);
-        ui->screenshotGraphicsView->scene()->addItem(item);
-    }
+    screenshotItem_ = new QGraphicsPixmapItem();
+    ui->screenshotGraphicsView->scene()->addItem(screenshotItem_);
 
     // setup meminfo chart
     memInfoChart_ = new QChart();
@@ -158,13 +155,13 @@ MainWindow::~MainWindow() {
     delete ui;
 }
 
-const QString SETTINGS_WINDOW_W = "WindowWidth";
-const QString SETTINGS_WINDOW_H = "WindowHeight";
+const QString SETTINGS_WINDOW_W = "Window_W";
+const QString SETTINGS_WINDOW_H = "Window_H";
 const QString SETTINGS_APPNAME = "AppName";
 const QString SETTINGS_SDKPATH = "SdkPath";
-const QString SETTINGS_SPLITER = "Spliter";
-const QString SETTINGS_SPLITER_2 = "Spliter_2";
-const QString SETTINGS_SPLITER_3 = "Spliter_3";
+const QString SETTINGS_MAIN_SPLITER = "Main_Spliter";
+const QString SETTINGS_UPPER_SPLITER = "Upper_Spliter";
+const QString SETTINGS_LOWER__SPLITER = "Lower_Spliter";
 const QString SETTINGS_SCALEHSLIDER = "ChartScaleHSlider";
 const QString SETTINGS_LASTOPENDIR = "lastopen_dir";
 const QString SETTINGS_LASTSYMBOLDIR = "lastsymbol_dir";
@@ -182,9 +179,9 @@ void MainWindow::LoadSettings() {
     ui->sdkPathLineEdit->setText(settings.value(SETTINGS_SDKPATH).toString());
     ui->addr2LinePathLineEdit->setText(settings.value(SETTINGS_ADDR2LINEPATH).toString());
     ui->pythonPathLineEdit->setText(settings.value(SETTINGS_PYTHONPATH).toString());
-    ui->splitter->restoreState(settings.value(SETTINGS_SPLITER).toByteArray());
-    ui->splitter_2->restoreState(settings.value(SETTINGS_SPLITER_2).toByteArray());
-    ui->splitter_3->restoreState(settings.value(SETTINGS_SPLITER_3).toByteArray());
+    ui->main_splitter->restoreState(settings.value(SETTINGS_MAIN_SPLITER).toByteArray());
+    ui->upper_splitter->restoreState(settings.value(SETTINGS_UPPER_SPLITER).toByteArray());
+    ui->lower_splitter->restoreState(settings.value(SETTINGS_LOWER__SPLITER).toByteArray());
     ui->chartScaleHSlider->setValue(settings.value(SETTINGS_SCALEHSLIDER, 10).toInt());
     auto lastOpenDir = settings.value(SETTINGS_LASTOPENDIR).toString();
     if (QDir(lastOpenDir).exists())
@@ -202,9 +199,9 @@ void MainWindow::SaveSettings() {
     settings.setValue(SETTINGS_SDKPATH, ui->sdkPathLineEdit->text());
     settings.setValue(SETTINGS_ADDR2LINEPATH, ui->addr2LinePathLineEdit->text());
     settings.setValue(SETTINGS_PYTHONPATH, ui->pythonPathLineEdit->text());
-    settings.setValue(SETTINGS_SPLITER, ui->splitter->saveState());
-    settings.setValue(SETTINGS_SPLITER_2, ui->splitter_2->saveState());
-    settings.setValue(SETTINGS_SPLITER_3, ui->splitter_3->saveState());
+    settings.setValue(SETTINGS_MAIN_SPLITER, ui->main_splitter->saveState());
+    settings.setValue(SETTINGS_UPPER_SPLITER, ui->upper_splitter->saveState());
+    settings.setValue(SETTINGS_LOWER__SPLITER, ui->lower_splitter->saveState());
     settings.setValue(SETTINGS_SCALEHSLIDER, ui->chartScaleHSlider->value());
     if (QDir(lastOpenDir_).exists())
         settings.setValue(SETTINGS_LASTOPENDIR, lastOpenDir_);
@@ -485,25 +482,14 @@ int MainWindow::GetScreenshotIndex(const QPointF& pos) const { // TODO: optimize
 
 void MainWindow::ShowScreenshotAt(int index) {
     int screenshotCount = screenshots_.size();
-    int count = screenshotItems_.size();
-    int startIndex = index - static_cast<int>(std::floor(static_cast<float>(count) / 2));
-    for (int i = 0; i < count; i++, startIndex++) {
-        auto& item = screenshotItems_[i];
-        if (startIndex < 0 || startIndex >= screenshotCount) {
-            item->setVisible(false);
-            continue;
-        }
-        QPixmap pixmap;
-        pixmap.loadFromData(screenshots_[startIndex].second, "JPG");
-        item->setPixmap(pixmap);
-        item->setVisible(true);
-        item->setScale(startIndex == index ? 1.2 : 1.0);
-        item->setZValue(startIndex == index ? count : i);
+    if (index < 0 || index >= screenshotCount) {
+        screenshotItem_->setVisible(false);
+        return;
     }
-    for (int i = 0; i < count; i++) {
-        auto& item = screenshotItems_[i];
-        item->setPos(i * 256.0, 0.0);
-    }
+    QPixmap pixmap;
+    pixmap.loadFromData(screenshots_[index].second, "JPG");
+    screenshotItem_->setPixmap(pixmap);
+    screenshotItem_->setVisible(true);
 }
 
 void MainWindow::HideToolTips() {

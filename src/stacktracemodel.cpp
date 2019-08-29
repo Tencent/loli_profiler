@@ -1,6 +1,6 @@
 #include "stacktracemodel.h"
 
-QString sizeToString(int size) {
+QString sizeToString(quint32 size) {
     if (size >= 1024 * 1024) {
         return QString::number(static_cast<double>(size) / 1024 / 1024, 'f', 2) + " MB";
     } else if (size > 1024) {

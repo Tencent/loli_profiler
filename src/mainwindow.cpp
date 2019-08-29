@@ -490,6 +490,7 @@ void MainWindow::ShowScreenshotAt(int index) {
     pixmap.loadFromData(screenshots_[index].second, "JPG");
     screenshotItem_->setPixmap(pixmap);
     screenshotItem_->setVisible(true);
+    screenshotItem_->setPos(0, 0);
 }
 
 void MainWindow::HideToolTips() {
@@ -532,9 +533,9 @@ void MainWindow::ShowCallStack(const QModelIndex& index) {
 
 void MainWindow::ShowSummary() {
     auto rowCount = stacktraceProxyModel_->rowCount();
-    int size = 0;
+    quint32 size = 0;
     for (int i = 0; i < rowCount; i++) {
-        size += stacktraceProxyModel_->data(stacktraceProxyModel_->index(i, 1), Qt::UserRole).toInt();
+        size += stacktraceProxyModel_->data(stacktraceProxyModel_->index(i, 1), Qt::UserRole).toUInt();
     }
     ui->recordCountLineEdit->setText(QString("%1 / %2").arg(rowCount).arg(sizeToString(size)));
 }
@@ -561,7 +562,7 @@ void MainWindow::ReadSMapsFile(QFile* file) {
             if (curSection == nullptr)
                 continue;
             auto word = strList[0];
-            auto value = strList[1].toInt();
+            auto value = strList[1].toUInt();
             if (word == "Size:") {
                 curSection->virtual_ += value;
                 total.virtual_ += value;
@@ -856,9 +857,9 @@ void MainWindow::on_actionExit_triggered() {
 
 class MemoryTableWidgetItem : public QTableWidgetItem {
 public:
-    MemoryTableWidgetItem(int size) : QTableWidgetItem(), size_(size) { setText(sizeToString(size)); }
+    MemoryTableWidgetItem(quint32 size) : QTableWidgetItem(), size_(size) { setText(sizeToString(size)); }
     bool operator< (const QTableWidgetItem &other) const { return size_ < static_cast<const MemoryTableWidgetItem&>(other).size_; }
-    int size_ = 0;
+    quint32 size_ = 0;
 };
 
 class MemoryTableWidget : public QTableWidget {
@@ -905,18 +906,19 @@ void MainWindow::on_actionStat_SMaps_triggered() {
                 QStringList() << "Name" << "Virtual Memory" << "Rss" << "Pss" <<
                 "Private Clean" << "Private Dirty" << "Shared Clean" << "Shared Dirty");
     int row = 0;
+    // smaps size data is in kilo-byte by default
     SMapsSection total;
     for (auto it = sMapsSections_.begin(); it != sMapsSections_.end(); ++it) {
         auto& name = it.key();
         auto& data = it.value();
         tableWidget->setItem(row, 0, new QTableWidgetItem(name));
-        tableWidget->setItem(row, 1, new MemoryTableWidgetItem(data.virtual_));
-        tableWidget->setItem(row, 2, new MemoryTableWidgetItem(data.rss_));
-        tableWidget->setItem(row, 3, new MemoryTableWidgetItem(data.pss_));
-        tableWidget->setItem(row, 4, new MemoryTableWidgetItem(data.privateClean_));
-        tableWidget->setItem(row, 5, new MemoryTableWidgetItem(data.privateDirty_));
-        tableWidget->setItem(row, 6, new MemoryTableWidgetItem(data.sharedClean_));
-        tableWidget->setItem(row, 7, new MemoryTableWidgetItem(data.sharedDirty_));
+        tableWidget->setItem(row, 1, new MemoryTableWidgetItem(data.virtual_ * 1024));
+        tableWidget->setItem(row, 2, new MemoryTableWidgetItem(data.rss_ * 1024));
+        tableWidget->setItem(row, 3, new MemoryTableWidgetItem(data.pss_ * 1024));
+        tableWidget->setItem(row, 4, new MemoryTableWidgetItem(data.privateClean_ * 1024));
+        tableWidget->setItem(row, 5, new MemoryTableWidgetItem(data.privateDirty_ * 1024));
+        tableWidget->setItem(row, 6, new MemoryTableWidgetItem(data.sharedClean_ * 1024));
+        tableWidget->setItem(row, 7, new MemoryTableWidgetItem(data.sharedDirty_ * 1024));
         total.virtual_ += data.virtual_;
         total.rss_ += data.rss_;
         total.pss_ += data.pss_;
@@ -932,8 +934,8 @@ void MainWindow::on_actionStat_SMaps_triggered() {
     tableWidget->show();
     auto statusBar = new QStatusBar(&fragDialog);
     statusBar->showMessage(QString("VM: %1, Rss: %2, Pss: %3, PC: %4, PD: %5, SC: %6, SD: %7")
-                             .arg(sizeToString(total.virtual_), sizeToString(total.rss_), sizeToString(total.pss_), sizeToString(total.privateClean_),
-                                  sizeToString(total.privateDirty_), sizeToString(total.sharedClean_), sizeToString(total.sharedDirty_)));
+                             .arg(sizeToString(total.virtual_ * 1024), sizeToString(total.rss_ * 1024), sizeToString(total.pss_ * 1024), sizeToString(total.privateClean_ * 1024),
+                                  sizeToString(total.privateDirty_ * 1024), sizeToString(total.sharedClean_ * 1024), sizeToString(total.sharedDirty_ * 1024)));
     layout->addWidget(tableWidget);
     layout->addWidget(statusBar);
     layout->setMargin(0);
@@ -987,18 +989,22 @@ void MainWindow::on_actionVisualize_SMaps_triggered() {
             auto sizeInKb = static_cast<double>(size) / 1024;
             auto y = i * 35;
             auto height = 30;
-            fragScene->addRect(0, y, sizeInKb, height, pen, bgBrush)->setToolTip(QString("Size: %1").arg(sizeToString(static_cast<int>(size))));
-            auto recordCount = stacktraceProxyModel_->rowCount();
-            for (int i = 0; i < recordCount; i++) {
-                auto recSize = stacktraceProxyModel_->data(stacktraceProxyModel_->index(i, 1), Qt::UserRole).toInt();
+            auto freeRect = fragScene->addRect(0, y, sizeInKb, height, pen, bgBrush);
+            auto rowCount = stacktraceProxyModel_->rowCount();
+            auto totalSize = 0ul;
+            for (int i = 0; i < rowCount; i++) {
+                auto recSize = stacktraceProxyModel_->data(stacktraceProxyModel_->index(i, 1), Qt::UserRole).toUInt();
                 auto recAddr = stacktraceProxyModel_->data(stacktraceProxyModel_->index(i, 2)).toString().toULongLong(nullptr, 0);
                 if (recAddr >= start && recAddr < end) {
                     auto recAddrInKb = (recAddr - start) / 1024;
                     auto recSizeInKb = recSize / 1024;
                     fragScene->addRect(recAddrInKb, y, recSizeInKb, height, pen, allocBrush)->setToolTip(QString("Size: %1").arg(sizeToString(recSize)));
                     recordsCount++;
+                    totalSize += recSize;
                 }
             }
+            freeRect->setToolTip(QString("Size: %1 Used: %2 (%3%)")
+                                 .arg(sizeToString(totalSize), sizeToString(static_cast<quint32>(size)), QString::number((static_cast<double>(totalSize) / size) * 100.0)));
         }
         statusBar->showMessage(QString("%1 sections with %2 allocation records").arg(sectionsCount).arg(recordsCount));
     });

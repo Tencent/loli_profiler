@@ -1,4 +1,5 @@
 #include "stacktraceproxymodel.h"
+#include "stacktracemodel.h"
 
 StackTraceProxyModel::StackTraceProxyModel(QHash<QString, int>& freeAddrMap, QAbstractItemModel* srcModel, QObject *parent)
     : QSortFilterProxyModel(parent), freeAddrMap_(freeAddrMap) {
@@ -20,11 +21,11 @@ void StackTraceProxyModel::setLibraryFilter(const QString& value) {
     invalidateFilter();
 }
 
-bool StackTraceProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const {
-    auto model = sourceModel();
+bool StackTraceProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex &) const {
+    const auto model = static_cast<StackTraceModel*>(sourceModel());
+    const auto record = model->recordAt(sourceRow);
     if (sizeFilter_ > 0) {
-        auto index1 = model->index(sourceRow, 1, sourceParent); // size
-        int size = model->data(index1, Qt::UserRole).toInt();
+        auto size = record.size_;
         switch(sizeFilter_) {
         case 1: // large
             if (size < 1048576)
@@ -41,15 +42,12 @@ bool StackTraceProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex &so
         }
     }
     if (libraryFilter_.size() > 0) {
-        auto index3 = model->index(sourceRow, 3, sourceParent); // lib
-        if (model->data(index3).toString() != libraryFilter_)
+        if (record.library_ != libraryFilter_)
             return false;
     }
     if (persistentFilter_) {
-        auto index0 = model->index(sourceRow, 1, sourceParent); // time
-        auto index2 = model->index(sourceRow, 2, sourceParent); // address
-        auto addr = model->data(index2).toString();
-        auto time = model->data(index0).toInt();
+        auto addr = record.addr_;
+        auto time = record.time_;
         auto it = freeAddrMap_.find(addr);
         if (it != freeAddrMap_.end()) {
             if (time < it.value()) {

@@ -149,13 +149,13 @@ private:
     };
     struct SMapsSection {
         QVector<SMapsSectionAddr> addrs_;
-        qint32 virtual_ = 0;
-        qint32 rss_ = 0;
-        qint32 pss_ = 0;
-        qint32 sharedClean_ = 0;
-        qint32 sharedDirty_ = 0;
-        qint32 privateClean_ = 0;
-        qint32 privateDirty_ = 0;
+        quint32 virtual_ = 0;
+        quint32 rss_ = 0;
+        quint32 pss_ = 0;
+        quint32 sharedClean_ = 0;
+        quint32 sharedDirty_ = 0;
+        quint32 privateClean_ = 0;
+        quint32 privateDirty_ = 0;
     };
     QHash<QString, SMapsSection> sMapsSections_;
 

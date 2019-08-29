@@ -2,6 +2,8 @@
 
 轻量开源内存分析工具（Lightweight Opensource profiLing Instrument）
 
+> [使用手册](https://git.code.oa.com/xinhou/loli_profiler/wikis/tutorial)、[常见问题](https://git.code.oa.com/xinhou/loli_profiler/wikis/faq)、[程序下载](https://git.code.oa.com/xinhou/loli_profiler/wikis/home)
+
 ![](res/images/macos.png)
 
 **注意：此程序仍处于初级研发阶段**
@@ -37,6 +39,14 @@ protected String updateUnityCommandLineArguments(String cmdLine) {
 }
 ```
 
+推荐设置：
+
+```
+5
+256
+libunity,libil2cpp,
+```
+
 ### UE4
 
 ```c++
@@ -47,6 +57,14 @@ FMalloc* FAndroidPlatformMemory::BaseAllocator() {
     return new FMallocBinned(MemoryConstants.PageSize, MemoryLimit);
 #endif
 }
+```
+
+推荐设置：
+
+```
+2
+256
+libue4,
 ```
 
 ## 计划
@@ -68,9 +86,9 @@ FMalloc* FAndroidPlatformMemory::BaseAllocator() {
 
 ## 链接
 
+* 程序下载 https://git.code.oa.com/xinhou/loli_profiler/wikis/home
+* 使用手册 https://git.code.oa.com/xinhou/loli_profiler/wikis/tutorial
 * 常见问题 https://git.code.oa.com/xinhou/loli_profiler/wikis/faq
-* KM介绍文章 http://km.oa.com/articles/show/408991
-* KM使用手册文章 http://km.oa.com/articles/show/421944
+* KM原理介绍文章 http://km.oa.com/articles/show/408991
 * xHook https://github.com/iqiyi/xHook
 * 图标 https://www.flaticon.com/authors/smashicons
-* 定期预编译的程序 https://git.code.oa.com/xinhou/loli_profiler/wikis/home

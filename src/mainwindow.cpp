@@ -980,6 +980,8 @@ void MainWindow::on_actionVisualize_SMaps_triggered() {
         auto& section = *sectionit;
         auto sectionsCount = section.addrs_.size();
         auto recordsCount = 0;
+        auto totalUsedSize = 0ul;
+        auto totalSize = 0ul;
         for (int i = 0; i < sectionsCount; i++) {
             auto& addr = section.addrs_[i];
             auto offset = addr.offset_;
@@ -991,7 +993,7 @@ void MainWindow::on_actionVisualize_SMaps_triggered() {
             auto height = 30;
             auto freeRect = fragScene->addRect(0, y, sizeInKb, height, pen, bgBrush);
             auto rowCount = stacktraceProxyModel_->rowCount();
-            auto totalSize = 0ul;
+            auto usedSize = 0ul;
             for (int i = 0; i < rowCount; i++) {
                 auto recSize = stacktraceProxyModel_->data(stacktraceProxyModel_->index(i, 1), Qt::UserRole).toUInt();
                 auto recAddr = stacktraceProxyModel_->data(stacktraceProxyModel_->index(i, 2)).toString().toULongLong(nullptr, 0);
@@ -1000,13 +1002,17 @@ void MainWindow::on_actionVisualize_SMaps_triggered() {
                     auto recSizeInKb = recSize / 1024;
                     fragScene->addRect(recAddrInKb, y, recSizeInKb, height, pen, allocBrush)->setToolTip(QString("Size: %1").arg(sizeToString(recSize)));
                     recordsCount++;
-                    totalSize += recSize;
+                    usedSize += recSize;
                 }
             }
-            freeRect->setToolTip(QString("Size: %1 Used: %2 (%3%)")
-                                 .arg(sizeToString(totalSize), sizeToString(static_cast<quint32>(size)), QString::number((static_cast<double>(totalSize) / size) * 100.0)));
+            freeRect->setToolTip(QString("Total: %1 Used: %2 (%3%)")
+                                 .arg(sizeToString(static_cast<quint32>(size)), sizeToString(usedSize), QString::number((static_cast<double>(usedSize) / size) * 100.0)));
+            totalUsedSize += usedSize;
+            totalSize += size;
         }
-        statusBar->showMessage(QString("%1 sections with %2 allocation records").arg(sectionsCount).arg(recordsCount));
+        statusBar->showMessage(QString("%1 sections with %2 allocation records, total: %3 used: %4 (%5%)")
+                               .arg(QString::number(sectionsCount), QString::number(recordsCount), sizeToString(totalSize), sizeToString(totalUsedSize),
+                                    QString::number((static_cast<double>(totalUsedSize) / totalSize) * 100.0)));
     });
     QSet<QString> visibleSections;
     auto recordCount = stacktraceProxyModel_->rowCount();

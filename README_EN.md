@@ -14,6 +14,7 @@ Lightweight Opensource profiLing Instrument
 - Translates function address to human readable format
 - Filtering persistent memory allocations
 - Query smaps info to get an memory overview of different so or modules
+- Combine smaps info with memory allocation records to produce memory fragmentation map
 - Take screen-shot every 5 second
 - Transfer memory related function's call-stack in real-time (by TCP Socket)
 - Network packet is compressed using lz4 to speed-up sending & receiving process
@@ -63,7 +64,7 @@ FMalloc* FAndroidPlatformMemory::BaseAllocator() {
 * QtCharts plugin installed
 * QT Creater 4.8 or higher
 * C++11 Compiler
-* Android NDK r16b or higher
+* Android NDK r16b or higher (If you want to build android plugin by hand)
 
 ## Links
 

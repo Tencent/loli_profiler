@@ -14,6 +14,7 @@
 - 可将函数地址自动批量转换为函数名称
 - 自动分析数据展示常驻内存
 - 获取并分析smaps数据，得到不同so、模块的内存总分配情况
+- 结合smaps数据与内存分配数据，可绘制出近似的内存碎片图
 - 每5s自动截图一次
 - 从手机端实时获取内存相关函数的堆栈信息（通过TCP Socket）
 - 网络包使用LZ4压缩以加快收发速度
@@ -63,11 +64,11 @@ FMalloc* FAndroidPlatformMemory::BaseAllocator() {
 * 安装QtCharts插件
 * QT Creater 4.8 或更高
 * C++11 编译器
-* Android NDK r16b 或更高
+* Android NDK r16b 或更高（如需自行编译安卓插件）
 
 ## 链接
 
-* FAQ https://git.code.oa.com/xinhou/loli_profiler/wikis/faq
+* 常见问题 https://git.code.oa.com/xinhou/loli_profiler/wikis/faq
 * KM介绍文章 http://km.oa.com/articles/show/408991
 * KM使用手册文章 http://km.oa.com/articles/show/421944
 * xHook https://github.com/iqiyi/xHook

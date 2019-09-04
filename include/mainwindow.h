@@ -55,6 +55,8 @@ private:
     QString TryAddNewAddress(const QString& lib, const QString& addr);
     void ShowCallStack(const QModelIndex& index);
     void ShowSummary();
+    void FilterStackTraceModel();
+    void SwitchStackTraceModel(StackTraceProxyModel* model);
     void ReadSMapsFile(QFile* file);
     bool CreateIfNoConfigFile();
 
@@ -99,7 +101,9 @@ private:
     QProgressDialog *progressDialog_;
     QStandardItemModel *callStackModel_;
     StackTraceModel *stacktraceModel_;
+    StackTraceModel *filteredStacktraceModel_;
     StackTraceProxyModel *stacktraceProxyModel_;
+    StackTraceProxyModel *filteredStacktraceProxyModel_;
     QHash<QUuid, QVector<QString>> callStackMap_;
     QSet<QString> libraries_;
     QString adbPath_;

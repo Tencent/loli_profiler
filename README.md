@@ -71,7 +71,7 @@ libue4,
 
 **短期计划**
 
-* 尝试同时支持 PLT hook 与 Inline hook
+* 尝试支持 [Inline hook :no_entry_sign:](https://git.code.oa.com/xinhou/loli_profiler/issues/12) 
 * 计划中 ... 
 
 ## 编译

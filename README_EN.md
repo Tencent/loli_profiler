@@ -53,7 +53,7 @@ FMalloc* FAndroidPlatformMemory::BaseAllocator() {
 
 **Future plans**
 
-* try support both PLT hook and Inline hook
+* try support [Inline hook :no_entry_sign:](https://git.code.oa.com/xinhou/loli_profiler/issues/12)
 * and more ... 
 
 ## Building

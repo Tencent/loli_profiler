@@ -43,13 +43,6 @@ MainWindow::MainWindow(QWidget *parent) :
     ui(new Ui::MainWindow) {
     ui->setupUi(this);
 
-    stacktraceModel_ = new StackTraceModel(this);
-    stacktraceProxyModel_ = new StackTraceProxyModel(freeAddrMap_, stacktraceModel_, this);
-    stacktraceProxyModel_->setSizeFilter(ui->memSizeComboBox->currentIndex());
-    stacktraceProxyModel_->setLibraryFilter(QString());
-    stacktraceProxyModel_->setPersistentFilter(ui->allocComboBox->currentIndex() == 1);
-    ui->stackTableView->setModel(stacktraceProxyModel_);
-
     progressDialog_ = new QProgressDialog(this, Qt::WindowTitleHint | Qt::CustomizeWindowHint);
     progressDialog_->setWindowModality(Qt::WindowModal);
     progressDialog_->setAutoClose(true);
@@ -143,8 +136,12 @@ MainWindow::MainWindow(QWidget *parent) :
 
     LoadSettings();
 
+    filteredStacktraceModel_ = new StackTraceModel(this);
+    filteredStacktraceProxyModel_ = new StackTraceProxyModel(filteredStacktraceModel_, this);
+    stacktraceModel_ = new StackTraceModel(this);
+    stacktraceProxyModel_ = new StackTraceProxyModel(stacktraceModel_, this);
+    SwitchStackTraceModel(stacktraceProxyModel_);
     connect(ui->stackTableView, &QTableView::customContextMenuRequested, this, &MainWindow::OnStackTableViewContextMenu);
-    connect(ui->stackTableView->selectionModel(), &QItemSelectionModel::selectionChanged, this, &MainWindow::OnStackTableViewSelectionChanged);
 
     mainTimer_ = new QTimer(this);
     connect(mainTimer_, SIGNAL(timeout()), this, SLOT(FixedUpdate()));
@@ -331,7 +328,9 @@ int MainWindow::LoadFromFile(QFile *file) {
     }
     // callstack tree view
     QSet<QString> libraries;
+    filteredStacktraceModel_->clear();
     stacktraceModel_->clear();
+    SwitchStackTraceModel(stacktraceProxyModel_);
     stream >> value;
     QVector<StackRecord> records;
     for (int i = 0; i < value; i++) {
@@ -520,7 +519,9 @@ QString MainWindow::TryAddNewAddress(const QString& lib, const QString& addr) {
 void MainWindow::ShowCallStack(const QModelIndex& index) {
     if (!index.isValid())
         return;
-    auto& selectedRecord = stacktraceModel_->recordAt(index.row());
+    auto proxyModel = static_cast<StackTraceProxyModel*>(ui->stackTableView->model());
+    auto srcModel = static_cast<StackTraceModel*>(proxyModel->sourceModel());
+    auto& selectedRecord = srcModel->recordAt(proxyModel->mapToSource(index).row());
     auto& callStack = callStackMap_[selectedRecord.uuid_];
     for (int i = 0, row = 0; i < callStack.size(); i += 2, row++) {
         const auto& libName = callStack[i];
@@ -532,12 +533,67 @@ void MainWindow::ShowCallStack(const QModelIndex& index) {
 }
 
 void MainWindow::ShowSummary() {
-    auto rowCount = stacktraceProxyModel_->rowCount();
+    auto model = ui->stackTableView->model();
+    auto rowCount = model->rowCount();
     quint32 size = 0;
     for (int i = 0; i < rowCount; i++) {
-        size += stacktraceProxyModel_->data(stacktraceProxyModel_->index(i, 1), Qt::UserRole).toUInt();
+        size += model->data(model->index(i, 1), Qt::UserRole).toUInt();
     }
     ui->recordCountLineEdit->setText(QString("%1 / %2").arg(rowCount).arg(sizeToString(size)));
+}
+
+void MainWindow::FilterStackTraceModel() {
+    auto sizeFilter = ui->memSizeComboBox->currentIndex();
+    auto libraryFilter = ui->libraryComboBox->currentIndex() == 0 ? QString() : ui->libraryComboBox->currentText();
+    auto persistentFilter = ui->allocComboBox->currentIndex() == 1;
+//    TimerProfiler profler("FilterStackTraceModel");
+    filteredStacktraceModel_->clear();
+    QVector<StackRecord> filteredRecords;
+    int recordCount = stacktraceModel_->rowCount();
+    for (int i = 0; i < recordCount; i++) {
+        const auto& record = stacktraceModel_->recordAt(i);
+        if (sizeFilter > 0) {
+            auto size = record.size_;
+            switch(sizeFilter) {
+            case 1: // large
+                if (size < 1048576)
+                    continue;
+                break;
+            case 2: // medium
+                if (size >= 1048576 || size <= 1024)
+                    continue;
+                break;
+            case 3: // small
+                if (size > 1024)
+                    continue;
+                break;
+            }
+        }
+        if (libraryFilter.size() > 0) {
+            if (record.library_ != libraryFilter)
+                continue;
+        }
+        if (persistentFilter) {
+            auto addr = record.addr_;
+            auto time = record.time_;
+            auto it = freeAddrMap_.find(addr);
+            if (it != freeAddrMap_.end()) {
+                if (time < it.value()) {
+                    continue;
+                }
+            }
+        }
+        filteredRecords.push_back(record);
+    }
+    filteredStacktraceModel_->append(filteredRecords);
+    SwitchStackTraceModel(filteredStacktraceProxyModel_);
+}
+
+void MainWindow::SwitchStackTraceModel(StackTraceProxyModel* model) {
+    if (model == ui->stackTableView->model())
+        return;
+    ui->stackTableView->setModel(model);
+    connect(ui->stackTableView->selectionModel(), &QItemSelectionModel::selectionChanged, this, &MainWindow::OnStackTableViewSelectionChanged);
 }
 
 void MainWindow::ReadSMapsFile(QFile* file) {
@@ -653,7 +709,9 @@ void MainWindow::OnStackTableViewContextMenu(const QPoint & pos) {
         auto selectedIndex = indexes.front();
         if (!selectedIndex.isValid())
             return;
-        auto& selectedRecord = stacktraceModel_->recordAt(selectedIndex.row());
+        auto proxyModel = static_cast<StackTraceProxyModel*>(ui->stackTableView->model());
+        auto srcModel = static_cast<StackTraceModel*>(proxyModel->sourceModel());
+        auto& selectedRecord = srcModel->recordAt(proxyModel->mapToSource(selectedIndex).row());
         auto& callStack = callStackMap_[selectedRecord.uuid_];
         for (int i = 0, row = 0; i < callStack.size(); i += 2, row++) {
             const auto& libName = callStack[i];
@@ -968,6 +1026,7 @@ void MainWindow::on_actionVisualize_SMaps_triggered() {
     auto fragView = new CustomGraphicsView(&fragDialog);
     auto fragScene = new QGraphicsScene(&fragDialog);
     auto sectionComboBox = new QComboBox(&fragDialog);
+    auto curModel = ui->stackTableView->model();
     connect(sectionComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), [&](int index){
         fragScene->clear();
         auto sectionit = sMapsSections_.find(sectionComboBox->itemText(index));
@@ -992,11 +1051,11 @@ void MainWindow::on_actionVisualize_SMaps_triggered() {
             auto y = i * 35;
             auto height = 30;
             auto freeRect = fragScene->addRect(0, y, sizeInKb, height, pen, bgBrush);
-            auto rowCount = stacktraceProxyModel_->rowCount();
+            auto rowCount = curModel->rowCount();
             auto usedSize = 0ul;
             for (int i = 0; i < rowCount; i++) {
-                auto recSize = stacktraceProxyModel_->data(stacktraceProxyModel_->index(i, 1), Qt::UserRole).toUInt();
-                auto recAddr = stacktraceProxyModel_->data(stacktraceProxyModel_->index(i, 2)).toString().toULongLong(nullptr, 0);
+                auto recSize = curModel->data(curModel->index(i, 1), Qt::UserRole).toUInt();
+                auto recAddr = curModel->data(curModel->index(i, 2)).toString().toULongLong(nullptr, 0);
                 if (recAddr >= start && recAddr < end) {
                     auto recAddrInKb = (recAddr - start) / 1024;
                     auto recSizeInKb = recSize / 1024;
@@ -1015,9 +1074,9 @@ void MainWindow::on_actionVisualize_SMaps_triggered() {
                                     QString::number((static_cast<double>(totalUsedSize) / totalSize) * 100.0)));
     });
     QSet<QString> visibleSections;
-    auto recordCount = stacktraceProxyModel_->rowCount();
+    auto recordCount = curModel->rowCount();
     for (int i = 0; i < recordCount; i++) {
-        auto recAddr = stacktraceProxyModel_->data(stacktraceProxyModel_->index(i, 2)).toString().toULongLong(nullptr, 0);
+        auto recAddr = curModel->data(curModel->index(i, 2)).toString().toULongLong(nullptr, 0);
         for (auto it = sMapsSections_.begin(); it != sMapsSections_.end(); ++it) {
             auto& section = *it;
             if (visibleSections.contains(it.key()))
@@ -1077,6 +1136,7 @@ void MainWindow::on_launchPushButton_clicked() {
         ConnectionFailed();
         for (auto& library : libraries_)
             ui->libraryComboBox->addItem(library);
+        FilterStackTraceModel();
         ShowSummary();
         progressDialog_->setValue(1);
         progressDialog_->setLabelText("Requesting smaps info from device.");
@@ -1129,8 +1189,10 @@ void MainWindow::on_launchPushButton_clicked() {
     HideToolTips();
 
     libraries_.clear();
+    filteredStacktraceModel_->clear();
     stacktraceModel_->clear();
     sMapsSections_.clear();
+    SwitchStackTraceModel(stacktraceProxyModel_);
     ui->memSizeComboBox->setCurrentIndex(0);
     ui->allocComboBox->setCurrentIndex(0);
     ui->libraryComboBox->setCurrentIndex(0);
@@ -1263,17 +1325,17 @@ void MainWindow::on_configPushButton_clicked() {
     }
 }
 
-void MainWindow::on_memSizeComboBox_currentIndexChanged(int index) {
-    stacktraceProxyModel_->setSizeFilter(index);
+void MainWindow::on_memSizeComboBox_currentIndexChanged(int) {
+    FilterStackTraceModel();
     ShowSummary();
 }
 
-void MainWindow::on_libraryComboBox_currentIndexChanged(int index) {
-    stacktraceProxyModel_->setLibraryFilter(index == 0 ? QString() : ui->libraryComboBox->currentText());
+void MainWindow::on_libraryComboBox_currentIndexChanged(int) {
+    FilterStackTraceModel();
     ShowSummary();
 }
 
-void MainWindow::on_allocComboBox_currentIndexChanged(int index) {
-    stacktraceProxyModel_->setPersistentFilter(index == 1);
+void MainWindow::on_allocComboBox_currentIndexChanged(int) {
+    FilterStackTraceModel();
     ShowSummary();
 }

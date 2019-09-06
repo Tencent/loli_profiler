@@ -6,11 +6,13 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <iterator>
 #include <mutex>
 #include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
+#include <unordered_set>
 
 #ifdef __cplusplus
 extern "C" {
@@ -22,9 +24,12 @@ extern "C" {
 #include <malloc.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 #include <unwind.h>
+#include <inttypes.h>
 #include <jni.h>
+#include <regex.h>
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -138,49 +143,49 @@ void *loliRealloc(void *ptr, size_t new_size) {
     return mem;
 }
 
-int loliHook(int minRecSize, const char *soNames) {
-    if (hooked_)
-        return 0;
-    minRecSize_ = minRecSize;
-    hookTime_ = std::chrono::system_clock::now();
-    std::string names(soNames);
-    std::string token;
-    char delimiter = ',';
-    std::size_t pos = 0;
-    int ecode = 0;
+int loliHookInternal(std::unordered_set<std::string>& tokens) {
     xhook_enable_debug(1);
-    while ((pos = names.find(delimiter)) != std::string::npos) {
-        token = names.substr(0, pos);
-        auto soName = ".*/" + token + "\\.so$";
+    xhook_clear();
+    int ecode = 0;
+    for (auto& token : tokens) {
+        auto soReg = ".*/" + token + "\\.so$";
         __android_log_print(ANDROID_LOG_INFO, "Loli", "hooking %s", token.c_str());
-        ecode = xhook_register(soName.c_str(), "malloc", (void*)loliMalloc, nullptr);
+        ecode = xhook_register(soReg.c_str(), "malloc", (void*)loliMalloc, nullptr);
         if (ecode != 0) {
             __android_log_print(ANDROID_LOG_INFO, "Loli", "error hooking %s's malloc()", token.c_str());
             return ecode;
         }
-        ecode = xhook_register(soName.c_str(), "free", (void*)loliFree, nullptr);
+        ecode = xhook_register(soReg.c_str(), "free", (void*)loliFree, nullptr);
         if (ecode != 0) {
             __android_log_print(ANDROID_LOG_INFO, "Loli", "error hooking %s's free()", token.c_str());
             return ecode;
         }
-        ecode = xhook_register(soName.c_str(), "calloc", (void*)loliCalloc, nullptr);
+        ecode = xhook_register(soReg.c_str(), "calloc", (void*)loliCalloc, nullptr);
         if (ecode != 0) {
             __android_log_print(ANDROID_LOG_INFO, "Loli", "error hooking %s's calloc()", token.c_str());
             return ecode;
         }
-        ecode = xhook_register(soName.c_str(), "memalign", (void*)loliMemalign, nullptr);
+        ecode = xhook_register(soReg.c_str(), "memalign", (void*)loliMemalign, nullptr);
         if (ecode != 0) {
             __android_log_print(ANDROID_LOG_INFO, "Loli", "error hooking %s's memalign()", token.c_str());
             return ecode;
         }
-        ecode = xhook_register(soName.c_str(), "realloc", (void*)loliRealloc, nullptr);
+        ecode = xhook_register(soReg.c_str(), "realloc", (void*)loliRealloc, nullptr);
         if (ecode != 0) {
             __android_log_print(ANDROID_LOG_INFO, "Loli", "error hooking %s's realloc()", token.c_str());
             return ecode;
         }
-        names.erase(0, pos + 1);
     }
     xhook_refresh(0);
+    return ecode;
+}
+
+int loliHook(int minRecSize, std::unordered_set<std::string>& tokens) {
+    if (hooked_)
+        return 0;
+    minRecSize_ = minRecSize;
+    hookTime_ = std::chrono::system_clock::now();
+    int ecode = loliHookInternal(tokens);
     auto svr = loli::serverStart(7100);
     __android_log_print(ANDROID_LOG_INFO, "Loli", "loli start status %i", svr);
     hooked_ = true;
@@ -196,29 +201,76 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
     std::ifstream infile("/data/local/tmp/loli.conf");
     std::string line;
     int count = 0;
-    int delaySeconds = 5;
     int minRecSize = 512;
     std::string hookLibraries = "libil2cpp,libunity,";
     while (std::getline(infile, line)) {
         if (count == 0) {
             std::istringstream iss(line);
-            iss >> delaySeconds;
-        } else if (count == 1) {
-            std::istringstream iss(line);
             iss >> minRecSize;
-        } else if (count == 2) {
+        } else if (count == 1) {
             hookLibraries = line;
+        } else {
+            break;
         }
         count++;
     }
-    __android_log_print(ANDROID_LOG_INFO, "Loli", "hookDelay: %i, minRecSize:: %i, hookLibs: %s", 
-        delaySeconds, minRecSize, hookLibraries.c_str());
-    // not a perfect solution right now, but it will work
-    // wait for serval seconds for unity or other engine to load all the .so libraries 
-    std::thread thread([=](){
-        std::this_thread::sleep_for(std::chrono::seconds(delaySeconds));
-        loliHook(minRecSize, hookLibraries.c_str());
-    });
+    __android_log_print(ANDROID_LOG_INFO, "Loli", "minRecSize:: %i, hookLibs: %s", minRecSize, hookLibraries.c_str());
+    std::unordered_set<std::string> tokens;
+    std::string token;
+    std::istringstream namess(hookLibraries);
+    while (std::getline(namess, token, ',')) 
+        tokens.insert(token);
+    loliHook(minRecSize, tokens);
+    std::thread thread([](const std::unordered_set<std::string>& libs){
+        char                                   line[512];
+        FILE                                  *fp;
+        uintptr_t                              base_addr;
+        char                                   perm[5];
+        unsigned long                          offset;
+        int                                    pathname_pos;
+        char                                  *pathname;
+        size_t                                 pathname_len;
+        std::unordered_set<std::string>        loadedLibs;
+        std::unordered_set<std::string>        desiredLibs(libs);
+        while (true) {
+            std::this_thread::sleep_for(std::chrono::seconds(2));
+            if(NULL == (fp = fopen("/proc/self/maps", "r"))) {
+                continue;
+            }
+            while(fgets(line, sizeof(line), fp)) { // code from xhook
+                if(sscanf(line, "%" PRIxPTR"-%*lx %4s %lx %*x:%*x %*d%n", &base_addr, perm, &offset, &pathname_pos) != 3) continue;
+                // check permission & offset
+                if(perm[0] != 'r') continue;
+                if(perm[3] != 'p') continue; // do not touch the shared memory
+                if(0 != offset) continue;
+                // get pathname
+                while(isspace(line[pathname_pos]) && pathname_pos < (int)(sizeof(line) - 1))
+                    pathname_pos += 1;
+                if(pathname_pos >= (int)(sizeof(line) - 1)) continue;
+                pathname = line + pathname_pos;
+                pathname_len = strlen(pathname);
+                if(0 == pathname_len) continue;
+                if(pathname[pathname_len - 1] == '\n') {
+                    pathname[pathname_len - 1] = '\0';
+                    pathname_len -= 1;
+                }
+                if(0 == pathname_len) continue;
+                if('[' == pathname[0]) continue;
+                // check path
+                auto pathnameStr = std::string(pathname);
+                if (loadedLibs.find(pathnameStr) == loadedLibs.end()) {
+                    loadedLibs.insert(pathnameStr);
+                    for (auto& token : desiredLibs) {
+                        if (pathnameStr.find(token) != std::string::npos) {
+                            __android_log_print(ANDROID_LOG_INFO, "Loli", "%s is loaded, hooking ...", token.c_str());
+                            loliHookInternal(desiredLibs);
+                        }
+                    }
+                }
+            }
+            fclose(fp);
+        }
+    }, tokens);
     thread.detach();
     return JNI_VERSION_1_6;
 }

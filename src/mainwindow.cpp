@@ -656,7 +656,7 @@ bool MainWindow::CreateIfNoConfigFile() {
         file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
         if (file.open(QIODevice::ReadWrite | QIODevice::Truncate | QIODevice::Text)) {
             QTextStream stream(&file);
-            stream << "5\n256\nlibunity,libil2cpp,";
+            stream << "256\nlibunity,libil2cpp";
             stream.flush();
             return true;
         } else {
@@ -1196,8 +1196,8 @@ void MainWindow::on_launchPushButton_clicked() {
     ui->memSizeComboBox->setCurrentIndex(0);
     ui->allocComboBox->setCurrentIndex(0);
     ui->libraryComboBox->setCurrentIndex(0);
-    for (int i = 1; i < ui->libraryComboBox->count(); i++)
-        ui->libraryComboBox->removeItem(i);
+    while (ui->libraryComboBox->count() > 1)
+        ui->libraryComboBox->removeItem(ui->libraryComboBox->count() - 1);
     ui->sdkPushButton->setEnabled(true);
     ui->appNameLineEdit->setEnabled(false);
     ui->launchPushButton->setText("Stop Capture");

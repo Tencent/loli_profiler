@@ -39,14 +39,6 @@ protected String updateUnityCommandLineArguments(String cmdLine) {
 }
 ```
 
-推荐设置：
-
-```
-5
-256
-libunity,libil2cpp,
-```
-
 ### UE4
 
 ```c++
@@ -59,20 +51,23 @@ FMalloc* FAndroidPlatformMemory::BaseAllocator() {
 }
 ```
 
-推荐设置：
-
-```
-2
-256
-libue4,
-```
-
 ## 计划
 
 **短期计划**
 
-* 尝试支持 [Inline hook :no_entry_sign:](https://git.code.oa.com/xinhou/loli_profiler/issues/12) 
+* 交互、性能优化
+* 实现更标准的[内存碎片展示功能](https://git.code.oa.com/xinhou/loli_profiler/issues/8)
 * 计划中 ... 
+
+## 技术选择
+
+我通过JDWP（ Java Debug Wire Protocol）技术进行对目标程序的动态库注入
+
+在动态库的 JNI_OnLoad 中对 Profile 程序进行初始化（开启 TCP Server，开启检测线程等）
+
+我选择 PLT Hook 技术，因为其有成熟稳定的[产品级实现](https://github.com/iqiyi/xHook)，且其不用考虑函数重入的问题，也没有在 GCC 编译器下出现的 Unwind 库 ABI 不兼容导致的[崩溃问题](https://git.code.oa.com/xinhou/loli_profiler/issues/12)。唯一的问题是目标库必须已加载到程序后，才可以被 PLT Hook 上
+
+最终我通过开线程定时读取 [proc/self/maps](https://stackoverflow.com/questions/1401359/understanding-linux-proc-id-maps) 数据来判断目标库是否已加载到程序中，然后再去重新做 Hook 以在目标库加载入程序后及时 Hook 到其内存函数的目的
 
 ## 编译
 
@@ -91,4 +86,5 @@ libue4,
 * 常见问题 https://git.code.oa.com/xinhou/loli_profiler/wikis/faq
 * KM原理介绍文章 http://km.oa.com/articles/show/408991
 * xHook https://github.com/iqiyi/xHook
+* JDWP库 https://koz.io/library-injection-for-debuggable-android-apps/
 * 图标 https://www.flaticon.com/authors/smashicons

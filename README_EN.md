@@ -53,7 +53,8 @@ FMalloc* FAndroidPlatformMemory::BaseAllocator() {
 
 **Future plans**
 
-* try support [Inline hook :no_entry_sign:](https://git.code.oa.com/xinhou/loli_profiler/issues/12)
+* better user experience and improve performance
+* implement better memory fragmentation viewer 
 * and more ... 
 
 ## Building
@@ -68,9 +69,10 @@ FMalloc* FAndroidPlatformMemory::BaseAllocator() {
 
 ## Links
 
-* FAQ https://git.code.oa.com/xinhou/loli_profiler/wikis/faq
-* xHook https://github.com/iqiyi/xHook
-* KM Intro http://km.oa.com/articles/show/408991
-* KM Step by step Manual http://km.oa.com/articles/show/421944
-* App Icon https://www.flaticon.com/authors/smashicons
 * Prebuild Binaries https://git.code.oa.com/xinhou/loli_profiler/wikis/home
+* FAQ in Chinese https://git.code.oa.com/xinhou/loli_profiler/wikis/faq
+* Manual in Chinese https://git.code.oa.com/xinhou/loli_profiler/wikis/tutorial
+* KM Intro http://km.oa.com/articles/show/408991
+* xHook https://github.com/iqiyi/xHook
+* JDWP Library https://koz.io/library-injection-for-debuggable-android-apps/
+* App Icon https://www.flaticon.com/authors/smashicons

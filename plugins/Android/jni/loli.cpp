@@ -48,11 +48,10 @@ int serverStart(int port);
 void serverShutdown();
 }
 
-std::chrono::system_clock::time_point hookTime_;
+std::chrono::system_clock::time_point startTime_;
 std::mutex cacheMutex_;
 std::vector<std::string> cache_;
 int minRecSize_ = 0;
-bool hooked_ = false;
 
 enum loliFlags {
     FREE_ = 0, 
@@ -68,7 +67,7 @@ void *loliMalloc(size_t size) {
     const size_t max = 30;
     void* buffer[max];
     std::ostringstream oss;
-    auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - hookTime_).count();
+    auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime_).count();
     auto mem = malloc(size);
     oss << MALLOC_ << '\\'<< time << ',' << size << ',' << mem << '\\';
     loli::dump(oss, buffer, loli::capture(buffer, max));
@@ -83,7 +82,7 @@ void loliFree(void* ptr) {
     if (ptr == nullptr) 
         return;
     std::ostringstream oss;
-    auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - hookTime_).count();
+    auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime_).count();
     oss << FREE_ << '\\'<< time << '\\' << ptr;
     {
         std::lock_guard<std::mutex> lock(cacheMutex_);
@@ -98,7 +97,7 @@ void *loliCalloc(int n, int size) {
     const size_t max = 30;
     void* buffer[max];
     std::ostringstream oss;
-    auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - hookTime_).count();
+    auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime_).count();
     auto mem = calloc(n, size);
     oss << CALLOC_ << '\\'<< time << ',' << n * size << ',' << mem << '\\';
     loli::dump(oss, buffer, loli::capture(buffer, max));
@@ -115,7 +114,7 @@ void *loliMemalign(size_t alignment, size_t size) {
     const size_t max = 30;
     void* buffer[max];
     std::ostringstream oss;
-    auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - hookTime_).count();
+    auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime_).count();
     auto mem = memalign(alignment, size);
     oss << MEMALIGN_ << '\\'<< time << ',' << size << ',' << mem << '\\';
     loli::dump(oss, buffer, loli::capture(buffer, max));
@@ -132,7 +131,7 @@ void *loliRealloc(void *ptr, size_t new_size) {
     const size_t max = 30;
     void* buffer[max];
     std::ostringstream oss;
-    auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - hookTime_).count();
+    auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime_).count();
     auto mem = realloc(ptr, new_size);
     oss << REALLOC_ << '\\'<< time << ',' << new_size << ',' << mem << ',' << (ptr == mem ? 1 : 0) << '\\';
     loli::dump(oss, buffer, loli::capture(buffer, max));
@@ -143,13 +142,13 @@ void *loliRealloc(void *ptr, size_t new_size) {
     return mem;
 }
 
-int loliHookInternal(std::unordered_set<std::string>& tokens) {
+int loliHook(std::unordered_set<std::string>& tokens) {
     xhook_enable_debug(1);
     xhook_clear();
     int ecode = 0;
     for (auto& token : tokens) {
         auto soReg = ".*/" + token + "\\.so$";
-        __android_log_print(ANDROID_LOG_INFO, "Loli", "hooking %s", token.c_str());
+        // __android_log_print(ANDROID_LOG_INFO, "Loli", "hooking %s", token.c_str());
         ecode = xhook_register(soReg.c_str(), "malloc", (void*)loliMalloc, nullptr);
         if (ecode != 0) {
             __android_log_print(ANDROID_LOG_INFO, "Loli", "error hooking %s's malloc()", token.c_str());
@@ -180,16 +179,64 @@ int loliHookInternal(std::unordered_set<std::string>& tokens) {
     return ecode;
 }
 
-int loliHook(int minRecSize, std::unordered_set<std::string>& tokens) {
-    if (hooked_)
-        return 0;
-    minRecSize_ = minRecSize;
-    hookTime_ = std::chrono::system_clock::now();
-    int ecode = loliHookInternal(tokens);
-    auto svr = loli::serverStart(7100);
-    __android_log_print(ANDROID_LOG_INFO, "Loli", "loli start status %i", svr);
-    hooked_ = true;
-    return ecode;
+void loliProcMapsThread(const std::unordered_set<std::string>& libs) {
+    char                                   line[512]; // proc/self/maps parsing code by xhook
+    FILE                                  *fp;
+    uintptr_t                              baseAddr;
+    char                                   perm[5];
+    unsigned long                          offset;
+    int                                    pathNamePos;
+    char                                  *pathName;
+    size_t                                 pathNameLen;
+    std::unordered_set<std::string>        loaded;
+    std::unordered_set<std::string>        desired(libs);
+    int                                    loadedDesiredCount = static_cast<int>(desired.size());
+    while (true) {
+        if(NULL == (fp = fopen("/proc/self/maps", "r"))) {
+            continue;
+        }
+        bool shouldHook = false;
+        while(fgets(line, sizeof(line), fp)) {
+            if(sscanf(line, "%" PRIxPTR"-%*lx %4s %lx %*x:%*x %*d%n", &baseAddr, perm, &offset, &pathNamePos) != 3) continue;
+            // check permission & offset
+            if(perm[0] != 'r') continue;
+            if(perm[3] != 'p') continue; // do not touch the shared memory
+            if(0 != offset) continue;
+            // get pathname
+            while(isspace(line[pathNamePos]) && pathNamePos < (int)(sizeof(line) - 1))
+                pathNamePos += 1;
+            if(pathNamePos >= (int)(sizeof(line) - 1)) continue;
+            pathName = line + pathNamePos;
+            pathNameLen = strlen(pathName);
+            if(0 == pathNameLen) continue;
+            if(pathName[pathNameLen - 1] == '\n') {
+                pathName[pathNameLen - 1] = '\0';
+                pathNameLen -= 1;
+            }
+            if(0 == pathNameLen) continue;
+            if('[' == pathName[0]) continue;
+            // check path
+            auto pathnameStr = std::string(pathName);
+            if (loaded.find(pathnameStr) == loaded.end()) {
+                loaded.insert(pathnameStr);
+                for (auto& token : desired) {
+                    if (pathnameStr.find(token) != std::string::npos) {
+                        loadedDesiredCount--;
+                        shouldHook = true;
+                        __android_log_print(ANDROID_LOG_INFO, "Loli", "%s is loaded", token.c_str());
+                    }
+                }
+            }
+        }
+        fclose(fp);
+        if (shouldHook) 
+            loliHook(desired);
+        if (loadedDesiredCount <= 0) {
+            __android_log_print(ANDROID_LOG_INFO, "Loli", "All desired libraries are loaded.");
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    }
 }
 
 JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
@@ -202,7 +249,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
     std::string line;
     int count = 0;
     int minRecSize = 512;
-    std::string hookLibraries = "libil2cpp,libunity,";
+    std::string hookLibraries = "libil2cpp,libunity";
     while (std::getline(infile, line)) {
         if (count == 0) {
             std::istringstream iss(line);
@@ -215,63 +262,19 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
         count++;
     }
     __android_log_print(ANDROID_LOG_INFO, "Loli", "minRecSize:: %i, hookLibs: %s", minRecSize, hookLibraries.c_str());
+    // parse library tokens
     std::unordered_set<std::string> tokens;
-    std::string token;
     std::istringstream namess(hookLibraries);
-    while (std::getline(namess, token, ',')) 
-        tokens.insert(token);
-    loliHook(minRecSize, tokens);
-    std::thread thread([](const std::unordered_set<std::string>& libs){
-        char                                   line[512];
-        FILE                                  *fp;
-        uintptr_t                              base_addr;
-        char                                   perm[5];
-        unsigned long                          offset;
-        int                                    pathname_pos;
-        char                                  *pathname;
-        size_t                                 pathname_len;
-        std::unordered_set<std::string>        loadedLibs;
-        std::unordered_set<std::string>        desiredLibs(libs);
-        while (true) {
-            std::this_thread::sleep_for(std::chrono::seconds(2));
-            if(NULL == (fp = fopen("/proc/self/maps", "r"))) {
-                continue;
-            }
-            while(fgets(line, sizeof(line), fp)) { // code from xhook
-                if(sscanf(line, "%" PRIxPTR"-%*lx %4s %lx %*x:%*x %*d%n", &base_addr, perm, &offset, &pathname_pos) != 3) continue;
-                // check permission & offset
-                if(perm[0] != 'r') continue;
-                if(perm[3] != 'p') continue; // do not touch the shared memory
-                if(0 != offset) continue;
-                // get pathname
-                while(isspace(line[pathname_pos]) && pathname_pos < (int)(sizeof(line) - 1))
-                    pathname_pos += 1;
-                if(pathname_pos >= (int)(sizeof(line) - 1)) continue;
-                pathname = line + pathname_pos;
-                pathname_len = strlen(pathname);
-                if(0 == pathname_len) continue;
-                if(pathname[pathname_len - 1] == '\n') {
-                    pathname[pathname_len - 1] = '\0';
-                    pathname_len -= 1;
-                }
-                if(0 == pathname_len) continue;
-                if('[' == pathname[0]) continue;
-                // check path
-                auto pathnameStr = std::string(pathname);
-                if (loadedLibs.find(pathnameStr) == loadedLibs.end()) {
-                    loadedLibs.insert(pathnameStr);
-                    for (auto& token : desiredLibs) {
-                        if (pathnameStr.find(token) != std::string::npos) {
-                            __android_log_print(ANDROID_LOG_INFO, "Loli", "%s is loaded, hooking ...", token.c_str());
-                            loliHookInternal(desiredLibs);
-                        }
-                    }
-                }
-            }
-            fclose(fp);
-        }
-    }, tokens);
-    thread.detach();
+    while (std::getline(namess, line, ',')) {
+        tokens.insert(line);
+    }
+    // start tcp server
+    minRecSize_ = minRecSize;
+    startTime_ = std::chrono::system_clock::now();
+    auto svr = loli::serverStart(7100);
+    __android_log_print(ANDROID_LOG_INFO, "Loli", "loli start status %i", svr);
+    // start proc/self/maps check thread
+    std::thread(loliProcMapsThread, tokens).detach();
     return JNI_VERSION_1_6;
 }
 

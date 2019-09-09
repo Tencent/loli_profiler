@@ -20,7 +20,7 @@ public:
         return errorStr_;
     }
 
-    void StartApp(const QString& appName, QProgressDialog* dialog);
+    void StartApp(const QString& appName, const QString& arch, QProgressDialog* dialog);
 
 protected:
     void OnProcessFinihed() override;

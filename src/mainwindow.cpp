@@ -9,9 +9,11 @@
 #include <QDir>
 #include <QFileDialog>
 #include <QGraphicsPixmapItem>
+#include <QListWidget>
 #include <QMenu>
 #include <QMessageBox>
 #include <QSettings>
+#include <QSpinBox>
 #include <QStandardItemModel>
 #include <QTemporaryFile>
 #include <QTextStream>
@@ -164,6 +166,7 @@ const QString SETTINGS_LASTOPENDIR = "lastopen_dir";
 const QString SETTINGS_LASTSYMBOLDIR = "lastsymbol_dir";
 const QString SETTINGS_ADDR2LINEPATH = "addr2line_path";
 const QString SETTINGS_PYTHONPATH = "python_path";
+const QString SETTINGS_ARCH = "target_arch";
 
 void MainWindow::LoadSettings() {
     QSettings settings("MoreFun", "LoliProfiler");
@@ -186,6 +189,7 @@ void MainWindow::LoadSettings() {
     auto lastSymbolDir = settings.value(SETTINGS_LASTSYMBOLDIR).toString();
     if (QDir(lastSymbolDir).exists())
         lastSymbolDir_ = lastSymbolDir;
+    targetArch_ = settings.value(SETTINGS_ARCH, "armeabi-v7a").toString();
 }
 
 void MainWindow::SaveSettings() {
@@ -1218,7 +1222,7 @@ void MainWindow::on_launchPushButton_clicked() {
 
     startAppProcess_->SetPythonPath(pythonPath);
     startAppProcess_->SetExecutablePath(adbPath_);
-    startAppProcess_->StartApp(ui->appNameLineEdit->text(), progressDialog_);
+    startAppProcess_->StartApp(ui->appNameLineEdit->text(), targetArch_, progressDialog_);
 
     isCapturing_ = true;
     Print("Starting application ...");
@@ -1297,30 +1301,86 @@ void MainWindow::on_addr2LinePushButton_clicked() {
 
 void MainWindow::on_configPushButton_clicked() {
     QDialog editDialog(this, Qt::WindowTitleHint | Qt::WindowCloseButtonHint);
-    auto layout = new QHBoxLayout();
-    auto textEdit = new QTextEdit(nullptr);
+    auto layout = new QVBoxLayout();
     auto cfgPath = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).first();
     if (!CreateIfNoConfigFile())
         return;
+    // load and parse config
+    auto minCaptureSize = 128;
+    auto desiredLibs = QStringList() << "libunity" << "libil2cpp";
     QFile file(cfgPath + "/loli.conf");
     file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
-    if (!file.open(QIODevice::ReadOnly)) {
-        textEdit->setText("5\n256\nlibunity,libil2cpp,");
-    } else {
-        textEdit->setText(file.readAll());
+    if (file.open(QIODevice::ReadOnly)) {
+        QTextStream stream(file.readAll());
+        QString line;
+        int lineNum = 0;
+        while (stream.readLineInto(&line)) {
+            if (lineNum == 0) {
+                minCaptureSize = line.toInt();
+            } else {
+                desiredLibs = line.split(',', QString::SplitBehavior::SkipEmptyParts);
+                break;
+            }
+            lineNum++;
+        }
     }
     file.close();
-    layout->setMargin(0);
-    layout->addWidget(textEdit);
+    // show gui
+    layout->setMargin(2);
+    layout->setSpacing(2);
+    QSettings settings("MoreFun", "LoliProfiler");
+    auto archCombo = new QComboBox();
+    archCombo->setToolTip("Application architecture");
+    archCombo->addItems(QStringList() << "armeabi-v7a" << "arm64-v8a");
+    targetArch_ = settings.value(SETTINGS_ARCH).toString();
+    archCombo->setCurrentText(targetArch_);
+    layout->addWidget(archCombo);
+    auto minSizeSpinBox = new QSpinBox();
+    minSizeSpinBox->setToolTip("Minimum capture size (Byte)");
+    minSizeSpinBox->setSingleStep(32);
+    minSizeSpinBox->setRange(0, 1024);
+    minSizeSpinBox->setValue(minCaptureSize);
+    layout->addWidget(minSizeSpinBox);
+    auto libList = new QListWidget();
+    libList->addItems(desiredLibs);
+    for (int i = 0; i < libList->count(); i++) {
+        auto item = libList->item(i);
+        item->setFlags(item->flags() | Qt::ItemIsEditable);
+    }
+    libList->setMinimumHeight(200);
+    libList->setVerticalScrollBarPolicy(Qt::ScrollBarPolicy::ScrollBarAlwaysOn);
+    libList->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(libList, &QListWidget::customContextMenuRequested, [&](const QPoint &pos){
+        QMenu menu;
+        menu.addAction("New", [&]() {
+            libList->addItem("libfoo");
+            auto item = libList->item(libList->count() - 1);
+            item->setFlags(item->flags() | Qt::ItemIsEditable);
+        });
+        menu.addAction("Delete", [&]() {
+            for (int i = 0; i < libList->selectedItems().size(); ++i)
+                delete libList->takeItem(libList->currentRow());
+        });
+        menu.exec(libList->mapToGlobal(pos));
+    });
+    layout->addWidget(libList);
     editDialog.setLayout(layout);
     editDialog.setWindowModality(Qt::WindowModal);
     editDialog.setWindowTitle("Edit Configuration");
     editDialog.setMinimumSize(400, 300);
     editDialog.resize(400, 300);
     editDialog.exec();
+    // save config
+    targetArch_ = archCombo->currentText();
+    settings.setValue(SETTINGS_ARCH, targetArch_);
     if (file.open(QIODevice::ReadWrite | QIODevice::Truncate | QIODevice::Text)) {
         QTextStream stream(&file);
-        stream << textEdit->toPlainText();
+        stream << minSizeSpinBox->value() << endl;
+        auto numLibs = libList->count();
+        for (int i = 0; i < numLibs; i++) {
+            stream << libList->item(i)->text();
+            if (i != numLibs - 1) stream << ',';
+        }
         stream.flush();
     }
 }

@@ -110,6 +110,7 @@ private:
     QString appPid_;
     QString lastOpenDir_;
     QString lastSymbolDir_;
+    QString targetArch_;
     QTimer* mainTimer_;
     int time_ = 0;
 

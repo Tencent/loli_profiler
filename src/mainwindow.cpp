@@ -70,6 +70,7 @@ MainWindow::MainWindow(QWidget *parent) :
 
     // setup screenshot view
     ui->screenshotGraphicsView->setScene(new QGraphicsScene());
+    ui->screenshotGraphicsView->setCenter(QPointF());
     screenshotItem_ = new QGraphicsPixmapItem();
     ui->screenshotGraphicsView->scene()->addItem(screenshotItem_);
 
@@ -493,7 +494,7 @@ void MainWindow::ShowScreenshotAt(int index) {
     pixmap.loadFromData(screenshots_[index].second, "JPG");
     screenshotItem_->setPixmap(pixmap);
     screenshotItem_->setVisible(true);
-    screenshotItem_->setPos(0, 0);
+    screenshotItem_->setPos(-pixmap.width() / 2, -pixmap.height() / 2);
 }
 
 void MainWindow::HideToolTips() {

@@ -19,6 +19,12 @@ CustomGraphicsView::CustomGraphicsView(QWidget *parent)
     setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setTransformationAnchor(QGraphicsView::AnchorUnderMouse);
     setCacheMode(QGraphicsView::CacheBackground);
+    setResizeAnchor(QGraphicsView::AnchorViewCenter);
+}
+
+void CustomGraphicsView::setCenter(const QPointF &pos) {
+    sceneOrigin_.setX(pos.x());
+    sceneOrigin_.setY(pos.y());
 }
 
 void CustomGraphicsView::mousePressEvent(QMouseEvent *event) {
@@ -96,6 +102,8 @@ void CustomGraphicsView::drawBackground(QPainter *painter, const QRectF &r) {
 }
 
 void CustomGraphicsView::showEvent(QShowEvent *event) {
-    scene()->setSceneRect(QRectF(sceneOrigin_.x(), sceneOrigin_.y(), this->rect().width(), this->rect().height()));
+    auto width = this->rect().width();
+    auto height = this->rect().height();
+    scene()->setSceneRect(QRectF(sceneOrigin_.x() - width / 2, sceneOrigin_.y() - height / 2, width, height));
     QGraphicsView::showEvent(event);
 }

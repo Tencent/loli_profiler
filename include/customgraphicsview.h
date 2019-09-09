@@ -9,6 +9,8 @@ class CustomGraphicsView : public QGraphicsView
 public:
     CustomGraphicsView(QWidget *parent = nullptr);
 
+    void setCenter(const QPointF &pos);
+
 protected:
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;

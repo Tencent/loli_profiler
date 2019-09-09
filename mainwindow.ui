@@ -110,7 +110,7 @@
             </property>
            </layout>
           </widget>
-          <widget class="QGraphicsView" name="screenshotGraphicsView">
+          <widget class="CustomGraphicsView" name="screenshotGraphicsView">
            <property name="sizePolicy">
             <sizepolicy hsizetype="Minimum" vsizetype="Expanding">
              <horstretch>0</horstretch>
@@ -727,6 +727,13 @@
   </action>
  </widget>
  <layoutdefault spacing="6" margin="11"/>
+ <customwidgets>
+  <customwidget>
+   <class>CustomGraphicsView</class>
+   <extends>QGraphicsView</extends>
+   <header>customgraphicsview.h</header>
+  </customwidget>
+ </customwidgets>
  <resources>
   <include location="res/icon.qrc"/>
  </resources>

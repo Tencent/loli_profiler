@@ -57,6 +57,16 @@ FMalloc* FAndroidPlatformMemory::BaseAllocator() {
 * implement better memory fragmentation viewer 
 * and more ... 
 
+## Inside
+
+I use JDWP (Java Debug Wire Protocol) to inject dynamic library to target application.
+
+And i initialize the profile functionalities in dynamic library's JNI_OnLoad function (Start TCP Server, start monitor threads etc).
+
+I choose PLT Hook, not only because it has stable & production level implementation, but also for it's simplicity. And PLT Hook doesn't have the crash issue with gcc compiler when unwinding callstacks. The only problem is we can hook a library only when it's loaded.
+
+I managed to read proc/self/maps file repeatedly to detect if there's any target so library is loaded to the application, if so i'll hook the newly loaded library automatically. This way we can hook any dynamic library in an application no matter when it will be loaded.
+
 ## Building
 
 **Requirments**

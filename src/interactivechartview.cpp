@@ -11,6 +11,7 @@ InteractiveChartView::InteractiveChartView(QChart *chart, QWidget *parent)
     : QChartView(chart, parent) {
     toolTip_ = new ChartTooltipItem(chart);
     toolTip_->hide();
+    rubberBand_ = new QRubberBand(QRubberBand::Rectangle, this);
     setAttribute(Qt::WA_AcceptTouchEvents, true);
 }
 
@@ -62,8 +63,6 @@ void InteractiveChartView::mousePressEvent(QMouseEvent *event) {
         prevMouseX_ = event->x();
         if (usingTouch_) {
             auto origin = event->pos();
-            if (!rubberBand_)
-                rubberBand_ = new QRubberBand(QRubberBand::Rectangle, this);
             rubberBand_->setGeometry(QRect(origin, QSize()));
             rubberBand_->show();
         }

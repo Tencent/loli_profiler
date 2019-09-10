@@ -121,10 +121,6 @@ MainWindow::MainWindow(QWidget *parent) :
     scrollArea_->widget()->layout()->setSpacing(0);
     scrollArea_->widget()->layout()->addWidget(memInfoChartView_);
     scrollArea_->widget()->setFixedSize(100, 250);
-    connect(scrollArea_, &FixedScrollArea::ScaleTriggered, [this](int delta) {
-        ui->chartScaleHSlider->setValue(
-                    ui->chartScaleHSlider->value() + (delta > 0 ? 1 : -1) * ui->chartScaleHSlider->singleStep());
-    });
 
     ui->chartWidget->layout()->setContentsMargins(0, 0, 0, 0);
     ui->chartWidget->layout()->setSpacing(0);

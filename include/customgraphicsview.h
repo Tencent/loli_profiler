@@ -4,6 +4,7 @@
 #include <QGraphicsView>
 
 class QMouseEvent;
+class QGestureEvent;
 class CustomGraphicsView : public QGraphicsView
 {
 public:
@@ -12,6 +13,8 @@ public:
     void setCenter(const QPointF &pos);
 
 protected:
+    bool event(QEvent* event) override;
+    bool gestureEvent(QGestureEvent *event);
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
     void wheelEvent(QWheelEvent *event) override;
@@ -20,8 +23,9 @@ protected:
 
 private:
     QPointF clickPos_ = {};
-    QPointF sceneOrigin_ = {};
+//    QPointF sceneOrigin_ = {};
     QPoint mousePressPos_ = {};
+    bool usingTouch_ = false;
 };
 
 #endif // CUSTOMGRAPHICSVIEW_H

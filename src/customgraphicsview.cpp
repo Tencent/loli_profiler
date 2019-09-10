@@ -1,5 +1,6 @@
 #include "customgraphicsview.h"
 
+#include <QGestureEvent>
 #include <QMouseEvent>
 #include <QMenu>
 #include <QTreeWidget>
@@ -20,11 +21,44 @@ CustomGraphicsView::CustomGraphicsView(QWidget *parent)
     setTransformationAnchor(QGraphicsView::AnchorUnderMouse);
     setCacheMode(QGraphicsView::CacheBackground);
     setResizeAnchor(QGraphicsView::AnchorViewCenter);
+    setAttribute(Qt::WA_AcceptTouchEvents, true);
+    grabGesture(Qt::PinchGesture);
 }
 
 void CustomGraphicsView::setCenter(const QPointF &pos) {
-    sceneOrigin_.setX(pos.x());
-    sceneOrigin_.setY(pos.y());
+    auto newRect = sceneRect();
+    newRect.setX(pos.x());
+    newRect.setY(pos.y());
+    setSceneRect(newRect);
+}
+
+bool CustomGraphicsView::event(QEvent* event) {
+    switch (event->type()) {
+    case QEvent::TouchBegin:
+    case QEvent::TouchUpdate:
+        usingTouch_ = true;
+        break;
+    case QEvent::Wheel:
+        if (static_cast<QWheelEvent *>(event)->source() == Qt::MouseEventNotSynthesized)
+            usingTouch_ = false;
+        break;
+    case QEvent::Gesture:
+        return gestureEvent(static_cast<QGestureEvent *>(event));
+    default:
+        break;
+    }
+    return QGraphicsView::event(event);
+}
+
+bool CustomGraphicsView::gestureEvent(QGestureEvent *event) {
+    if (QGesture *pinch = event->gesture(Qt::PinchGesture)) {
+        auto pinchGes = static_cast<QPinchGesture *>(pinch);
+        auto factor = pinchGes->scaleFactor();
+        if (transform().m11() > 2.0 && factor > 1.0)
+            return false;
+        scale(factor, factor);
+    }
+    return true;
 }
 
 void CustomGraphicsView::mousePressEvent(QMouseEvent *event) {
@@ -42,31 +76,36 @@ void CustomGraphicsView::mouseMoveEvent(QMouseEvent *event) {
         if ((event->modifiers() & Qt::ShiftModifier) == 0) {
             QPointF difference = clickPos_ - mapToScene(event->pos());
             setSceneRect(sceneRect().translated(difference.x(), difference.y()));
-            sceneOrigin_.setX(sceneRect().x());
-            sceneOrigin_.setY(sceneRect().y());
         }
     }
     QGraphicsView::mouseMoveEvent(event);
 }
 
 void CustomGraphicsView::wheelEvent(QWheelEvent *event) {
-    QPoint delta = event->angleDelta();
-    if (delta.y() == 0) {
-        event->ignore();
-        return;
-    }
-    double const d = delta.y() / std::abs(delta.y());
-    if (d > 0.0) {
-        double const step   = 1.2;
-        double const factor = std::pow(step, 1.0);
-//        QTransform t = transform();
-//        if (t.m11() > 2.0)
-//            return;
-        scale(factor, factor);
+    if (usingTouch_) {
+        auto delta = event->pixelDelta();
+        if (!delta.isNull()) {
+            setSceneRect(sceneRect().translated(-delta.x(), -delta.y()));
+        }
     } else {
-        double const step   = 1.2;
-        double const factor = std::pow(step, -1.0);
-        scale(factor, factor);
+        QPoint delta = event->angleDelta();
+        if (delta.y() == 0) {
+            event->ignore();
+            return;
+        }
+        double const d = delta.y() / std::abs(delta.y());
+        if (d > 0.0) {
+            double const step   = 1.2;
+            double const factor = std::pow(step, 1.0);
+            QTransform t = transform();
+            if (t.m11() > 2.0)
+                return;
+            scale(factor, factor);
+        } else {
+            double const step   = 1.2;
+            double const factor = std::pow(step, -1.0);
+            scale(factor, factor);
+        }
     }
     QGraphicsView::wheelEvent(event);
 }
@@ -102,8 +141,9 @@ void CustomGraphicsView::drawBackground(QPainter *painter, const QRectF &r) {
 }
 
 void CustomGraphicsView::showEvent(QShowEvent *event) {
-    auto width = this->rect().width();
-    auto height = this->rect().height();
-    scene()->setSceneRect(QRectF(sceneOrigin_.x() - width / 2, sceneOrigin_.y() - height / 2, width, height));
+    auto curRect = rect();
+    auto width = curRect.width();
+    auto height = curRect.height();
+    scene()->setSceneRect(QRectF(curRect.x() - width / 2, curRect.y() - height / 2, width, height));
     QGraphicsView::showEvent(event);
 }

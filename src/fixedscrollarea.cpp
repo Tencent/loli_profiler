@@ -1,5 +1,5 @@
 #include "fixedscrollarea.h"
-#include <QWheelEvent>
+//#include <QWheelEvent>
 #include <QScrollBar>
 
 void FixedScrollArea::resizeEvent(QResizeEvent *event) {
@@ -9,10 +9,10 @@ void FixedScrollArea::resizeEvent(QResizeEvent *event) {
     QScrollArea::resizeEvent(event);
 }
 
-void FixedScrollArea::wheelEvent(QWheelEvent *event) {
-    if (event->modifiers() & Qt::ShiftModifier) {
-        emit ScaleTriggered(event->delta());
-        return;
-    }
-    QScrollArea::wheelEvent(event);
-}
+//void FixedScrollArea::wheelEvent(QWheelEvent *event) {
+//    if (event->modifiers() & Qt::ShiftModifier) {
+//        emit ScaleTriggered(event->delta());
+//        return;
+//    }
+//    QScrollArea::wheelEvent(event);
+//}

@@ -2,6 +2,7 @@
 #include "charttooltipitem.h"
 #include <QValueAxis>
 #include <QStringBuilder>
+#include <QRubberBand>
 #include <QDebug>
 
 using namespace QtCharts;
@@ -10,6 +11,7 @@ InteractiveChartView::InteractiveChartView(QChart *chart, QWidget *parent)
     : QChartView(chart, parent) {
     toolTip_ = new ChartTooltipItem(chart);
     toolTip_->hide();
+    setAttribute(Qt::WA_AcceptTouchEvents, true);
 }
 
 void InteractiveChartView::HideToolTip() {
@@ -35,10 +37,36 @@ void InteractiveChartView::SetRangeScale(int scale) {
     hAxis->setRange(rangeMin_, rangeMax_);
 }
 
+bool InteractiveChartView::event(QEvent* event) {
+    switch (event->type()) {
+    case QEvent::TouchBegin:
+    case QEvent::TouchUpdate:
+        usingTouch_ = true;
+        break;
+    case QEvent::TouchEnd:
+        usingTouch_ = false;
+        break;
+    case QEvent::Wheel:
+        if (static_cast<QWheelEvent *>(event)->source() == Qt::MouseEventNotSynthesized)
+            usingTouch_ = false;
+        break;
+    default:
+        break;
+    }
+    return QChartView::event(event);
+}
+
 void InteractiveChartView::mousePressEvent(QMouseEvent *event) {
     if (event->button() == Qt::MouseButton::LeftButton) {
         mousePressed_ = true;
         prevMouseX_ = event->x();
+        if (usingTouch_) {
+            auto origin = event->pos();
+            if (!rubberBand_)
+                rubberBand_ = new QRubberBand(QRubberBand::Rectangle, this);
+            rubberBand_->setGeometry(QRect(origin, QSize()));
+            rubberBand_->show();
+        }
     }
     else {
         mousePressed_ = false;
@@ -47,56 +75,71 @@ void InteractiveChartView::mousePressEvent(QMouseEvent *event) {
 }
 
 void InteractiveChartView::mouseMoveEvent(QMouseEvent *event) {
-    auto axisX = static_cast<QValueAxis*>(chart()->axes(Qt::Horizontal)[0]);
-    auto axisY = static_cast<QValueAxis*>(chart()->axes(Qt::Vertical)[0]);
-    auto maxX = axisX->max(), minX = axisX->min();
-    auto maxY = axisY->max(), minY = axisY->min();
-    auto valPos = chart()->mapToValue(event->pos());
-    auto valX = valPos.x();
-    auto valY = valPos.y();
-    auto showTooltip = false;
-
-    if (valX <= maxX && valX >= minX && valY <= maxY && valY >= minY) {
-        const auto& series = chart()->series();
-        QString str;
-        for (auto& serie : series) {
-            if (ignoreSeries_.contains(serie))
-                continue;
-            auto xySeries = static_cast<QXYSeries*>(serie);
-            auto xySeriesCount = xySeries->count();
-            if (xySeriesCount > 0) {
-                auto xySeriesMinX = xySeries->at(0).x();
-                auto xySeriesMaxX = xySeries->at(xySeriesCount - 1).x();
-                if (valX >= xySeriesMinX && valX < xySeriesMaxX) {
-                    showTooltip = true;
-                    str.append(QString("%1: %2\n").arg(serie->name()).arg(GetSeriesYFromX(xySeries, valX)));
+    if (mousePressed_) {
+        if (usingTouch_) {
+            rubberBand_->setGeometry(QRect(QPoint(prevMouseX_, 0), QPoint(event->pos().x(), height())).normalized());
+        } else {
+            auto delta = prevMouseX_ - event->x();
+            prevMouseX_ = event->x();
+            SyncScroll(nullptr, prevMouseX_, delta); // execute
+            OnSyncScroll(this, prevMouseX_, delta); // broadcast
+        }
+    } else {
+        auto axisX = static_cast<QValueAxis*>(chart()->axes(Qt::Horizontal)[0]);
+        auto axisY = static_cast<QValueAxis*>(chart()->axes(Qt::Vertical)[0]);
+        auto maxX = axisX->max(), minX = axisX->min();
+        auto maxY = axisY->max(), minY = axisY->min();
+        auto valPos = chart()->mapToValue(event->pos());
+        auto valX = valPos.x();
+        auto valY = valPos.y();
+        auto showTooltip = false;
+        if (valX <= maxX && valX >= minX && valY <= maxY && valY >= minY) {
+            const auto& series = chart()->series();
+            QString str;
+            for (auto& serie : series) {
+                if (ignoreSeries_.contains(serie))
+                    continue;
+                auto xySeries = static_cast<QXYSeries*>(serie);
+                auto xySeriesCount = xySeries->count();
+                if (xySeriesCount > 0) {
+                    auto xySeriesMinX = xySeries->at(0).x();
+                    auto xySeriesMaxX = xySeries->at(xySeriesCount - 1).x();
+                    if (valX >= xySeriesMinX && valX < xySeriesMaxX) {
+                        showTooltip = true;
+                        str.append(QString("%1: %2\n").arg(serie->name()).arg(GetSeriesYFromX(xySeries, valX)));
+                    }
                 }
             }
-        }
-        if (showTooltip) {
-            OnSelectionChange(valPos);
-            toolTip_->setText(str);
-            valPos.setY(minY + (maxY - minY) / 2);
-            toolTip_->setAnchor(valPos);
-            toolTip_->setZValue(11);
-            toolTip_->updateGeometry();
-            toolTip_->show();
+            if (showTooltip) {
+                OnSelectionChange(valPos);
+                toolTip_->setText(str);
+                valPos.setY(minY + (maxY - minY) / 2);
+                toolTip_->setAnchor(valPos);
+                toolTip_->setZValue(11);
+                toolTip_->updateGeometry();
+                toolTip_->show();
+            }
         }
     }
-
-    if (mousePressed_) {
-        auto delta = prevMouseX_ - event->x();
-        prevMouseX_ = event->x();
-        SyncScroll(nullptr, prevMouseX_, delta); // execute
-        OnSyncScroll(this, prevMouseX_, delta); // broadcast
-    }
-
     QChartView::mouseMoveEvent(event);
 }
 
 void InteractiveChartView::mouseReleaseEvent(QMouseEvent *event) {
+    rubberBand_->hide();
     mousePressed_ = false;
     QChartView::mouseReleaseEvent(event);
+}
+
+void InteractiveChartView::wheelEvent(QWheelEvent *event) {
+    if (usingTouch_) {
+        auto delta = event->pixelDelta();
+        if (!delta.isNull()) {
+            prevMouseX_ = event->x();
+            SyncScroll(nullptr, prevMouseX_, delta.x()); // execute
+            OnSyncScroll(this, prevMouseX_, delta.x()); // broadcast
+        }
+    }
+    QChartView::wheelEvent(event);
 }
 
 // TODO: optimize by binary search ?

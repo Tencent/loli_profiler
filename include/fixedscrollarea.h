@@ -9,12 +9,12 @@ public:
     FixedScrollArea(QWidget* parent = nullptr)
         : QScrollArea(parent) {}
 
-signals:
-    void ScaleTriggered(int);
+//signals:
+//    void ScaleTriggered(int);
 
 protected:
     void resizeEvent(QResizeEvent *event) override;
-    void wheelEvent(QWheelEvent *event) override;
+//    void wheelEvent(QWheelEvent *event) override;
 };
 
 #endif // FIXEDSCROLLAREA_H

@@ -25,16 +25,20 @@ signals:
     void OnSelectionChange(const QPointF& pos);
 
 protected:
+    bool event(QEvent* event) override;
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
+    void wheelEvent(QWheelEvent *event) override;
 
     double GetSeriesYFromX(QtCharts::QXYSeries *series, double x) const;
 
 protected:
+    QRubberBand* rubberBand_ = nullptr;
     QVector<QtCharts::QAbstractSeries*> ignoreSeries_;
     ChartTooltipItem *toolTip_ = nullptr;
     bool mousePressed_ = false;
+    bool usingTouch_ = false;
     int prevMouseX_ = 0;
     double CurPos_ = 0.0;
     int rangeMin_ = 0;

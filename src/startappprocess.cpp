@@ -4,6 +4,7 @@
 #include <QRegularExpression>
 #include <QProgressDialog>
 #include <QStandardPaths>
+#include <QThread>
 #include <QDebug>
 
 StartAppProcess::StartAppProcess(QObject* parent)
@@ -91,6 +92,7 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, QPro
     }
     unsigned int pid = 0;
     { // adb jdwp
+        QThread::sleep(1);
         dialog->setLabelText("Gettting jdwp id.");
         arguments.clear();
         arguments << "jdwp";

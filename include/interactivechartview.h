@@ -23,6 +23,8 @@ public:
 signals:
     void OnSyncScroll(QtCharts::QChartView* sender, int prevMouseX, int delta);
     void OnSelectionChange(const QPointF& pos);
+    void OnRubberBandSelected(double from, double to);
+    void OnRubberBandHide();
 
 protected:
     bool event(QEvent* event) override;
@@ -39,6 +41,7 @@ protected:
     ChartTooltipItem *toolTip_ = nullptr;
     bool mousePressed_ = false;
     bool usingTouch_ = false;
+    bool shiftPressed_ = false;
     int prevMouseX_ = 0;
     double CurPos_ = 0.0;
     int rangeMin_ = 0;

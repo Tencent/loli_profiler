@@ -23,12 +23,10 @@ void InteractiveChartView::SyncScroll(QtCharts::QChartView* sender, int prevMous
     if (this == sender)
         return;
     prevMouseX_ = prevMouseX;
-    double fdelta = static_cast<double>(delta * rangeScale_) / 100;
+    auto fdelta = static_cast<double>(delta * rangeScale_) / 100;
     CurPos_ = qMax(CurPos_ + fdelta, 0.0);
     rangeMin_ = qRound(CurPos_);
     SetRangeScale(rangeScale_);
-    if (delta != 0)
-        HideToolTip();
 }
 
 void InteractiveChartView::SetRangeScale(int scale) {
@@ -36,6 +34,9 @@ void InteractiveChartView::SetRangeScale(int scale) {
     rangeScale_ = scale;
     auto hAxis = chart()->axes(Qt::Horizontal)[0];
     hAxis->setRange(rangeMin_, rangeMax_);
+    HideToolTip();
+    rubberBand_->hide();
+    emit OnRubberBandHide();
 }
 
 bool InteractiveChartView::event(QEvent* event) {
@@ -60,23 +61,30 @@ bool InteractiveChartView::event(QEvent* event) {
 void InteractiveChartView::mousePressEvent(QMouseEvent *event) {
     if (event->button() == Qt::MouseButton::LeftButton) {
         mousePressed_ = true;
+        shiftPressed_ = event->modifiers().testFlag(Qt::ShiftModifier);
         prevMouseX_ = event->x();
-        if (usingTouch_) {
+        rubberBand_->hide();
+        emit OnRubberBandHide();
+        if (usingTouch_ || shiftPressed_) {
             auto origin = event->pos();
             rubberBand_->setGeometry(QRect(origin, QSize()));
-            rubberBand_->show();
         }
     }
     else {
         mousePressed_ = false;
+        shiftPressed_ = false;
     }
     QChartView::mousePressEvent(event);
 }
 
 void InteractiveChartView::mouseMoveEvent(QMouseEvent *event) {
     if (mousePressed_) {
-        if (usingTouch_) {
+        if (usingTouch_ || shiftPressed_) {
             rubberBand_->setGeometry(QRect(QPoint(prevMouseX_, 0), QPoint(event->pos().x(), height())).normalized());
+            if (!rubberBand_->isVisible()) {
+                HideToolTip();
+                rubberBand_->show();
+            }
         } else {
             auto delta = prevMouseX_ - event->x();
             prevMouseX_ = event->x();
@@ -124,18 +132,28 @@ void InteractiveChartView::mouseMoveEvent(QMouseEvent *event) {
 }
 
 void InteractiveChartView::mouseReleaseEvent(QMouseEvent *event) {
-    rubberBand_->hide();
     mousePressed_ = false;
+    if ((usingTouch_ || shiftPressed_) && rubberBand_->isVisible()) {
+        auto selectRect = rubberBand_->geometry();
+        auto topRight = chart()->mapToValue(selectRect.topRight());
+        auto bottomLeft = chart()->mapToValue(selectRect.bottomLeft());
+        emit OnRubberBandSelected(bottomLeft.x(), topRight.x());
+    }
+    usingTouch_ = false;
+    shiftPressed_ = false;
     QChartView::mouseReleaseEvent(event);
 }
 
 void InteractiveChartView::wheelEvent(QWheelEvent *event) {
+    shiftPressed_ = false;
     if (usingTouch_) {
         auto delta = event->pixelDelta();
         if (!delta.isNull()) {
             prevMouseX_ = event->x();
             SyncScroll(nullptr, prevMouseX_, delta.x()); // execute
             OnSyncScroll(this, prevMouseX_, delta.x()); // broadcast
+            rubberBand_->hide();
+            emit OnRubberBandHide();
         }
     }
     QChartView::wheelEvent(event);

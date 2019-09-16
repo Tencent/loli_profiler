@@ -65,6 +65,8 @@ private slots:
 
     void OnTimeSelectionChange(const QPointF& pos);
     void OnSyncScroll(QtCharts::QChartView* sender, int prevMouseX, int delta);
+    void OnTimelineRubberBandSelected(double from, double to);
+    void OnTimelineRubberBandHide();
     void OnStackTableViewContextMenu(const QPoint & pos);
     void OnStackTableViewSelectionChanged(const QItemSelection &selected, const QItemSelection &deselected);
 
@@ -113,6 +115,8 @@ private:
     QString targetArch_;
     QTimer* mainTimer_;
     int time_ = 0;
+    double minTime_ = 0;
+    double maxTime_ = 0;
 
     // adb shell monkey -p packagename -c android.intent.category.LAUNCHER 1
     StartAppProcess *startAppProcess_;

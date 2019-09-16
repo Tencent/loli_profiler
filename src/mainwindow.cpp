@@ -27,6 +27,7 @@
 #include <algorithm>
 #include <cmath>
 #include <vector>
+#include <limits>
 
 #define APP_MAGIC 0xA4B3C2D1
 #define APP_VERSION 103
@@ -44,6 +45,8 @@ MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::MainWindow) {
     ui->setupUi(this);
+
+    maxTime_ = std::numeric_limits<double>::max();
 
     progressDialog_ = new QProgressDialog(this, Qt::WindowTitleHint | Qt::CustomizeWindowHint);
     progressDialog_->setWindowModality(Qt::WindowModal);
@@ -108,6 +111,8 @@ MainWindow::MainWindow(QWidget *parent) :
 
     connect(memInfoChartView_, &InteractiveChartView::OnSyncScroll, this, &MainWindow::OnSyncScroll);
     connect(memInfoChartView_, &InteractiveChartView::OnSelectionChange, this, &MainWindow::OnTimeSelectionChange);
+    connect(memInfoChartView_, &InteractiveChartView::OnRubberBandSelected, this, &MainWindow::OnTimelineRubberBandSelected);
+    connect(memInfoChartView_, &InteractiveChartView::OnRubberBandHide, this, &MainWindow::OnTimelineRubberBandHide);
 
     // steup chart scroll area
     scrollArea_ = new FixedScrollArea();
@@ -435,6 +440,7 @@ int MainWindow::LoadFromFile(QFile *file) {
         sMapsSections_.insert(name, section);
     }
     ShowSummary();
+    OnTimelineRubberBandHide();
     return static_cast<qint32>(IOErrorCode::NONE);
 }
 
@@ -553,6 +559,9 @@ void MainWindow::FilterStackTraceModel() {
     int recordCount = stacktraceModel_->rowCount();
     for (int i = 0; i < recordCount; i++) {
         const auto& record = stacktraceModel_->recordAt(i);
+        auto timeInSecond = record.time_ / 1000;
+        if (timeInSecond < minTime_ || timeInSecond > maxTime_)
+            continue;
         if (sizeFilter > 0) {
             auto size = record.size_;
             switch(sizeFilter) {
@@ -694,6 +703,20 @@ void MainWindow::OnTimeSelectionChange(const QPointF& pos) {
 
 void MainWindow::OnSyncScroll(QtCharts::QChartView* sender, int prevMouseX, int delta) {
     memInfoChartView_->SyncScroll(sender, prevMouseX, delta);
+}
+
+void MainWindow::OnTimelineRubberBandSelected(double from, double to) {
+    const auto eplison = 1e-6;
+    if (std::abs(minTime_ - from) > eplison || std::abs(maxTime_ - to) > eplison) {
+        minTime_ = from;
+        maxTime_ = to;
+        FilterStackTraceModel();
+        ShowSummary();
+    }
+}
+
+void MainWindow::OnTimelineRubberBandHide() {
+    OnTimelineRubberBandSelected(0.0, std::numeric_limits<double>::max());
 }
 
 void MainWindow::OnStackTableViewContextMenu(const QPoint & pos) {
@@ -1137,8 +1160,7 @@ void MainWindow::on_launchPushButton_clicked() {
         ConnectionFailed();
         for (auto& library : libraries_)
             ui->libraryComboBox->addItem(library);
-        FilterStackTraceModel();
-        ShowSummary();
+        OnTimelineRubberBandHide();
         progressDialog_->setValue(1);
         progressDialog_->setLabelText("Requesting smaps info from device.");
         QProcess process;

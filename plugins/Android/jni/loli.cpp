@@ -64,7 +64,7 @@ enum loliFlags {
 void *loliMalloc(size_t size) {
     if (size < static_cast<size_t>(minRecSize_))
         return malloc(size);
-    const size_t max = 30;
+    const size_t max = 60;
     void* buffer[max];
     std::ostringstream oss;
     auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime_).count();
@@ -94,7 +94,7 @@ void loliFree(void* ptr) {
 void *loliCalloc(int n, int size) {
     if (n * size < minRecSize_)
         return calloc(n, size);
-    const size_t max = 30;
+    const size_t max = 60;
     void* buffer[max];
     std::ostringstream oss;
     auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime_).count();
@@ -111,7 +111,7 @@ void *loliCalloc(int n, int size) {
 void *loliMemalign(size_t alignment, size_t size) {
     if (size < static_cast<size_t>(minRecSize_))
         return memalign(alignment, size);
-    const size_t max = 30;
+    const size_t max = 60;
     void* buffer[max];
     std::ostringstream oss;
     auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime_).count();
@@ -128,7 +128,7 @@ void *loliMemalign(size_t alignment, size_t size) {
 void *loliRealloc(void *ptr, size_t new_size) {
     if (new_size < static_cast<size_t>(minRecSize_))
         return realloc(ptr, new_size);
-    const size_t max = 30;
+    const size_t max = 60;
     void* buffer[max];
     std::ostringstream oss;
     auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime_).count();

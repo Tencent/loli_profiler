@@ -1566,7 +1566,7 @@ void MainWindow::on_selectAppToolButton_clicked() {
     for (auto& line : lines) {
         auto lineParts = line.split(':');
         if (lineParts.count() > 1) {
-            listWidget->addItem(lineParts[1]);
+            listWidget->addItem(lineParts[1].trimmed());
         }
     }
     listWidget->setCurrentItem(listWidget->item(0));

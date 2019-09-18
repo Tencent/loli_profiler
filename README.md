@@ -6,6 +6,8 @@
 
 ![](res/images/macos.png)
 
+![](res/images/macos_2.png)
+
 **注意：此程序仍处于初级研发阶段**
 
 ## 特性

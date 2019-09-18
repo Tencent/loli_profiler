@@ -4,6 +4,8 @@ Lightweight Opensource profiLing Instrument
 
 ![](res/images/macos.png)
 
+![](res/images/macos_2.png)
+
 **Please Note: this project is still in early stage**
 
 ## Features

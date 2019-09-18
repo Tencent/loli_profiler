@@ -18,6 +18,7 @@
 #include <QTemporaryFile>
 #include <QTextStream>
 #include <QTableWidget>
+#include <QTreeWidget>
 #include <QProgressDialog>
 #include <QScrollBar>
 #include <QGLWidget>
@@ -1130,6 +1131,99 @@ void MainWindow::on_actionVisualize_SMaps_triggered() {
     layout->addWidget(statusBar);
     layout->setMargin(0);
     fragDialog.setWindowTitle("Visualize proc/pid/smaps");
+    fragDialog.resize(900, 400);
+    fragDialog.setMinimumSize(900, 400);
+    fragDialog.exec();
+}
+
+void MainWindow::on_actionShow_Merged_Callstacks_triggered() {
+    auto model = filteredStacktraceModel_;
+    auto count = model->rowCount();
+    if (count == 0) {
+        count = stacktraceModel_->rowCount();
+        if (count == 0) {
+            QMessageBox::information(this, "Show Merged Callstakcs", "No callstack record, open or capture some records first!");
+            return;
+        } else {
+            model = stacktraceModel_;
+        }
+    }
+    QDialog fragDialog(this, Qt::WindowTitleHint | Qt::WindowCloseButtonHint);
+    auto layout = new QVBoxLayout(&fragDialog);
+    layout->setSpacing(2);
+    fragDialog.setLayout(layout);
+    // fill treeWidget with model
+    auto treeWidget = new QTreeWidget();
+    treeWidget->setHeaderLabels(QStringList() << "Function" << "Size");
+    // CustomTreeWidhgetItem
+    class CustomTreeWidgetItem : public QTreeWidgetItem {
+    public:
+        CustomTreeWidgetItem(QString funcName, unsigned int size, QTreeWidget* parent = nullptr)
+            : QTreeWidgetItem(parent), size_(size), funcName_(funcName) {
+            setData(0, Qt::DisplayRole, funcName_);
+            setData(1, Qt::DisplayRole, sizeToString(size_));
+        }
+        void setSize(unsigned int size) {
+            size_ = size;
+            setData(1, Qt::DisplayRole, sizeToString(size_));
+        }
+        unsigned int size() const { return size_; }
+        bool operator<(const QTreeWidgetItem &other) const {
+            auto casted = static_cast<const CustomTreeWidgetItem&>(other);
+            int column = treeWidget()->sortColumn();
+            if (column == 0) {
+                return funcName_ < casted.funcName_;
+            } else {
+                return size_ < casted.size_;
+            }
+        }
+    private:
+        unsigned int size_;
+        QString funcName_;
+    };
+    QHash<uint, CustomTreeWidgetItem*> itemMap;
+    QList<QTreeWidgetItem*> topLevelItems;
+    for (int i = 0; i < count; i++) {
+        const auto& record = model->recordAt(i);
+        const auto& callstacks = callStackMap_[record.uuid_];
+        CustomTreeWidgetItem* child = nullptr;
+        QStringList callstackNames;
+        for (int j = 0; j < callstacks.size(); j += 2) {
+            const auto& libName = callstacks[j];
+            const auto& funcAddr = callstacks[j + 1];
+            const auto& funcName = TryAddNewAddress(libName, funcAddr);
+            callstackNames << funcName;
+        }
+        for (auto it = callstackNames.begin(); it != callstackNames.end(); ++it) {
+            auto curHash = qHashRange(it, callstackNames.end());
+            auto itemIt = itemMap.find(curHash);
+            CustomTreeWidgetItem* item = nullptr;
+            if (itemIt != itemMap.end()) {
+                item = itemIt.value();
+                auto parent = item;
+                while (parent != nullptr) {
+                    parent->setSize(parent->size() + static_cast<unsigned int>(record.size_));
+                    parent = static_cast<CustomTreeWidgetItem*>(parent->parent());
+                }
+                if (child != nullptr)
+                    item->addChild(child);
+                break;
+            }
+            item = new CustomTreeWidgetItem(*it, static_cast<unsigned int>(record.size_));
+            itemMap.insert(curHash, item);
+            if (child != nullptr)
+                item->addChild(child);
+            child = item;
+        }
+        if (child != nullptr && child->parent() == nullptr)
+            topLevelItems.push_back(child);
+    }
+    treeWidget->addTopLevelItems(topLevelItems);
+    treeWidget->header()->resizeSections(QHeaderView::ResizeMode::ResizeToContents);
+    treeWidget->setSortingEnabled(true);
+    layout->addWidget(treeWidget);
+    layout->setMargin(0);
+    fragDialog.setWindowTitle("Show Merged Callstacks");
     fragDialog.resize(900, 400);
     fragDialog.setMinimumSize(900, 400);
     fragDialog.exec();

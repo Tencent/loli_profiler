@@ -86,6 +86,7 @@ private slots:
     void on_actionExit_triggered();
     void on_actionStat_SMaps_triggered();
     void on_actionVisualize_SMaps_triggered();
+    void on_actionShow_Merged_Callstacks_triggered();
     void on_actionAbout_triggered();
     void on_sdkPushButton_clicked();
     void on_launchPushButton_clicked();

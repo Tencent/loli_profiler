@@ -705,6 +705,7 @@
     </property>
     <addaction name="actionStat_SMaps"/>
     <addaction name="actionVisualize_SMaps"/>
+    <addaction name="actionShow_Merged_Callstacks"/>
    </widget>
    <addaction name="menuFile"/>
    <addaction name="menuTools"/>
@@ -748,6 +749,11 @@
   <action name="actionVisualize_SMaps">
    <property name="text">
     <string>Visualize proc/pid/smaps</string>
+   </property>
+  </action>
+  <action name="actionShow_Merged_Callstacks">
+   <property name="text">
+    <string>Show Merged Callstacks</string>
    </property>
   </action>
  </widget>

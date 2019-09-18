@@ -1404,6 +1404,124 @@ void MainWindow::on_configPushButton_clicked() {
     }
 }
 
+class ArrowLineEdit : public QLineEdit {
+public:
+    ArrowLineEdit(QListWidget* listView, QWidget *parent = nullptr) :
+        QLineEdit(parent), listView_(listView) { }
+
+    void keyPressEvent(QKeyEvent *event) override {
+        if (event->key() == Qt::Key_Up || event->key() == Qt::Key_Down) {
+            auto selectedItems = listView_->selectedItems();
+            QListWidgetItem* item = nullptr;
+            if (selectedItems.count() >= 0) {
+                auto currentRow = listView_->row(selectedItems[0]);
+                if (event->key() == Qt::Key_Down) {
+                    while (currentRow + 1 < listView_->count()) {
+                        currentRow++;
+                        auto curItem = listView_->item(currentRow);
+                        if (!curItem->isHidden()) {
+                            item = curItem;
+                            break;
+                        }
+                    }
+                } else {
+                    while (currentRow - 1 >= 0) {
+                        currentRow--;
+                        auto curItem = listView_->item(currentRow);
+                        if (!curItem->isHidden()) {
+                            item = curItem;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (item)
+                listView_->setCurrentItem(item);
+        } else {
+            QLineEdit::keyPressEvent(event);
+        }
+    }
+private:
+    QListWidget* listView_;
+};
+
+void MainWindow::on_selectAppToolButton_clicked() {
+    adbPath_ = ui->sdkPathLineEdit->text();
+    adbPath_ = adbPath_.size() == 0 ? "adb" : adbPath_ + "/platform-tools/adb";
+    QProcess process;
+    process.start(adbPath_, QStringList() << "shell" << "pm" << "list" << "packages");
+    if (!process.waitForStarted()) {
+        Print("error start adb shell pm list packages, make sure your device is connected!");
+        return;
+    }
+    if (!process.waitForFinished()) {
+        Print("error finishing adb shell pm list packages!");
+        return;
+    }
+    auto pkgStrs = QString(process.readAll());
+    auto lines = pkgStrs.split('\n', QString::SkipEmptyParts);
+    if (lines.count() == 0) {
+        return;
+    }
+    QDialog dialog(this, Qt::WindowTitleHint | Qt::WindowCloseButtonHint);
+    auto layout = new QVBoxLayout();
+    layout->setMargin(2);
+    layout->setSpacing(2);
+    auto listWidget = new QListWidget();
+    listWidget->setSelectionMode(QListWidget::SelectionMode::SingleSelection);
+    for (auto& line : lines) {
+        auto lineParts = line.split(':');
+        if (lineParts.count() > 1) {
+            listWidget->addItem(lineParts[1]);
+        }
+    }
+    listWidget->setCurrentItem(listWidget->item(0));
+    auto searchLineEdit = new ArrowLineEdit(listWidget);
+    // text filtering
+    connect(searchLineEdit, &QLineEdit::textChanged, [&](const QString &text) {
+        // Use regular expression to search fuzzily
+        // "Hello\n" -> ".*H.*e.*l.*l.*o.*\\.*n"
+        QString pattern;
+        for (auto i = 0; i < text.size(); i++) {
+            pattern += QRegularExpression::escape(text[i]);
+            if (i != text.size() - 1)
+                pattern += ".*";
+        }
+        QRegularExpression re(pattern, QRegularExpression::CaseInsensitiveOption);
+        auto first = true;
+        for (int i = 0; i < listWidget->count(); ++i) {
+            auto item = listWidget->item(i);
+            if (item->text().contains(re)) {
+                item->setHidden(false);
+                item->setSelected(first);
+                first = false;
+            } else {
+                item->setHidden(true);
+                item->setSelected(false);
+            }
+        }
+    });
+    connect(searchLineEdit, &QLineEdit::returnPressed, [&]() {
+        auto selected = listWidget->selectedItems();
+        if (selected.count() > 0)
+            ui->appNameLineEdit->setText(selected[0]->text());
+        dialog.close();
+    });
+    connect(listWidget, &QListWidget::itemClicked, [&](QListWidgetItem *item) {
+        ui->appNameLineEdit->setText(item->text());
+        dialog.close();
+    });
+    layout->addWidget(searchLineEdit);
+    layout->addWidget(listWidget);
+    searchLineEdit->setFocus();
+    dialog.setLayout(layout);
+    dialog.setWindowModality(Qt::WindowModal);
+    dialog.setWindowTitle("Selection Application");
+    dialog.setMinimumSize(400, 300);
+    dialog.resize(400, 300);
+    dialog.exec();
+}
+
 void MainWindow::on_memSizeComboBox_currentIndexChanged(int) {
     FilterStackTraceModel();
     ShowSummary();

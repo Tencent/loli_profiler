@@ -192,7 +192,7 @@
              <rect>
               <x>10</x>
               <y>160</y>
-              <width>151</width>
+              <width>111</width>
               <height>20</height>
              </rect>
             </property>
@@ -361,6 +361,31 @@
             </property>
             <property name="text">
              <string>Configure</string>
+            </property>
+           </widget>
+           <widget class="QToolButton" name="selectAppToolButton">
+            <property name="geometry">
+             <rect>
+              <x>130</x>
+              <y>160</y>
+              <width>31</width>
+              <height>19</height>
+             </rect>
+            </property>
+            <property name="toolTip">
+             <string>Select Target Application</string>
+            </property>
+            <property name="text">
+             <string>...</string>
+            </property>
+            <property name="popupMode">
+             <enum>QToolButton::DelayedPopup</enum>
+            </property>
+            <property name="autoRaise">
+             <bool>false</bool>
+            </property>
+            <property name="arrowType">
+             <enum>Qt::NoArrow</enum>
             </property>
            </widget>
           </widget>

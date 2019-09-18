@@ -94,6 +94,7 @@ private slots:
     void on_addr2LinePushButton_clicked();
     void on_pythonPushButton_clicked();
     void on_configPushButton_clicked();
+    void on_selectAppToolButton_clicked();
     void on_memSizeComboBox_currentIndexChanged(int index);
     void on_libraryComboBox_currentIndexChanged(int index);
     void on_allocComboBox_currentIndexChanged(int index);

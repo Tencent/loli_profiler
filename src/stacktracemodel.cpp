@@ -1,7 +1,9 @@
 #include "stacktracemodel.h"
 
-QString sizeToString(quint32 size) {
-    if (size >= 1024 * 1024) {
+QString sizeToString(quint64 size) {
+    if (size >= 1024 * 1024 * 1024) {
+        return QString::number(static_cast<double>(size) / 1024 / 1024 / 1024, 'f', 2) + " GB";
+    } else if (size >= 1024 * 1024) {
         return QString::number(static_cast<double>(size) / 1024 / 1024, 'f', 2) + " MB";
     } else if (size > 1024) {
         return QString::number(static_cast<double>(size) / 1024, 'f', 2) + " KB";
@@ -46,7 +48,7 @@ QVariant StackTraceModel::data(const QModelIndex &index, int role) const {
                 case 0:
                     return timeToString(record.time_);
                 case 1:
-                    return sizeToString(record.size_);
+                    return sizeToString(static_cast<quint64>(record.size_));
                 case 2:
                     return record.addr_;
                 case 3:

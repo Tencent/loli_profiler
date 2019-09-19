@@ -543,7 +543,7 @@ void MainWindow::ShowCallStack(const QModelIndex& index) {
 void MainWindow::ShowSummary() {
     auto model = ui->stackTableView->model();
     auto rowCount = model->rowCount();
-    quint32 size = 0;
+    quint64 size = 0;
     for (int i = 0; i < rowCount; i++) {
         size += model->data(model->index(i, 1), Qt::UserRole).toUInt();
     }

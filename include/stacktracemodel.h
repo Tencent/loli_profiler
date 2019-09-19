@@ -13,7 +13,7 @@ struct StackRecord {
     QString funcAddr_;
 };
 
-QString sizeToString(quint32 size);
+QString sizeToString(quint64 size);
 QString timeToString(int time);
 
 class StackTraceModel : public QAbstractTableModel {

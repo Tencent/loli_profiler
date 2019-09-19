@@ -1158,16 +1158,16 @@ void MainWindow::on_actionShow_Merged_Callstacks_triggered() {
     // CustomTreeWidhgetItem
     class CustomTreeWidgetItem : public QTreeWidgetItem {
     public:
-        CustomTreeWidgetItem(QString funcName, unsigned int size, QTreeWidget* parent = nullptr)
-            : QTreeWidgetItem(parent), size_(size), funcName_(funcName) {
+        CustomTreeWidgetItem(QString funcName, quint64 size, QTreeWidget* parent = nullptr)
+            : QTreeWidgetItem(parent), funcName_(funcName), size_(size) {
             setData(0, Qt::DisplayRole, funcName_);
             setData(1, Qt::DisplayRole, sizeToString(size_));
         }
-        void setSize(unsigned int size) {
+        void setSize(quint64 size) {
             size_ = size;
             setData(1, Qt::DisplayRole, sizeToString(size_));
         }
-        unsigned int size() const { return size_; }
+        quint64 size() const { return size_; }
         bool operator<(const QTreeWidgetItem &other) const {
             auto casted = static_cast<const CustomTreeWidgetItem&>(other);
             int column = treeWidget()->sortColumn();
@@ -1178,8 +1178,8 @@ void MainWindow::on_actionShow_Merged_Callstacks_triggered() {
             }
         }
     private:
-        unsigned int size_;
         QString funcName_;
+        quint64 size_;
     };
     QHash<uint, CustomTreeWidgetItem*> itemMap;
     QList<QTreeWidgetItem*> topLevelItems;
@@ -1202,14 +1202,14 @@ void MainWindow::on_actionShow_Merged_Callstacks_triggered() {
                 item = itemIt.value();
                 auto parent = item;
                 while (parent != nullptr) {
-                    parent->setSize(parent->size() + static_cast<unsigned int>(record.size_));
+                    parent->setSize(parent->size() + static_cast<quint64>(record.size_));
                     parent = static_cast<CustomTreeWidgetItem*>(parent->parent());
                 }
                 if (child != nullptr)
                     item->addChild(child);
                 break;
             }
-            item = new CustomTreeWidgetItem(*it, static_cast<unsigned int>(record.size_));
+            item = new CustomTreeWidgetItem(*it, static_cast<quint64>(record.size_));
             itemMap.insert(curHash, item);
             if (child != nullptr)
                 item->addChild(child);

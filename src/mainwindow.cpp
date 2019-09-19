@@ -941,36 +941,42 @@ void MainWindow::on_actionExit_triggered() {
 class MemoryTableWidgetItem : public QTableWidgetItem {
 public:
     MemoryTableWidgetItem(quint32 size) : QTableWidgetItem(), size_(size) { setText(sizeToString(size)); }
-    bool operator< (const QTableWidgetItem &other) const { return size_ < static_cast<const MemoryTableWidgetItem&>(other).size_; }
+    bool operator< (const QTableWidgetItem &other) const;
     quint32 size_ = 0;
 };
+
+bool MemoryTableWidgetItem::operator< (const QTableWidgetItem &other) const {
+    return size_ < static_cast<const MemoryTableWidgetItem&>(other).size_;
+}
 
 class MemoryTableWidget : public QTableWidget {
 public:
     MemoryTableWidget(int rows, int columns, QWidget* parent) : QTableWidget(rows, columns, parent) {}
-    void keyPressEvent(QKeyEvent *event) override {
-        if (event == QKeySequence::Copy) {
-            QString output;
-            QTextStream stream(&output);
-            stream << "Name, Virtual Memory, Rss, Pss, Private Clean, Private Dirty, Shared Clean, Shared Dirty" << endl;
-            auto ranges = selectedRanges();
-            for (auto& range : ranges) {
-                int top = range.topRow();
-                int bottom = range.bottomRow();
-                for (int row = top; row <= bottom; row++) {
-                    stream << item(row, 0)->text() << ", " << item(row, 1)->text() << ", " << item(row, 2)->text() << ", " <<
-                              item(row, 3)->text() << ", " << item(row, 4)->text() << ", " << item(row, 5)->text() << ", " <<
-                              item(row, 6)->text() << ", " << item(row, 7)->text() << endl;
-                }
-            }
-            stream.flush();
-            QApplication::clipboard()->setText(output);
-            event->accept();
-            return;
-        }
-        QTableWidget::keyPressEvent(event);
-    }
+    void keyPressEvent(QKeyEvent *event);
 };
+
+void MemoryTableWidget::keyPressEvent(QKeyEvent *event) {
+    if (event == QKeySequence::Copy) {
+        QString output;
+        QTextStream stream(&output);
+        stream << "Name, Virtual Memory, Rss, Pss, Private Clean, Private Dirty, Shared Clean, Shared Dirty" << endl;
+        auto ranges = selectedRanges();
+        for (auto& range : ranges) {
+            int top = range.topRow();
+            int bottom = range.bottomRow();
+            for (int row = top; row <= bottom; row++) {
+                stream << item(row, 0)->text() << ", " << item(row, 1)->text() << ", " << item(row, 2)->text() << ", " <<
+                          item(row, 3)->text() << ", " << item(row, 4)->text() << ", " << item(row, 5)->text() << ", " <<
+                          item(row, 6)->text() << ", " << item(row, 7)->text() << endl;
+            }
+        }
+        stream.flush();
+        QApplication::clipboard()->setText(output);
+        event->accept();
+        return;
+    }
+    QTableWidget::keyPressEvent(event);
+}
 
 void MainWindow::on_actionStat_SMaps_triggered() {
     if (sMapsSections_.size() == 0) {
@@ -1255,6 +1261,7 @@ void MainWindow::on_launchPushButton_clicked() {
         for (auto& library : libraries_)
             ui->libraryComboBox->addItem(library);
         OnTimelineRubberBandHide();
+        ShowSummary();
         progressDialog_->setValue(1);
         progressDialog_->setLabelText("Requesting smaps info from device.");
         QProcess process;
@@ -1502,42 +1509,43 @@ class ArrowLineEdit : public QLineEdit {
 public:
     ArrowLineEdit(QListWidget* listView, QWidget *parent = nullptr) :
         QLineEdit(parent), listView_(listView) { }
-
-    void keyPressEvent(QKeyEvent *event) override {
-        if (event->key() == Qt::Key_Up || event->key() == Qt::Key_Down) {
-            auto selectedItems = listView_->selectedItems();
-            QListWidgetItem* item = nullptr;
-            if (selectedItems.count() >= 0) {
-                auto currentRow = listView_->row(selectedItems[0]);
-                if (event->key() == Qt::Key_Down) {
-                    while (currentRow + 1 < listView_->count()) {
-                        currentRow++;
-                        auto curItem = listView_->item(currentRow);
-                        if (!curItem->isHidden()) {
-                            item = curItem;
-                            break;
-                        }
-                    }
-                } else {
-                    while (currentRow - 1 >= 0) {
-                        currentRow--;
-                        auto curItem = listView_->item(currentRow);
-                        if (!curItem->isHidden()) {
-                            item = curItem;
-                            break;
-                        }
-                    }
-                }
-            }
-            if (item)
-                listView_->setCurrentItem(item);
-        } else {
-            QLineEdit::keyPressEvent(event);
-        }
-    }
+    void keyPressEvent(QKeyEvent *event);
 private:
     QListWidget* listView_;
 };
+
+void ArrowLineEdit::keyPressEvent(QKeyEvent *event) {
+    if (event->key() == Qt::Key_Up || event->key() == Qt::Key_Down) {
+        auto selectedItems = listView_->selectedItems();
+        QListWidgetItem* item = nullptr;
+        if (selectedItems.count() >= 0) {
+            auto currentRow = listView_->row(selectedItems[0]);
+            if (event->key() == Qt::Key_Down) {
+                while (currentRow + 1 < listView_->count()) {
+                    currentRow++;
+                    auto curItem = listView_->item(currentRow);
+                    if (!curItem->isHidden()) {
+                        item = curItem;
+                        break;
+                    }
+                }
+            } else {
+                while (currentRow - 1 >= 0) {
+                    currentRow--;
+                    auto curItem = listView_->item(currentRow);
+                    if (!curItem->isHidden()) {
+                        item = curItem;
+                        break;
+                    }
+                }
+            }
+        }
+        if (item)
+            listView_->setCurrentItem(item);
+    } else {
+        QLineEdit::keyPressEvent(event);
+    }
+}
 
 void MainWindow::on_selectAppToolButton_clicked() {
     adbPath_ = ui->sdkPathLineEdit->text();

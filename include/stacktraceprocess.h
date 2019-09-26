@@ -17,7 +17,7 @@ public:
     bool IsConnected() const { return serverConnected_; }
 
     const QVector<QStringList>& GetStackInfo() const { return stackInfo_; }
-    const QVector<QPair<int, QString>>& GetFreeInfo() const { return freeInfo_; }
+    const QVector<QPair<quint32, QString>>& GetFreeInfo() const { return freeInfo_; }
 
     void SetExecutablePath(const QString& str) { execPath_ = str; }
     const QString& GetExecutablePath() const { return execPath_; }
@@ -35,7 +35,7 @@ private:
 private:
     QString execPath_;
     QVector<QStringList> stackInfo_;
-    QVector<QPair<int, QString>> freeInfo_;
+    QVector<QPair<quint32, QString>> freeInfo_;
     QTcpSocket* socket_ = nullptr;
     bool connectingServer_ = false;
     bool serverConnected_ = false;

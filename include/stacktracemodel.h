@@ -6,8 +6,9 @@
 
 struct StackRecord {
     QUuid uuid_;
-    int time_;
-    int size_;
+    quint32 seq_;
+    qint32 time_;
+    qint32 size_;
     QString addr_;
     QString library_;
     QString funcAddr_;

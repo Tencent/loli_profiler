@@ -31,7 +31,7 @@
 #include <limits>
 
 #define APP_MAGIC 0xA4B3C2D1
-#define APP_VERSION 103
+#define APP_VERSION 105
 
 enum class IOErrorCode : qint32 {
     NONE = 0,
@@ -249,8 +249,9 @@ void MainWindow::SaveToFile(QFile *file) {
     for (int i = 0; i < count; i++) {
         auto& record = stacktraceModel_->recordAt(i);
         stream << record.uuid_.toString();
-        stream << static_cast<qint32>(record.time_);
-        stream << static_cast<qint32>(record.size_);
+        stream << record.seq_;
+        stream << record.time_;
+        stream << record.size_;
         stream << record.addr_;
         stream << record.library_;
         stream << record.funcAddr_;
@@ -275,7 +276,7 @@ void MainWindow::SaveToFile(QFile *file) {
     stream << static_cast<qint32>(freeAddrMap_.size());
     for (auto it = freeAddrMap_.begin(); it != freeAddrMap_.end(); ++it) {
         stream << it.key();
-        stream << static_cast<qint32>(it.value());
+        stream << static_cast<quint32>(it.value());
     }
     // screen shots
     stream << static_cast<qint32>(screenshots_.size());
@@ -345,11 +346,9 @@ int MainWindow::LoadFromFile(QFile *file) {
         QString str;
         stream >> str;
         record.uuid_ = QUuid::fromString(str);
-        qint32 size;
-        stream >> size;
-        record.time_ = size;
-        stream >> size;
-        record.size_ = size;
+        stream >> record.seq_;
+        stream >> record.time_;
+        stream >> record.size_;
         stream >> str;
         record.addr_ = str;
         stream >> str;
@@ -398,9 +397,9 @@ int MainWindow::LoadFromFile(QFile *file) {
     for (int i = 0; i < value; i++) {
         QString str;
         stream >> str;
-        qint32 time;
-        stream >> time;
-        freeAddrMap_.insert(str, time);
+        quint32 seq;
+        stream >> seq;
+        freeAddrMap_.insert(str, seq);
     }
     stacktraceModel_->append(records);
     // screen shots
@@ -586,10 +585,10 @@ void MainWindow::FilterStackTraceModel() {
         }
         if (persistentFilter) {
             auto addr = record.addr_;
-            auto time = record.time_;
+            auto seq = record.seq_;
             auto it = freeAddrMap_.find(addr);
             if (it != freeAddrMap_.end()) {
-                if (time < it.value()) {
+                if (seq < it.value()) {
                     continue;
                 }
             }
@@ -823,15 +822,17 @@ void MainWindow::StacktraceDataReceived() {
             if (stack.size() < 3)
                 continue;
             auto root = stack[0].split(',');
-            if (root.size() < 3)
+            if (root.size() < 4)
                 continue;
-            const auto& rootTime = root[0];
-            const auto& rootSize = root[1];
-            const auto& rootMemAddr = root[2];
+            const auto& rootSeq = root[0];
+            const auto& rootTime = root[1];
+            const auto& rootSize = root[2];
+            const auto& rootMemAddr = root[3];
             const auto& rootLibrary = stack[1];
             const auto& rootFuncAddr = TryAddNewAddress(rootLibrary, stack[2]);
             StackRecord record;
             record.uuid_ = QUuid::createUuid();
+            record.seq_ = rootSeq.toUInt();
             record.time_ = rootTime.toInt();
             record.size_ = rootSize.toInt();
             record.addr_ = rootMemAddr;
@@ -859,8 +860,8 @@ void MainWindow::StacktraceDataReceived() {
     if (frees.size() > 0) {
         for (const auto& free : frees) {
             const auto address = free.second;
-            auto curTime = freeAddrMap_[address];
-            if (free.first > curTime) {
+            auto curSeq = freeAddrMap_[address];
+            if (free.first > curSeq) {
                 freeAddrMap_[address] = free.first;
             }
         }

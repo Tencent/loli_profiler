@@ -138,7 +138,7 @@ private:
     // <dllname, <func address, func name>>
     QHash<QString, QHash<QString, QString>> symbloMap_;
     // <mem address, time>
-    QHash<QString, int> freeAddrMap_;
+    QHash<QString, quint32> freeAddrMap_;
 
     // meminfo process
     MemInfoProcess* memInfoProcess_;

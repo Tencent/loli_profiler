@@ -52,6 +52,7 @@ std::chrono::system_clock::time_point startTime_;
 std::mutex cacheMutex_;
 std::vector<std::string> cache_;
 int minRecSize_ = 0;
+std::atomic<std::uint32_t> callSeq_;
 
 enum loliFlags {
     FREE_ = 0, 
@@ -69,7 +70,7 @@ void *loliMalloc(size_t size) {
     std::ostringstream oss;
     auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime_).count();
     auto mem = malloc(size);
-    oss << MALLOC_ << '\\'<< time << ',' << size << ',' << mem << '\\';
+    oss << MALLOC_ << '\\' << ++callSeq_ << ',' << time << ',' << size << ',' << mem << '\\';
     loli::dump(oss, buffer, loli::capture(buffer, max));
     {
         std::lock_guard<std::mutex> lock(cacheMutex_);
@@ -82,8 +83,8 @@ void loliFree(void* ptr) {
     if (ptr == nullptr) 
         return;
     std::ostringstream oss;
-    auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime_).count();
-    oss << FREE_ << '\\'<< time << '\\' << ptr;
+    // auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime_).count();
+    oss << FREE_ << '\\' << ++callSeq_ << '\\' << ptr;
     {
         std::lock_guard<std::mutex> lock(cacheMutex_);
         cache_.emplace_back(oss.str());
@@ -99,7 +100,7 @@ void *loliCalloc(int n, int size) {
     std::ostringstream oss;
     auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime_).count();
     auto mem = calloc(n, size);
-    oss << CALLOC_ << '\\'<< time << ',' << n * size << ',' << mem << '\\';
+    oss << CALLOC_ << '\\' << ++callSeq_ << ','<< time << ',' << n * size << ',' << mem << '\\';
     loli::dump(oss, buffer, loli::capture(buffer, max));
     {
         std::lock_guard<std::mutex> lock(cacheMutex_);
@@ -116,7 +117,7 @@ void *loliMemalign(size_t alignment, size_t size) {
     std::ostringstream oss;
     auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime_).count();
     auto mem = memalign(alignment, size);
-    oss << MEMALIGN_ << '\\'<< time << ',' << size << ',' << mem << '\\';
+    oss << MEMALIGN_ << '\\' << ++callSeq_ << ','<< time << ',' << size << ',' << mem << '\\';
     loli::dump(oss, buffer, loli::capture(buffer, max));
     {
         std::lock_guard<std::mutex> lock(cacheMutex_);
@@ -133,7 +134,14 @@ void *loliRealloc(void *ptr, size_t new_size) {
     std::ostringstream oss;
     auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime_).count();
     auto mem = realloc(ptr, new_size);
-    oss << REALLOC_ << '\\'<< time << ',' << new_size << ',' << mem << ',' << (ptr == mem ? 1 : 0) << '\\';
+    if (ptr == mem) {
+        oss << FREE_ << '\\' << ++callSeq_ << '\\' << ptr;
+        std::lock_guard<std::mutex> lock(cacheMutex_);
+        cache_.emplace_back(oss.str());
+        oss.str(std::string());
+        oss.clear();
+    }
+    oss << REALLOC_ << '\\' << ++callSeq_ << ',' << time << ',' << new_size << ',' << mem << '\\';
     loli::dump(oss, buffer, loli::capture(buffer, max));
     {
         std::lock_guard<std::mutex> lock(cacheMutex_);
@@ -270,6 +278,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
     }
     // start tcp server
     minRecSize_ = minRecSize;
+    callSeq_ = 0;
     startTime_ = std::chrono::system_clock::now();
     auto svr = loli::serverStart(7100);
     __android_log_print(ANDROID_LOG_INFO, "Loli", "loli start status %i", svr);

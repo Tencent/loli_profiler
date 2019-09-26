@@ -85,14 +85,7 @@ void StackTraceProcess::Interpret(const QByteArray& bytes) {
         if (type == FREE_) {
             if (words.size() < 3)
                 continue;
-            freeInfo_.push_back(qMakePair(words[1].toInt(), words[2]));
-        } else if (type == REALLOC_) {
-            words.removeAt(0);
-            stackInfo_.push_back(words);
-            auto wordList = words[0].split(',');
-            if (wordList.size() > 3 && wordList[3] == "1") { // realloc newaddr == oldaddr
-                freeInfo_.push_back(qMakePair(wordList[0].toInt(), wordList[2]));
-            }
+            freeInfo_.push_back(qMakePair(words[1].toUInt(), words[2]));
         } else {
             words.removeAt(0);
             stackInfo_.push_back(words);

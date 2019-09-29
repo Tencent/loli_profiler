@@ -92,3 +92,4 @@ I managed to read proc/self/maps file repeatedly to detect if there's any target
 * JDWP Library https://koz.io/library-injection-for-debuggable-android-apps/
 * TreeMap https://github.com/yahoo/YMTreeMap
 * App Icon https://www.flaticon.com/authors/smashicons
+* ToolButton Icon https://www.flaticon.com/authors/freepik

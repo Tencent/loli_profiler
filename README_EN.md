@@ -6,7 +6,9 @@ Lightweight Opensource profiLing Instrument
 
 ![](res/images/macos_2.png)
 
-**Please Note: this project is still in early stage**
+![](res/images/treemap.gif)
+
+Please Note: this project is still in early stage**
 
 ## Features
 
@@ -17,6 +19,7 @@ Lightweight Opensource profiLing Instrument
 - Filtering persistent memory allocations
 - Query smaps info to get an memory overview of different so or modules
 - Combine smaps info with memory allocation records to produce memory fragmentation map
+- Transform data to Treemap format for easier analysis 
 - Take screen-shot every 5 second
 - Transfer memory related function's call-stack in real-time (by TCP Socket)
 - Network packet is compressed using lz4 to speed-up sending & receiving process
@@ -87,4 +90,5 @@ I managed to read proc/self/maps file repeatedly to detect if there's any target
 * KM Intro http://km.oa.com/articles/show/408991
 * xHook https://github.com/iqiyi/xHook
 * JDWP Library https://koz.io/library-injection-for-debuggable-android-apps/
+* TreeMap https://github.com/yahoo/YMTreeMap
 * App Icon https://www.flaticon.com/authors/smashicons

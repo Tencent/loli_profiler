@@ -8,6 +8,8 @@
 
 ![](res/images/macos_2.png)
 
+![](res/images/treemap.gif)
+
 **注意：此程序仍处于初级研发阶段**
 
 ## 特性
@@ -19,6 +21,7 @@
 - 自动分析数据展示常驻内存
 - 获取并分析smaps数据，得到不同so、模块的内存总分配情况
 - 结合smaps数据与内存分配数据，可绘制出近似的内存碎片图
+- 将数据整理为TreeMap形式展示，方便观察
 - 每5s自动截图一次
 - 从手机端实时获取内存相关函数的堆栈信息（通过TCP Socket）
 - 网络包使用LZ4压缩以加快收发速度
@@ -89,4 +92,5 @@ FMalloc* FAndroidPlatformMemory::BaseAllocator() {
 * KM原理介绍文章 http://km.oa.com/articles/show/408991
 * xHook https://github.com/iqiyi/xHook
 * JDWP库 https://koz.io/library-injection-for-debuggable-android-apps/
+* TreeMap实现 https://github.com/yahoo/YMTreeMap
 * 图标 https://www.flaticon.com/authors/smashicons

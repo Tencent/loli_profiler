@@ -19,10 +19,6 @@
   <property name="windowTitle">
    <string>LoliProfiler</string>
   </property>
-  <property name="windowIcon">
-   <iconset resource="res/icon.qrc">
-    <normaloff>:/icon/devices.ico</normaloff>:/icon/devices.ico</iconset>
-  </property>
   <widget class="QWidget" name="centralWidget">
    <layout class="QVBoxLayout" name="verticalLayout_2">
     <property name="spacing">

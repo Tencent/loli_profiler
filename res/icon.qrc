@@ -1,6 +1,7 @@
 <RCC>
     <qresource prefix="/icon">
         <file>devices.ico</file>
+        <file>devices.icns</file>
     </qresource>
     <qresource prefix="/toolbutton">
         <file>btn_callstacks.png</file>

@@ -706,6 +706,7 @@
     <addaction name="actionStat_SMaps"/>
     <addaction name="actionVisualize_SMaps"/>
     <addaction name="actionShow_Merged_Callstacks"/>
+    <addaction name="actionShow_Callstacks_In_TreeMap"/>
    </widget>
    <addaction name="menuFile"/>
    <addaction name="menuTools"/>
@@ -754,6 +755,11 @@
   <action name="actionShow_Merged_Callstacks">
    <property name="text">
     <string>Show Merged Callstacks</string>
+   </property>
+  </action>
+  <action name="actionShow_Callstacks_In_TreeMap">
+   <property name="text">
+    <string>Show Callstacks In TreeMap</string>
    </property>
   </action>
  </widget>

@@ -2,11 +2,6 @@
 
 #include <QGestureEvent>
 #include <QMouseEvent>
-#include <QMenu>
-#include <QTreeWidget>
-#include <QLineEdit>
-#include <QWidgetAction>
-#include <QHeaderView>
 #include <QDebug>
 
 #include <cmath>

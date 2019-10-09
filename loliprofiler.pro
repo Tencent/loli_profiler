@@ -36,6 +36,7 @@ SOURCES += \
         src/lz4/lz4.c \
         src/main.cpp \
         src/mainwindow.cpp \
+        src/memgraphicsview.cpp \
         src/meminfoprocess.cpp \
         src/screenshotprocess.cpp \
         src/stacktracemodel.cpp \
@@ -53,6 +54,7 @@ HEADERS += \
         include/interactivechartview.h \
         src/lz4/lz4.h \
         include/mainwindow.h \
+        include/memgraphicsview.h \
         include/meminfoprocess.h \
         include/screenshotprocess.h \
         include/stacktracemodel.h \

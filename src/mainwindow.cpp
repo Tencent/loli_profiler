@@ -3,6 +3,7 @@
 #include "timeprofiler.h"
 #include "customgraphicsview.h"
 #include "treemapgraphicsview.h"
+#include "memgraphicsview.h"
 
 #include <QClipboard>
 #include <QDataStream>
@@ -1134,7 +1135,7 @@ void MainWindow::on_actionVisualize_SMaps_triggered() {
     layout->setSpacing(2);
     fragDialog.setLayout(layout);
     auto statusBar = new QStatusBar(&fragDialog);
-    auto fragView = new CustomGraphicsView(&fragDialog);
+    auto fragView = new MemGraphicsView(&fragDialog);
     auto fragScene = new QGraphicsScene(&fragDialog);
     auto sectionComboBox = new QComboBox(&fragDialog);
     auto curModel = ui->stackTableView->model();
@@ -1144,39 +1145,32 @@ void MainWindow::on_actionVisualize_SMaps_triggered() {
         if (sectionit == sMapsSections_.end()) {
             return;
         }
-        QPen pen(QBrush(), 0.0);
-        QBrush allocBrush(QColor::fromRgb(200, 50, 50, 255));
-        QBrush bgBrush(QColor::fromRgb(50, 200, 50, 255));
         auto& section = *sectionit;
         auto sectionsCount = section.addrs_.size();
         auto recordsCount = 0;
         auto totalUsedSize = 0ul;
         auto totalSize = 0ul;
+        auto curY = 0.0;
         for (int i = 0; i < sectionsCount; i++) {
             auto& addr = section.addrs_[i];
-            auto offset = addr.offset_;
-            auto start = addr.start_ - offset;
-            auto end = addr.end_ - offset;
+            auto start = addr.start_ - addr.offset_;
+            auto end = addr.end_ - addr.offset_;
             auto size = end - start;
-            auto sizeInKb = static_cast<double>(size) / 1024;
-            auto y = i * 35;
-            auto height = 30;
-            auto freeRect = fragScene->addRect(0, y, sizeInKb, height, pen, bgBrush);
+            auto sectionItem = new MemSectionItem(1024, static_cast<double>(size) / 1024);
+            sectionItem->setY(curY);
             auto rowCount = curModel->rowCount();
             auto usedSize = 0ul;
             for (int i = 0; i < rowCount; i++) {
                 auto recSize = curModel->data(curModel->index(i, 1), Qt::UserRole).toUInt();
                 auto recAddr = curModel->data(curModel->index(i, 2)).toString().toULongLong(nullptr, 0);
-                if (recAddr >= start && recAddr < end) {
-                    auto recAddrInKb = (recAddr - start) / 1024;
-                    auto recSizeInKb = recSize / 1024;
-                    fragScene->addRect(recAddrInKb, y, recSizeInKb, height, pen, allocBrush)->setToolTip(QString("Size: %1").arg(sizeToString(recSize)));
+                if (recAddr >= start && recAddr < end && recAddr + recSize <= end) {
+                    sectionItem->addAllocation((recAddr - start) / 1024, recSize / 1024);
                     recordsCount++;
                     usedSize += recSize;
                 }
             }
-            freeRect->setToolTip(QString("Total: %1 Used: %2 (%3%)")
-                                 .arg(sizeToString(static_cast<quint32>(size)), sizeToString(usedSize), QString::number((static_cast<double>(usedSize) / size) * 100.0)));
+            fragScene->addItem(sectionItem);
+            curY += sectionItem->boundingRect().height() + 16;
             totalUsedSize += usedSize;
             totalSize += size;
         }
@@ -1216,6 +1210,7 @@ void MainWindow::on_actionVisualize_SMaps_triggered() {
     layout->addWidget(fragView);
     layout->addWidget(statusBar);
     layout->setMargin(0);
+    fragView->setFocus();
     fragDialog.setWindowTitle("Visualize proc/pid/smaps");
     fragDialog.resize(900, 400);
     fragDialog.setMinimumSize(900, 400);

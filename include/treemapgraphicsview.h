@@ -60,7 +60,7 @@ private:
     };
 public:
     TreeMapGraphicsView(QList<QTreeWidgetItem*>& topLevelItems, QWidget *parent = nullptr);
-    ~TreeMapGraphicsView();
+    ~TreeMapGraphicsView() override;
     void Generate(QTreeWidgetItem* parent, QRectF rect, int depth);
 
 protected:

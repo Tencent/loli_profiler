@@ -2,6 +2,8 @@
 
 轻量开源内存分析工具（Lightweight Opensource profiLing Instrument）
 
+**目前支持Windows10与MacOSX（Mojave+），需要Python2.x**
+
 > [使用手册](https://git.code.oa.com/xinhou/loli_profiler/wikis/tutorial)、[常见问题](https://git.code.oa.com/xinhou/loli_profiler/wikis/faq)、[程序下载](https://git.code.oa.com/xinhou/loli_profiler/wikis/home)
 
 ![](res/images/macos.png)

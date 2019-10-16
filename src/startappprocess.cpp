@@ -119,16 +119,16 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, QPro
     { // adb forward
         dialog->setLabelText("Forwadring tcp port.");
         arguments.clear();
-        arguments << "forward" << "tcp:" + QString::number(jdwpPort_) << ("jdwp:" + QString::number(pid));
+        arguments << "forward" << "tcp:8700" << ("jdwp:" + QString::number(pid));
         QProcess process;
         process.start(execPath, arguments);
         if (!process.waitForStarted()) {
-            errorStr_ = "erro starting: adb forward tcp:" + QString::number(jdwpPort_) + " jdwp:xxxx";
+            errorStr_ = "erro starting: adb forward tcp:8700 jdwp:xxxx";
             emit ProcessErrorOccurred();
             return;
         }
         if (!process.waitForFinished()) {
-            errorStr_ = "erro finishing: adb forward tcp:" + QString::number(jdwpPort_) + " jdwp:xxxx";
+            errorStr_ = "erro finishing: adb forward tcp:8700 jdwp:xxxx";
             emit ProcessErrorOccurred();
             return;
         }
@@ -137,7 +137,7 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, QPro
     // python jdwp-shellifier.py
     dialog->setLabelText("Injecting libloli.so to target application.");
     process_->setWorkingDirectory(QCoreApplication::applicationDirPath());
-    ExecuteAsync(pythonPath_ + " jdwp-shellifier.py --target 127.0.0.1 --port " + QString::number(jdwpPort_) + " --break-on android.app.Activity.onResume --loadlib libloli.so");
+    ExecuteAsync(pythonPath_ + " jdwp-shellifier.py --target 127.0.0.1 --port 8700 --break-on android.app.Activity.onResume --loadlib libloli.so");
 }
 
 void StartAppProcess::OnProcessFinihed() {

@@ -124,6 +124,7 @@ private:
 
     // adb shell monkey -p packagename -c android.intent.category.LAUNCHER 1
     StartAppProcess *startAppProcess_;
+    int jdwpPort_ = 8700;
 
     // screenshot
     ScreenshotProcess *screenshotProcess_;

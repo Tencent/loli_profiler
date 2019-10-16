@@ -12,6 +12,10 @@ public:
         pythonPath_ = path;
     }
 
+    void SetJDWPPort(int port) {
+        jdwpPort_ = port;
+    }
+
     bool Result() const {
         return startResult_;
     }
@@ -24,11 +28,13 @@ public:
 
 protected:
     void OnProcessFinihed() override;
+    void OnProcessErrorOccurred() override;
 
 private:
     bool startResult_ = false;
     QString errorStr_;
     QString pythonPath_;
+    int jdwpPort_ = 8700;
 };
 
 #endif // STARTAPPPROCESS_H

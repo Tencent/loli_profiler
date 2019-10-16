@@ -172,6 +172,7 @@ const QString SETTINGS_LASTSYMBOLDIR = "lastsymbol_dir";
 const QString SETTINGS_ADDR2LINEPATH = "addr2line_path";
 const QString SETTINGS_PYTHONPATH = "python_path";
 const QString SETTINGS_ARCH = "target_arch";
+const QString SETTINGS_JDWPPORT = "jdwp_port";
 
 void MainWindow::LoadSettings() {
     QSettings settings("MoreFun", "LoliProfiler");
@@ -195,6 +196,7 @@ void MainWindow::LoadSettings() {
     if (QDir(lastSymbolDir).exists())
         lastSymbolDir_ = lastSymbolDir;
     targetArch_ = settings.value(SETTINGS_ARCH, "armeabi-v7a").toString();
+    jdwpPort_ = settings.value(SETTINGS_JDWPPORT, 8700).toInt();
 }
 
 void MainWindow::SaveSettings() {
@@ -213,6 +215,7 @@ void MainWindow::SaveSettings() {
         settings.setValue(SETTINGS_LASTOPENDIR, lastOpenDir_);
     if (QDir(lastSymbolDir_).exists())
         settings.setValue(SETTINGS_LASTSYMBOLDIR, lastSymbolDir_);
+    settings.setValue(SETTINGS_JDWPPORT, jdwpPort_);
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {
@@ -1365,6 +1368,7 @@ void MainWindow::on_launchPushButton_clicked() {
 
     startAppProcess_->SetPythonPath(pythonPath);
     startAppProcess_->SetExecutablePath(adbPath_);
+    startAppProcess_->SetJDWPPort(jdwpPort_);
     startAppProcess_->StartApp(ui->appNameLineEdit->text(), targetArch_, progressDialog_);
 
     isCapturing_ = true;
@@ -1484,6 +1488,11 @@ void MainWindow::on_configPushButton_clicked() {
     minSizeSpinBox->setRange(0, 1024);
     minSizeSpinBox->setValue(minCaptureSize);
     layout->addWidget(minSizeSpinBox);
+    auto jdwpPortSpinBox = new QSpinBox();
+    jdwpPortSpinBox->setToolTip("Port for Java Debug Wire Protocol");
+    jdwpPortSpinBox->setRange(0, 99999999);
+    jdwpPortSpinBox->setValue(jdwpPort_);
+    layout->addWidget(jdwpPortSpinBox);
     auto libList = new QListWidget();
     libList->addItems(desiredLibs);
     for (int i = 0; i < libList->count(); i++) {
@@ -1514,6 +1523,8 @@ void MainWindow::on_configPushButton_clicked() {
     editDialog.resize(400, 300);
     editDialog.exec();
     // save config
+    jdwpPort_ = jdwpPortSpinBox->value();
+    startAppProcess_->SetJDWPPort(jdwpPort_);
     targetArch_ = archCombo->currentText();
     settings.setValue(SETTINGS_ARCH, targetArch_);
     if (file.open(QIODevice::ReadWrite | QIODevice::Truncate | QIODevice::Text)) {

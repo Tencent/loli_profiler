@@ -53,6 +53,7 @@ signals:
 
 protected:
     virtual void OnProcessFinihed() = 0;
+    virtual void OnProcessErrorOccurred() {}
 
 protected slots:
     void AdbProcessFinished(int exitCode, QProcess::ExitStatus exitStatus);

@@ -38,15 +38,14 @@ void AdbProcess::AdbProcessFinished(int exitCode, QProcess::ExitStatus exitStatu
         return;
     }
     hasErrors_ = false;
+    running_ = false;
     OnProcessFinihed(); // handle returned data
     emit ProcessFinished(this); // then process the handled data
-    running_ = false;
 }
 
-void AdbProcess::AdbProcessErrorOccurred(QProcess::ProcessError error) {
-    emit ProcessErrorOccurred();
-    qDebug() << error;
-    qDebug() << process_->readAll();
+void AdbProcess::AdbProcessErrorOccurred(QProcess::ProcessError) {
+    OnProcessErrorOccurred();
     running_ = false;
     hasErrors_ =  true;
+    emit ProcessErrorOccurred();
 }

@@ -668,7 +668,7 @@ bool MainWindow::CreateIfNoConfigFile() {
         file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
         if (file.open(QIODevice::ReadWrite | QIODevice::Truncate | QIODevice::Text)) {
             QTextStream stream(&file);
-            stream << "256\nlibunity,libil2cpp";
+            stream << "256\nlibunity,libil2cpp\n64";
             stream.flush();
             return true;
         } else {
@@ -1466,6 +1466,7 @@ void MainWindow::on_configPushButton_clicked() {
         return;
     // load and parse config
     auto minCaptureSize = 128;
+    auto maxCallstackBufferSize = 64;
     auto desiredLibs = QStringList() << "libunity" << "libil2cpp";
     QFile file(cfgPath + "/loli.conf");
     file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
@@ -1476,8 +1477,10 @@ void MainWindow::on_configPushButton_clicked() {
         while (stream.readLineInto(&line)) {
             if (lineNum == 0) {
                 minCaptureSize = line.toInt();
-            } else {
+            } else if (lineNum == 1) {
                 desiredLibs = line.split(',', QString::SplitBehavior::SkipEmptyParts);
+            } else {
+                maxCallstackBufferSize = line.toInt();
                 break;
             }
             lineNum++;
@@ -1495,11 +1498,17 @@ void MainWindow::on_configPushButton_clicked() {
     archCombo->setCurrentText(targetArch_);
     layout->addWidget(archCombo);
     auto minSizeSpinBox = new QSpinBox();
-    minSizeSpinBox->setToolTip("Minimum capture size (Byte)");
+    minSizeSpinBox->setToolTip("Minimum capture size (Byte, recommend 128)");
     minSizeSpinBox->setSingleStep(32);
-    minSizeSpinBox->setRange(0, 1024);
+    minSizeSpinBox->setRange(32, 1024);
     minSizeSpinBox->setValue(minCaptureSize);
     layout->addWidget(minSizeSpinBox);
+    auto maxCallstackBufferSizeSpinBox = new QSpinBox();
+    maxCallstackBufferSizeSpinBox->setToolTip("Callstack buffer size (Byte, recommend 64)");
+    maxCallstackBufferSizeSpinBox->setSingleStep(16);
+    maxCallstackBufferSizeSpinBox->setRange(0, 1024);
+    maxCallstackBufferSizeSpinBox->setValue(maxCallstackBufferSize);
+    layout->addWidget(maxCallstackBufferSizeSpinBox);
     auto libList = new QListWidget();
     libList->addItems(desiredLibs);
     for (int i = 0; i < libList->count(); i++) {
@@ -1540,6 +1549,8 @@ void MainWindow::on_configPushButton_clicked() {
             stream << libList->item(i)->text();
             if (i != numLibs - 1) stream << ',';
         }
+        stream << endl;
+        stream << maxCallstackBufferSizeSpinBox->value() << endl;
         stream.flush();
     }
 }

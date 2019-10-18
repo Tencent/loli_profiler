@@ -52,6 +52,7 @@ std::chrono::system_clock::time_point startTime_;
 std::mutex cacheMutex_;
 std::vector<std::string> cache_;
 int minRecSize_ = 0;
+int maxCallstackBufferSize_ = 64;
 std::atomic<std::uint32_t> callSeq_;
 
 enum loliFlags {
@@ -65,13 +66,12 @@ enum loliFlags {
 void *loliMalloc(size_t size) {
     if (size < static_cast<size_t>(minRecSize_))
         return malloc(size);
-    const size_t max = 60;
-    void* buffer[max];
+    void* buffer[maxCallstackBufferSize_];
     std::ostringstream oss;
     auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime_).count();
     auto mem = malloc(size);
     oss << MALLOC_ << '\\' << ++callSeq_ << ',' << time << ',' << size << ',' << mem << '\\';
-    loli::dump(oss, buffer, loli::capture(buffer, max));
+    loli::dump(oss, buffer, loli::capture(buffer, maxCallstackBufferSize_));
     {
         std::lock_guard<std::mutex> lock(cacheMutex_);
         cache_.emplace_back(oss.str());
@@ -95,13 +95,12 @@ void loliFree(void* ptr) {
 void *loliCalloc(int n, int size) {
     if (n * size < minRecSize_)
         return calloc(n, size);
-    const size_t max = 60;
-    void* buffer[max];
+    void* buffer[maxCallstackBufferSize_];
     std::ostringstream oss;
     auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime_).count();
     auto mem = calloc(n, size);
     oss << CALLOC_ << '\\' << ++callSeq_ << ','<< time << ',' << n * size << ',' << mem << '\\';
-    loli::dump(oss, buffer, loli::capture(buffer, max));
+    loli::dump(oss, buffer, loli::capture(buffer, maxCallstackBufferSize_));
     {
         std::lock_guard<std::mutex> lock(cacheMutex_);
         cache_.emplace_back(oss.str());
@@ -112,13 +111,12 @@ void *loliCalloc(int n, int size) {
 void *loliMemalign(size_t alignment, size_t size) {
     if (size < static_cast<size_t>(minRecSize_))
         return memalign(alignment, size);
-    const size_t max = 60;
-    void* buffer[max];
+    void* buffer[maxCallstackBufferSize_];
     std::ostringstream oss;
     auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime_).count();
     auto mem = memalign(alignment, size);
     oss << MEMALIGN_ << '\\' << ++callSeq_ << ','<< time << ',' << size << ',' << mem << '\\';
-    loli::dump(oss, buffer, loli::capture(buffer, max));
+    loli::dump(oss, buffer, loli::capture(buffer, maxCallstackBufferSize_));
     {
         std::lock_guard<std::mutex> lock(cacheMutex_);
         cache_.emplace_back(oss.str());
@@ -129,8 +127,7 @@ void *loliMemalign(size_t alignment, size_t size) {
 void *loliRealloc(void *ptr, size_t new_size) {
     if (new_size < static_cast<size_t>(minRecSize_))
         return realloc(ptr, new_size);
-    const size_t max = 60;
-    void* buffer[max];
+    void* buffer[maxCallstackBufferSize_];
     std::ostringstream oss;
     auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime_).count();
     auto mem = realloc(ptr, new_size);
@@ -142,7 +139,7 @@ void *loliRealloc(void *ptr, size_t new_size) {
         oss.clear();
     }
     oss << REALLOC_ << '\\' << ++callSeq_ << ',' << time << ',' << new_size << ',' << mem << '\\';
-    loli::dump(oss, buffer, loli::capture(buffer, max));
+    loli::dump(oss, buffer, loli::capture(buffer, maxCallstackBufferSize_));
     {
         std::lock_guard<std::mutex> lock(cacheMutex_);
         cache_.emplace_back(oss.str());
@@ -257,6 +254,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
     std::string line;
     int count = 0;
     int minRecSize = 512;
+    int maxCallstackBufferSize = 64;
     std::string hookLibraries = "libil2cpp,libunity";
     while (std::getline(infile, line)) {
         if (count == 0) {
@@ -264,12 +262,15 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
             iss >> minRecSize;
         } else if (count == 1) {
             hookLibraries = line;
-        } else {
+        } else if (count == 2) {
+            std::istringstream iss(line);
+            iss >> maxCallstackBufferSize;
             break;
         }
         count++;
     }
-    __android_log_print(ANDROID_LOG_INFO, "Loli", "minRecSize:: %i, hookLibs: %s", minRecSize, hookLibraries.c_str());
+    __android_log_print(ANDROID_LOG_INFO, "Loli", "minRecSize: %i, maxCallstackBufferSize: %i, hookLibs: %s", 
+        minRecSize, maxCallstackBufferSize, hookLibraries.c_str());
     // parse library tokens
     std::unordered_set<std::string> tokens;
     std::istringstream namess(hookLibraries);
@@ -278,6 +279,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
     }
     // start tcp server
     minRecSize_ = minRecSize;
+    maxCallstackBufferSize_ = maxCallstackBufferSize;
     callSeq_ = 0;
     startTime_ = std::chrono::system_clock::now();
     auto svr = loli::serverStart(7100);

@@ -1288,9 +1288,15 @@ void MainWindow::on_launchPushButton_clicked() {
         progressDialog_->setValue(1);
         progressDialog_->setLabelText("Requesting smaps info from device.");
         QProcess process;
+        QStringList arguments;
+        arguments << "shell" << "run-as" << ui->appNameLineEdit->text() <<
+                     "cat" << "/proc/" + memInfoProcess_->GetAppPid() + "/smaps" << ">" << "/data/local/tmp/smaps.txt";
         process.setProgram(adbPath_);
-        process.setArguments(QStringList() << "shell" << "run-as" << ui->appNameLineEdit->text() <<
-                             "cat" << "/proc/" + memInfoProcess_->GetAppPid() + "/smaps" << ">" << "/data/local/tmp/smaps.txt");
+#ifdef Q_OS_WIN
+        process.setNativeArguments(arguments.join(' '));
+#else
+        process.setArguments(arguments);
+#endif
         process.start();
         auto readSMaps = false;
         if (process.waitForStarted()) {
@@ -1298,8 +1304,14 @@ void MainWindow::on_launchPushButton_clicked() {
                 if (process.readAll().size() == 0) {
                     process.close();
                     auto smapsPath = QCoreApplication::applicationDirPath() + "/smaps.txt";
+                    arguments.clear();
+                    arguments << "pull" << "/data/local/tmp/smaps.txt" << smapsPath;
                     process.setProgram(adbPath_);
-                    process.setArguments(QStringList() << "pull" << "/data/local/tmp/smaps.txt" << smapsPath);
+#ifdef Q_OS_WIN
+                    process.setNativeArguments(arguments.join(' '));
+#else
+                    process.setArguments(arguments);
+#endif
                     process.start();
                     process.waitForStarted();
                     process.waitForFinished();
@@ -1579,7 +1591,14 @@ void MainWindow::on_selectAppToolButton_clicked() {
     adbPath_ = adbPath_.size() == 0 ? "adb" : adbPath_ + "/platform-tools/adb";
     QProcess process;
     process.setProgram(adbPath_);
-    process.setArguments(QStringList() << "shell" << "pm" << "list" << "packages");
+    QStringList arguments;
+    arguments << "shell" << "pm" << "list" << "packages";
+
+#ifdef Q_OS_WIN
+    process.setNativeArguments(arguments.join(' '));
+#else
+    process.setArguments(arguments);
+#endif
     process.start();
     if (!process.waitForStarted()) {
         Print("error start adb shell pm list packages, make sure your device is connected!");

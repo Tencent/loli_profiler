@@ -23,7 +23,11 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, QPro
         QProcess process;
         process.setWorkingDirectory(QCoreApplication::applicationDirPath());
         process.setProgram(execPath);
+#ifdef Q_OS_WIN
+        process.setNativeArguments(arguments.join(' '));
+#else
         process.setArguments(arguments);
+#endif
         process.start();
         if (!process.waitForStarted()) {
             errorStr_ = "erro starting: adb push remote/libloli.so /data/local/tmp";
@@ -44,7 +48,11 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, QPro
         QProcess process;
         process.setWorkingDirectory(QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).first());
         process.setProgram(execPath);
+#ifdef Q_OS_WIN
+        process.setNativeArguments(arguments.join(' '));
+#else
         process.setArguments(arguments);
+#endif
         process.start();
         if (!process.waitForStarted()) {
             errorStr_ = "erro starting: adb push loli.conf /data/local/tmp";
@@ -64,7 +72,11 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, QPro
         arguments << "shell" << "am" << "set-debug-app" << "-w" << appName;
         QProcess process;
         process.setProgram(execPath);
+#ifdef Q_OS_WIN
+        process.setNativeArguments(arguments.join(' '));
+#else
         process.setArguments(arguments);
+#endif
         process.start();
         if (!process.waitForStarted()) {
             errorStr_ = "erro starting: adb shell am set-debug-app -w com.company.app";
@@ -84,7 +96,11 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, QPro
         arguments << "shell" << "monkey -p" << appName << "-c android.intent.category.LAUNCHER 1";
         QProcess process;
         process.setProgram(execPath);
+#ifdef Q_OS_WIN
+        process.setNativeArguments(arguments.join(' '));
+#else
         process.setArguments(arguments);
+#endif
         process.start();
         if (!process.waitForStarted()) {
             errorStr_ = "erro starting: adb shell monkey -p com.company.app -c android.intent.category.LAUNCHER 1";
@@ -106,7 +122,11 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, QPro
         arguments << "jdwp";
         QProcess process;
         process.setProgram(execPath);
+#ifdef Q_OS_WIN
+        process.setNativeArguments(arguments.join(' '));
+#else
         process.setArguments(arguments);
+#endif
         process.start();
         if (!process.waitForStarted()) {
             errorStr_ = "erro starting: adb jdwp";
@@ -132,7 +152,11 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, QPro
         arguments << "forward" << "tcp:8700" << ("jdwp:" + QString::number(pid));
         QProcess process;
         process.setProgram(execPath);
+#ifdef Q_OS_WIN
+        process.setNativeArguments(arguments.join(' '));
+#else
         process.setArguments(arguments);
+#endif
         process.start();
         if (!process.waitForStarted()) {
             errorStr_ = "erro starting: adb forward tcp:8700 jdwp:xxxx";
@@ -149,9 +173,15 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, QPro
     // python jdwp-shellifier.py
     errorStr_ = "python jdwp-shellifier.py";
     dialog->setLabelText("Injecting libloli.so to target application.");
+    arguments.clear();
+    arguments << "jdwp-shellifier.py" << "--target" << "127.0.0.1" << "--port" << "8700" << "--break-on" << "android.app.Activity.onResume" << "--loadlib" << "libloli.so";
     process_->setWorkingDirectory(QCoreApplication::applicationDirPath());
     process_->setProgram(pythonPath_);
-    process_->setArguments(QStringList() << "jdwp-shellifier.py" << "--target" << "127.0.0.1" << "--port" << "8700" << "--break-on" << "android.app.Activity.onResume" << "--loadlib" << "libloli.so");
+#ifdef Q_OS_WIN
+    process_->setNativeArguments(arguments.join(' '));
+#else
+    process_->setArguments(arguments);
+#endif
     ExecuteAsync();
 }
 

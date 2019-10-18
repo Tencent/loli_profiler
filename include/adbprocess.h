@@ -21,19 +21,24 @@ public:
         return process_;
     }
 
-    void ExecuteAsync(const QString command) {
-        running_ = true;
-        process_->start(command);
-    }
-
     void ExecuteAsync(const QStringList& arguments) {
-        running_ = true;
-        process_->start(execPath_, arguments);
+        ExecuteAsync(execPath_, arguments);
     }
 
     void ExecuteAsync(const QString execPath, const QStringList& arguments) {
         running_ = true;
-        process_->start(execPath, arguments);
+        process_->setProgram(execPath);
+        process_->setArguments(arguments);
+        process_->start();
+    }
+
+    void SetArguments(const QStringList& arguments) {
+        process_->setArguments(arguments);
+    }
+
+    void ExecuteAsync() {
+        running_ = true;
+        process_->start();
     }
 
     bool IsRunning() const {

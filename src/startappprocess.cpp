@@ -22,7 +22,9 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, QPro
         arguments << "push" << "remote/" + arch + "/libloli.so" << "/data/local/tmp";
         QProcess process;
         process.setWorkingDirectory(QCoreApplication::applicationDirPath());
-        process.start(execPath, arguments);
+        process.setProgram(execPath);
+        process.setArguments(arguments);
+        process.start();
         if (!process.waitForStarted()) {
             errorStr_ = "erro starting: adb push remote/libloli.so /data/local/tmp";
             emit ProcessErrorOccurred();
@@ -41,7 +43,9 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, QPro
         arguments << "push" << "loli.conf" << "/data/local/tmp";
         QProcess process;
         process.setWorkingDirectory(QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).first());
-        process.start(execPath, arguments);
+        process.setProgram(execPath);
+        process.setArguments(arguments);
+        process.start();
         if (!process.waitForStarted()) {
             errorStr_ = "erro starting: adb push loli.conf /data/local/tmp";
             emit ProcessErrorOccurred();
@@ -59,7 +63,9 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, QPro
         arguments.clear();
         arguments << "shell" << "am" << "set-debug-app" << "-w" << appName;
         QProcess process;
-        process.start(execPath, arguments);
+        process.setProgram(execPath);
+        process.setArguments(arguments);
+        process.start();
         if (!process.waitForStarted()) {
             errorStr_ = "erro starting: adb shell am set-debug-app -w com.company.app";
             emit ProcessErrorOccurred();
@@ -77,7 +83,9 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, QPro
         arguments.clear();
         arguments << "shell" << "monkey -p" << appName << "-c android.intent.category.LAUNCHER 1";
         QProcess process;
-        process.start(execPath, arguments);
+        process.setProgram(execPath);
+        process.setArguments(arguments);
+        process.start();
         if (!process.waitForStarted()) {
             errorStr_ = "erro starting: adb shell monkey -p com.company.app -c android.intent.category.LAUNCHER 1";
             emit ProcessErrorOccurred();
@@ -97,7 +105,9 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, QPro
         arguments.clear();
         arguments << "jdwp";
         QProcess process;
-        process.start(execPath, arguments);
+        process.setProgram(execPath);
+        process.setArguments(arguments);
+        process.start();
         if (!process.waitForStarted()) {
             errorStr_ = "erro starting: adb jdwp";
             emit ProcessErrorOccurred();
@@ -121,7 +131,9 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, QPro
         arguments.clear();
         arguments << "forward" << "tcp:8700" << ("jdwp:" + QString::number(pid));
         QProcess process;
-        process.start(execPath, arguments);
+        process.setProgram(execPath);
+        process.setArguments(arguments);
+        process.start();
         if (!process.waitForStarted()) {
             errorStr_ = "erro starting: adb forward tcp:8700 jdwp:xxxx";
             emit ProcessErrorOccurred();
@@ -135,9 +147,12 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, QPro
         dialog->setValue(dialog->value() + 1);
     }
     // python jdwp-shellifier.py
+    errorStr_ = "python jdwp-shellifier.py";
     dialog->setLabelText("Injecting libloli.so to target application.");
     process_->setWorkingDirectory(QCoreApplication::applicationDirPath());
-    ExecuteAsync(pythonPath_ + " jdwp-shellifier.py --target 127.0.0.1 --port 8700 --break-on android.app.Activity.onResume --loadlib libloli.so");
+    process_->setProgram(pythonPath_);
+    process_->setArguments(QStringList() << "jdwp-shellifier.py" << "--target" << "127.0.0.1" << "--port" << "8700" << "--break-on" << "android.app.Activity.onResume" << "--loadlib" << "libloli.so");
+    ExecuteAsync();
 }
 
 void StartAppProcess::OnProcessFinihed() {

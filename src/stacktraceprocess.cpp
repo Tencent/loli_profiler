@@ -32,7 +32,9 @@ void StackTraceProcess::ConnectToServer(int port) {
     QProcess process;
     QStringList arguments;
     arguments << "forward" << "tcp:" + QString::number(port) << "tcp:7100";
-    process.start(execPath_, arguments);
+    process.setProgram(execPath_);
+    process.setArguments(arguments);
+    process.start();
     if (!process.waitForStarted()) {
         emit ConnectionLost();
         return;

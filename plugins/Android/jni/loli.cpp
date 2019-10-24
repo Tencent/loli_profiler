@@ -1,6 +1,7 @@
 #ifndef LOLI_CPP // Lightweight Opensource profiLing Instrument
 #define LOLI_CPP
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <fstream>
@@ -244,6 +245,12 @@ void loliProcMapsThread(const std::unordered_set<std::string>& libs) {
     }
 }
 
+void loliTrim(std::string &s) {
+    s.erase(std::remove_if(s.begin(), s.end(), [](int ch) {
+        return std::isspace(ch);
+    }), s.end());
+}
+
 JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
     __android_log_print(ANDROID_LOG_INFO, "Loli", "JNI_OnLoad");
     JNIEnv* env;
@@ -275,6 +282,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
     std::unordered_set<std::string> tokens;
     std::istringstream namess(hookLibraries);
     while (std::getline(namess, line, ',')) {
+        loliTrim(line);
         tokens.insert(line);
     }
     // start tcp server

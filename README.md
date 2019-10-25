@@ -19,6 +19,7 @@
 ## 特性
 
 - 可以Profile所有Debuggable的程序（Root后的设备可Profile所有程序）
+- 可通过[此方法](https://git.code.oa.com/xinhou/loli_profiler/wikis/profile-release-build-apks/)Profile Release版本的程序
 - 可Hook目标APK中任意so库
 - Hook上的内存函数malloc、calloc、realloc、memalign、free
 - 可将函数地址自动批量转换为函数名称

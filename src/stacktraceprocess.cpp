@@ -126,7 +126,7 @@ void StackTraceProcess::OnDataReceived() {
             }
         } else {
             auto remainPacketSize = packetSize_ - static_cast<uint>(bufferCache_.size());
-            if (remainPacketSize < remainBytes) { // the remaining data is stored in this packet, read what we need
+            if (remainPacketSize <= remainBytes) { // the remaining data is stored in this packet, read what we need
                 bufferCache_.append(buffer_ + bufferPos, static_cast<int>(remainPacketSize));
                 remainBytes -= remainPacketSize;
                 bufferPos = size - remainBytes;

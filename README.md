@@ -8,6 +8,8 @@
 
 > [使用手册](https://git.code.oa.com/xinhou/loli_profiler/wikis/tutorial)、[常见问题](https://git.code.oa.com/xinhou/loli_profiler/wikis/faq)、[程序下载](https://git.code.oa.com/xinhou/loli_profiler/wikis/home)、[WeTest商店](https://wetest.oa.com/store/loli-profiler)
 
+**求助：目前的方案仍存在一个不同abi获取堆栈数据会[崩溃的问题](https://git.code.oa.com/xinhou/loli_profiler/issues/21)，有熟悉安卓开发的朋友，希望给一些改进建议**
+
 ![](res/images/macos.png)
 
 ![](res/images/macos_2.png)

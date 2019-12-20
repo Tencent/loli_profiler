@@ -1500,7 +1500,7 @@ void MainWindow::on_configPushButton_clicked() {
     auto minSizeSpinBox = new QSpinBox();
     minSizeSpinBox->setToolTip("Minimum capture size (Byte, recommend 128)");
     minSizeSpinBox->setSingleStep(32);
-    minSizeSpinBox->setRange(32, 1024);
+    minSizeSpinBox->setRange(32, 1024 * 1024 * 512);
     minSizeSpinBox->setValue(minCaptureSize);
     layout->addWidget(minSizeSpinBox);
     auto maxCallstackBufferSizeSpinBox = new QSpinBox();

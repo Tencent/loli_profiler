@@ -183,207 +183,159 @@
              <height>16777215</height>
             </size>
            </property>
-           <widget class="QLineEdit" name="appNameLineEdit">
-            <property name="geometry">
-             <rect>
-              <x>10</x>
-              <y>160</y>
-              <width>111</width>
-              <height>20</height>
-             </rect>
-            </property>
-            <property name="placeholderText">
-             <string>com.company.app</string>
-            </property>
-           </widget>
-           <widget class="QPushButton" name="launchPushButton">
-            <property name="geometry">
-             <rect>
-              <x>170</x>
-              <y>160</y>
-              <width>80</width>
-              <height>20</height>
-             </rect>
-            </property>
-            <property name="text">
-             <string>Launch</string>
-            </property>
-           </widget>
-           <widget class="QPushButton" name="sdkPushButton">
-            <property name="geometry">
-             <rect>
-              <x>170</x>
-              <y>40</y>
-              <width>81</width>
-              <height>20</height>
-             </rect>
-            </property>
-            <property name="toolTip">
-             <string>Select the root path of Android SDK</string>
-            </property>
-            <property name="text">
-             <string>Select SDK</string>
-            </property>
-           </widget>
-           <widget class="QLineEdit" name="sdkPathLineEdit">
-            <property name="geometry">
-             <rect>
-              <x>10</x>
-              <y>40</y>
-              <width>151</width>
-              <height>20</height>
-             </rect>
-            </property>
-            <property name="readOnly">
-             <bool>true</bool>
-            </property>
-            <property name="placeholderText">
-             <string>path to android sdk</string>
-            </property>
-           </widget>
-           <widget class="QSlider" name="chartScaleHSlider">
-            <property name="geometry">
-             <rect>
-              <x>10</x>
-              <y>10</y>
-              <width>241</width>
-              <height>16</height>
-             </rect>
-            </property>
-            <property name="toolTip">
-             <string>Shift+MouseWheel</string>
-            </property>
-            <property name="minimum">
-             <number>1</number>
-            </property>
-            <property name="maximum">
-             <number>500</number>
-            </property>
-            <property name="value">
-             <number>10</number>
-            </property>
-            <property name="orientation">
-             <enum>Qt::Horizontal</enum>
-            </property>
-           </widget>
-           <widget class="QPushButton" name="symbloPushButton">
-            <property name="geometry">
-             <rect>
-              <x>10</x>
-              <y>130</y>
-              <width>151</width>
-              <height>20</height>
-             </rect>
-            </property>
-            <property name="toolTip">
-             <string>Load symbols after capture is done</string>
-            </property>
-            <property name="text">
-             <string>Load Symblos</string>
-            </property>
-           </widget>
-           <widget class="QLineEdit" name="addr2LinePathLineEdit">
-            <property name="geometry">
-             <rect>
-              <x>10</x>
-              <y>100</y>
-              <width>151</width>
-              <height>20</height>
-             </rect>
-            </property>
-            <property name="readOnly">
-             <bool>true</bool>
-            </property>
-            <property name="placeholderText">
-             <string>path to addr2line</string>
-            </property>
-           </widget>
-           <widget class="QPushButton" name="addr2LinePushButton">
-            <property name="geometry">
-             <rect>
-              <x>170</x>
-              <y>100</y>
-              <width>81</width>
-              <height>20</height>
-             </rect>
-            </property>
-            <property name="text">
-             <string>Addr2line</string>
-            </property>
-           </widget>
-           <widget class="QPushButton" name="pythonPushButton">
-            <property name="geometry">
-             <rect>
-              <x>170</x>
-              <y>70</y>
-              <width>81</width>
-              <height>20</height>
-             </rect>
-            </property>
-            <property name="toolTip">
-             <string>Select the path of python executable</string>
-            </property>
-            <property name="text">
-             <string>Python</string>
-            </property>
-           </widget>
-           <widget class="QLineEdit" name="pythonPathLineEdit">
-            <property name="geometry">
-             <rect>
-              <x>10</x>
-              <y>70</y>
-              <width>151</width>
-              <height>20</height>
-             </rect>
-            </property>
-            <property name="readOnly">
-             <bool>true</bool>
-            </property>
-            <property name="placeholderText">
-             <string>path to python</string>
-            </property>
-           </widget>
-           <widget class="QPushButton" name="configPushButton">
-            <property name="geometry">
-             <rect>
-              <x>170</x>
-              <y>130</y>
-              <width>80</width>
-              <height>20</height>
-             </rect>
-            </property>
-            <property name="toolTip">
-             <string>Configure injecting behaviour</string>
-            </property>
-            <property name="text">
-             <string>Configure</string>
-            </property>
-           </widget>
-           <widget class="QToolButton" name="selectAppToolButton">
-            <property name="geometry">
-             <rect>
-              <x>130</x>
-              <y>160</y>
-              <width>31</width>
-              <height>19</height>
-             </rect>
-            </property>
-            <property name="toolTip">
-             <string>Select Target Application</string>
-            </property>
-            <property name="text">
-             <string>...</string>
-            </property>
-            <property name="popupMode">
-             <enum>QToolButton::DelayedPopup</enum>
-            </property>
-            <property name="autoRaise">
-             <bool>false</bool>
-            </property>
-            <property name="arrowType">
-             <enum>Qt::NoArrow</enum>
-            </property>
-           </widget>
+           <layout class="QGridLayout" name="gridLayout">
+            <item row="5" column="1">
+             <widget class="QToolButton" name="selectAppToolButton">
+              <property name="toolTip">
+               <string>Select Target Application</string>
+              </property>
+              <property name="text">
+               <string>...</string>
+              </property>
+              <property name="popupMode">
+               <enum>QToolButton::DelayedPopup</enum>
+              </property>
+              <property name="autoRaise">
+               <bool>false</bool>
+              </property>
+              <property name="arrowType">
+               <enum>Qt::NoArrow</enum>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="0" colspan="2">
+             <widget class="QLineEdit" name="addr2LinePathLineEdit">
+              <property name="readOnly">
+               <bool>true</bool>
+              </property>
+              <property name="placeholderText">
+               <string>path to addr2line</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="0" colspan="2">
+             <widget class="QLineEdit" name="sdkPathLineEdit">
+              <property name="readOnly">
+               <bool>true</bool>
+              </property>
+              <property name="placeholderText">
+               <string>path to android sdk</string>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="0" colspan="2">
+             <widget class="QLineEdit" name="pythonPathLineEdit">
+              <property name="readOnly">
+               <bool>true</bool>
+              </property>
+              <property name="placeholderText">
+               <string>path to python</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="2">
+             <widget class="QPushButton" name="sdkPushButton">
+              <property name="toolTip">
+               <string>Select the root path of Android SDK</string>
+              </property>
+              <property name="text">
+               <string>Select SDK</string>
+              </property>
+             </widget>
+            </item>
+            <item row="5" column="2">
+             <widget class="QPushButton" name="launchPushButton">
+              <property name="text">
+               <string>Launch</string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="0" colspan="3">
+             <widget class="QSlider" name="chartScaleHSlider">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="toolTip">
+               <string>Shift+MouseWheel</string>
+              </property>
+              <property name="minimum">
+               <number>1</number>
+              </property>
+              <property name="maximum">
+               <number>500</number>
+              </property>
+              <property name="value">
+               <number>10</number>
+              </property>
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </widget>
+            </item>
+            <item row="4" column="0" colspan="2">
+             <widget class="QPushButton" name="symbloPushButton">
+              <property name="toolTip">
+               <string>Load symbols after capture is done</string>
+              </property>
+              <property name="text">
+               <string>Load Symblos</string>
+              </property>
+             </widget>
+            </item>
+            <item row="5" column="0">
+             <widget class="QLineEdit" name="appNameLineEdit">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="placeholderText">
+               <string>com.company.app</string>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="2">
+             <widget class="QPushButton" name="pythonPushButton">
+              <property name="toolTip">
+               <string>Select the path of python executable</string>
+              </property>
+              <property name="text">
+               <string>Python</string>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="2">
+             <widget class="QPushButton" name="addr2LinePushButton">
+              <property name="text">
+               <string>Addr2line</string>
+              </property>
+             </widget>
+            </item>
+            <item row="4" column="2">
+             <widget class="QPushButton" name="configPushButton">
+              <property name="toolTip">
+               <string>Configure injecting behaviour</string>
+              </property>
+              <property name="text">
+               <string>Configure</string>
+              </property>
+             </widget>
+            </item>
+            <item row="6" column="0">
+             <widget class="QWidget" name="widget_2" native="true">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Minimum" vsizetype="Expanding">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+             </widget>
+            </item>
+           </layout>
           </widget>
          </item>
          <item>
@@ -419,6 +371,9 @@
           <widget class="QSplitter" name="lower_splitter">
            <property name="orientation">
             <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="childrenCollapsible">
+            <bool>false</bool>
            </property>
            <widget class="QWidget" name="verticalWidget" native="true">
             <property name="sizePolicy">

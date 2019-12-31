@@ -10,6 +10,8 @@
 
 **求助：目前的方案仍存在一个不同abi获取堆栈数据会[崩溃的问题](https://git.code.oa.com/xinhou/loli_profiler/issues/21)，有熟悉安卓开发的朋友，希望给一些改进建议**
 
+**提示：若您觉得Profiler工具本身或其实现原理对您所在的项目有所帮助，非常欢迎您[告诉我](https://git.code.oa.com/xinhou/loli_profiler/issues/23)项目的名称**
+
 ![](res/images/macos.png)
 
 ![](res/images/macos_2.png)

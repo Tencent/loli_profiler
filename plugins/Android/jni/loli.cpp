@@ -132,18 +132,21 @@ void *loliRealloc(void *ptr, size_t new_size) {
     std::ostringstream oss;
     auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime_).count();
     auto mem = realloc(ptr, new_size);
-    if (ptr == mem) {
-        oss << FREE_ << '\\' << ++callSeq_ << '\\' << ptr;
-        std::lock_guard<std::mutex> lock(cacheMutex_);
-        cache_.emplace_back(oss.str());
-        oss.str(std::string());
-        oss.clear();
-    }
-    oss << REALLOC_ << '\\' << ++callSeq_ << ',' << time << ',' << new_size << ',' << mem << '\\';
-    loli::dump(oss, buffer, loli::capture(buffer, maxCallstackBufferSize_));
+    if (mem != 0)
     {
-        std::lock_guard<std::mutex> lock(cacheMutex_);
-        cache_.emplace_back(oss.str());
+        {
+            oss << FREE_ << '\\' << ++callSeq_ << '\\' << ptr;
+            std::lock_guard<std::mutex> lock(cacheMutex_);
+            cache_.emplace_back(oss.str());
+            oss.str(std::string());
+            oss.clear();
+        }
+        oss << MALLOC_ << '\\' << ++callSeq_ << ',' << time << ',' << new_size << ',' << mem << '\\';
+        loli::dump(oss, buffer, loli::capture(buffer, maxCallstackBufferSize_));
+        {
+            std::lock_guard<std::mutex> lock(cacheMutex_);
+            cache_.emplace_back(oss.str());
+        }
     }
     return mem;
 }

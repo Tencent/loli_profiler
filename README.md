@@ -1,3 +1,7 @@
+## 写在前面
+
+**通过最近的宣传，已有同事对继续改进LoliProfiler、继续在这个方向做研究表示出合作的兴趣（已有游戏开发、性能工具开发、安卓开发的同事感兴趣），我也会开始筹备此项目的OTeam孵化工作，如果你对安卓平台性能优化感兴趣，也想与我们合作开发性能优化工具，也欢迎与我（xinhou）联系**
+
 # Loli Profiler
 
 轻量开源内存分析工具（Lightweight Opensource profiLing Instrument）

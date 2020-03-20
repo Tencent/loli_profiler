@@ -56,6 +56,8 @@ int minRecSize_ = 0;
 int maxCallstackBufferSize_ = 64;
 std::atomic<std::uint32_t> callSeq_;
 
+#define STACKBUFFERSIZE 128
+
 enum loliFlags {
     FREE_ = 0, 
     MALLOC_ = 1, 
@@ -67,12 +69,12 @@ enum loliFlags {
 void *loliMalloc(size_t size) {
     if (size < static_cast<size_t>(minRecSize_))
         return malloc(size);
-    void* buffer[maxCallstackBufferSize_];
+    static thread_local void* buffer[STACKBUFFERSIZE];
     std::ostringstream oss;
     auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime_).count();
     auto mem = malloc(size);
     oss << MALLOC_ << '\\' << ++callSeq_ << ',' << time << ',' << size << ',' << mem << '\\';
-    loli::dump(oss, buffer, loli::capture(buffer, maxCallstackBufferSize_));
+    loli::dump(oss, buffer, loli::capture(buffer, STACKBUFFERSIZE));
     {
         std::lock_guard<std::mutex> lock(cacheMutex_);
         cache_.emplace_back(oss.str());
@@ -96,12 +98,12 @@ void loliFree(void* ptr) {
 void *loliCalloc(int n, int size) {
     if (n * size < minRecSize_)
         return calloc(n, size);
-    void* buffer[maxCallstackBufferSize_];
+    static thread_local void* buffer[STACKBUFFERSIZE];
     std::ostringstream oss;
     auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime_).count();
     auto mem = calloc(n, size);
     oss << CALLOC_ << '\\' << ++callSeq_ << ','<< time << ',' << n * size << ',' << mem << '\\';
-    loli::dump(oss, buffer, loli::capture(buffer, maxCallstackBufferSize_));
+    loli::dump(oss, buffer, loli::capture(buffer, STACKBUFFERSIZE));
     {
         std::lock_guard<std::mutex> lock(cacheMutex_);
         cache_.emplace_back(oss.str());
@@ -112,12 +114,12 @@ void *loliCalloc(int n, int size) {
 void *loliMemalign(size_t alignment, size_t size) {
     if (size < static_cast<size_t>(minRecSize_))
         return memalign(alignment, size);
-    void* buffer[maxCallstackBufferSize_];
+    static thread_local void* buffer[STACKBUFFERSIZE];
     std::ostringstream oss;
     auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime_).count();
     auto mem = memalign(alignment, size);
     oss << MEMALIGN_ << '\\' << ++callSeq_ << ','<< time << ',' << size << ',' << mem << '\\';
-    loli::dump(oss, buffer, loli::capture(buffer, maxCallstackBufferSize_));
+    loli::dump(oss, buffer, loli::capture(buffer, STACKBUFFERSIZE));
     {
         std::lock_guard<std::mutex> lock(cacheMutex_);
         cache_.emplace_back(oss.str());
@@ -128,7 +130,7 @@ void *loliMemalign(size_t alignment, size_t size) {
 void *loliRealloc(void *ptr, size_t new_size) {
     if (new_size < static_cast<size_t>(minRecSize_))
         return realloc(ptr, new_size);
-    void* buffer[maxCallstackBufferSize_];
+    static thread_local void* buffer[STACKBUFFERSIZE];
     std::ostringstream oss;
     auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime_).count();
     auto mem = realloc(ptr, new_size);
@@ -142,7 +144,7 @@ void *loliRealloc(void *ptr, size_t new_size) {
             oss.clear();
         }
         oss << MALLOC_ << '\\' << ++callSeq_ << ',' << time << ',' << new_size << ',' << mem << '\\';
-        loli::dump(oss, buffer, loli::capture(buffer, maxCallstackBufferSize_));
+        loli::dump(oss, buffer, loli::capture(buffer, STACKBUFFERSIZE));
         {
             std::lock_guard<std::mutex> lock(cacheMutex_);
             cache_.emplace_back(oss.str());

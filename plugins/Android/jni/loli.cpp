@@ -14,6 +14,7 @@
 #include <thread>
 #include <vector>
 #include <unordered_set>
+#include <unordered_map>
 
 #ifdef __cplusplus
 extern "C" {
@@ -334,30 +335,27 @@ void dump(std::ostream& os, void** buffer, size_t count) {
         const void* addr = buffer[idx];
         if (addr == prevAddr) // skip same addr
             continue;
-        Dl_info info;
-        if (dladdr(addr, &info)) {
-            int status = 0;
-            {
-                auto demangled = __cxxabiv1::__cxa_demangle(info.dli_fname, 0, 0, &status);
-                const char* dlname = (status == 0 && demangled != nullptr) ? demangled : info.dli_fname;
-                auto shortdlname = strrchr(dlname, '/');
-                os << (shortdlname ? shortdlname + 1 : dlname) << '\\';
-                if (demangled != nullptr) free(demangled);
+        static thread_local std::unordered_map<const void*, Dl_info> dlInfoCache;
+        auto it = dlInfoCache.find(addr);
+        if (it == dlInfoCache.end()) {
+            Dl_info info;
+            if (dladdr(addr, &info)) {
+                it = dlInfoCache.emplace(addr, info).first;
+            } else {
+                continue;
             }
-            // don't demangle function names, because they might be very loooooong
-            // if (info.dli_sname != nullptr) {
-            //     auto demangled = __cxxabiv1::__cxa_demangle(info.dli_sname, 0, 0, &status);
-            //     if (status == 0 && demangled != nullptr) {
-            //         os << demangled << '\\';
-            //     } else {
-            //         os << info.dli_sname << '\\';
-            //     }
-            //     if (demangled != nullptr) free(demangled);
-            // } else {
-                const void* reladdr = (void*)((_Unwind_Word)addr - (_Unwind_Word)info.dli_fbase);
-                os << reladdr << '\\';
-            // }
         }
+        Dl_info& info = it->second;
+        int status = 0;
+        {
+            auto demangled = __cxxabiv1::__cxa_demangle(info.dli_fname, 0, 0, &status);
+            const char* dlname = (status == 0 && demangled != nullptr) ? demangled : info.dli_fname;
+            auto shortdlname = strrchr(dlname, '/');
+            os << (shortdlname ? shortdlname + 1 : dlname) << '\\';
+            if (demangled != nullptr) free(demangled);
+        }
+        const void* reladdr = (void*)((_Unwind_Word)addr - (_Unwind_Word)info.dli_fbase);
+        os << reladdr << '\\';
         prevAddr = addr;
     }
 }

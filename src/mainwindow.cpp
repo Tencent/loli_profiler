@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 #include "timeprofiler.h"
+#include "configdialog.h"
 #include "customgraphicsview.h"
 #include "treemapgraphicsview.h"
 #include "memgraphicsview.h"
@@ -657,27 +658,6 @@ void MainWindow::ReadSMapsFile(QFile* file) {
     }
 }
 
-bool MainWindow::CreateIfNoConfigFile() {
-    auto cfgPath = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).first();
-    QFile file(cfgPath + "/loli.conf");
-    if (!file.exists()) {
-        if (!QDir(cfgPath).mkpath(cfgPath)) {
-            QMessageBox::warning(this, "Warning", "Can't create application data path: " + cfgPath);
-            return false;
-        }
-        file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
-        if (file.open(QIODevice::ReadWrite | QIODevice::Truncate | QIODevice::Text)) {
-            QTextStream stream(&file);
-            stream << "256\nlibunity,libil2cpp\n64";
-            stream.flush();
-            return true;
-        } else {
-            return false;
-        }
-    }
-    return true;
-}
-
 void MainWindow::GetMergedCallstacks(QList<QTreeWidgetItem*>& topLevelItems) {
     auto model = filteredStacktraceModel_;
     auto count = model->rowCount();
@@ -754,6 +734,66 @@ void MainWindow::GetMergedCallstacks(QList<QTreeWidgetItem*>& topLevelItems) {
         if (child != nullptr && child->parent() == nullptr)
             topLevelItems.push_back(child);
     }
+}
+
+void MainWindow::StopCaptureProcess() {
+    progressDialog_->setWindowTitle("Stop Capture Progress");
+    progressDialog_->setLabelText(QString("Stopping capture ..."));
+    progressDialog_->setMinimum(0);
+    progressDialog_->setMaximum(2);
+    progressDialog_->setValue(0);
+    progressDialog_->show();
+    Print(QString("Captured %1 records.").arg(stacktraceModel_->rowCount()));
+    ConnectionFailed();
+    for (auto& library : libraries_)
+        ui->libraryComboBox->addItem(library);
+    OnTimelineRubberBandHide();
+    ShowSummary();
+    progressDialog_->setValue(1);
+    progressDialog_->setLabelText("Requesting smaps info from device.");
+    QProcess process;
+    QStringList arguments;
+    arguments << "shell" << "run-as" << ui->appNameLineEdit->text() <<
+                 "cat" << "/proc/" + memInfoProcess_->GetAppPid() + "/smaps" << ">" << "/data/local/tmp/smaps.txt";
+    process.setProgram(adbPath_);
+#ifdef Q_OS_WIN
+    process.setNativeArguments(arguments.join(' '));
+#else
+    process.setArguments(arguments);
+#endif
+    process.start();
+    auto readSMaps = false;
+    process.waitForStarted();
+    process.waitForFinished();
+    if (process.isReadable()) {
+        process.readAll();
+        process.close();
+        auto smapsPath = QCoreApplication::applicationDirPath() + "/smaps.txt";
+        arguments.clear();
+        arguments << "pull" << "/data/local/tmp/smaps.txt" << smapsPath;
+        process.setProgram(adbPath_);
+#ifdef Q_OS_WIN
+        process.setNativeArguments(arguments.join(' '));
+#else
+        process.setArguments(arguments);
+#endif
+        process.start();
+        process.waitForStarted();
+        process.waitForFinished();
+        process.close();
+        QFile file(smapsPath);
+        if (file.exists()) {
+            if (file.open(QFile::OpenModeFlag::ReadOnly)) {
+                ReadSMapsFile(&file);
+                readSMaps = true;
+            }
+            file.remove();
+        }
+    }
+    if (!readSMaps) {
+        Print("Failed to cat proc/pid/smaps");
+    }
+    progressDialog_->setValue(2);
 }
 
 void MainWindow::FixedUpdate() {
@@ -1199,7 +1239,7 @@ void MainWindow::on_actionVisualize_SMaps_triggered() {
         if (visibleSections.count() == sMapsSections_.count())
             break;
     }
-    auto sectionNames = visibleSections.toList();
+    auto sectionNames = visibleSections.values();
     sectionNames.sort(Qt::CaseSensitivity::CaseInsensitive);
     sectionComboBox->addItems(sectionNames);
     fragView->setScene(fragScene);
@@ -1259,7 +1299,7 @@ void MainWindow::on_actionShow_Callstacks_In_TreeMap_triggered() {
 }
 
 void MainWindow::on_actionAbout_triggered() {
-    QMessageBox::about(this, "About MoreFun Loli Profiler", "Copyright 2019 MoreFun Studio Group, Tencent.");
+    QMessageBox::about(this, "About Loli Profiler", "Copyright 2020 Tencent.");
 }
 
 void MainWindow::on_sdkPushButton_clicked() {
@@ -1273,63 +1313,7 @@ void MainWindow::on_launchPushButton_clicked() {
     adbPath_ = adbPath_.size() == 0 ? "adb" : adbPath_ + "/platform-tools/adb";
 
     if (isConnected_) {
-        progressDialog_->setWindowTitle("Stop Capture Progress");
-        progressDialog_->setLabelText(QString("Stopping capture ..."));
-        progressDialog_->setMinimum(0);
-        progressDialog_->setMaximum(2);
-        progressDialog_->setValue(0);
-        progressDialog_->show();
-        Print(QString("Captured %1 records.").arg(stacktraceModel_->rowCount()));
-        ConnectionFailed();
-        for (auto& library : libraries_)
-            ui->libraryComboBox->addItem(library);
-        OnTimelineRubberBandHide();
-        ShowSummary();
-        progressDialog_->setValue(1);
-        progressDialog_->setLabelText("Requesting smaps info from device.");
-        QProcess process;
-        QStringList arguments;
-        arguments << "shell" << "run-as" << ui->appNameLineEdit->text() <<
-                     "cat" << "/proc/" + memInfoProcess_->GetAppPid() + "/smaps" << ">" << "/data/local/tmp/smaps.txt";
-        process.setProgram(adbPath_);
-#ifdef Q_OS_WIN
-        process.setNativeArguments(arguments.join(' '));
-#else
-        process.setArguments(arguments);
-#endif
-        process.start();
-        auto readSMaps = false;
-        if (process.waitForStarted()) {
-            if (process.waitForFinished()) {
-                if (process.readAll().size() == 0) {
-                    process.close();
-                    auto smapsPath = QCoreApplication::applicationDirPath() + "/smaps.txt";
-                    arguments.clear();
-                    arguments << "pull" << "/data/local/tmp/smaps.txt" << smapsPath;
-                    process.setProgram(adbPath_);
-#ifdef Q_OS_WIN
-                    process.setNativeArguments(arguments.join(' '));
-#else
-                    process.setArguments(arguments);
-#endif
-                    process.start();
-                    process.waitForStarted();
-                    process.waitForFinished();
-                    QFile file(smapsPath);
-                    if (file.exists()) {
-                        if (file.open(QFile::OpenModeFlag::ReadOnly)) {
-                            ReadSMapsFile(&file);
-                            readSMaps = true;
-                        }
-                        file.remove();
-                    }
-                }
-            }
-        }
-        if (!readSMaps) {
-            Print("Failed to cat proc/pid/smaps");
-        }
-        progressDialog_->setValue(2);
+        StopCaptureProcess();
         return;
     }
 
@@ -1339,7 +1323,7 @@ void MainWindow::on_launchPushButton_clicked() {
         return;
     }
 
-    if (!CreateIfNoConfigFile())
+    if (!ConfigDialog::CreateIfNoConfigFile(this))
         return;
 
     progressDialog_->setWindowTitle("Launch Progress");
@@ -1459,100 +1443,19 @@ void MainWindow::on_addr2LinePushButton_clicked() {
 }
 
 void MainWindow::on_configPushButton_clicked() {
-    QDialog editDialog(this, Qt::WindowTitleHint | Qt::WindowCloseButtonHint);
-    auto layout = new QVBoxLayout();
-    auto cfgPath = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).first();
-    if (!CreateIfNoConfigFile())
-        return;
-    // load and parse config
-    auto minCaptureSize = 128;
-    auto maxCallstackBufferSize = 64;
-    auto desiredLibs = QStringList() << "libunity" << "libil2cpp";
-    QFile file(cfgPath + "/loli.conf");
-    file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
-    if (file.open(QIODevice::ReadOnly)) {
-        QTextStream stream(file.readAll());
-        QString line;
-        int lineNum = 0;
-        while (stream.readLineInto(&line)) {
-            if (lineNum == 0) {
-                minCaptureSize = line.toInt();
-            } else if (lineNum == 1) {
-                desiredLibs = line.split(',', QString::SplitBehavior::SkipEmptyParts);
-            } else {
-                maxCallstackBufferSize = line.toInt();
-                break;
-            }
-            lineNum++;
-        }
-    }
-    file.close();
-    // show gui
-    layout->setMargin(2);
-    layout->setSpacing(2);
     QSettings settings("MoreFun", "LoliProfiler");
-    auto archCombo = new QComboBox();
-    archCombo->setToolTip("Application architecture");
-    archCombo->addItems(QStringList() << "armeabi-v7a" << "arm64-v8a");
     targetArch_ = settings.value(SETTINGS_ARCH).toString();
-    archCombo->setCurrentText(targetArch_);
-    layout->addWidget(archCombo);
-    auto minSizeSpinBox = new QSpinBox();
-    minSizeSpinBox->setToolTip("Minimum capture size (Byte, recommend 128)");
-    minSizeSpinBox->setSingleStep(32);
-    minSizeSpinBox->setRange(0, 1024 * 1024 * 512);
-    minSizeSpinBox->setValue(minCaptureSize);
-    layout->addWidget(minSizeSpinBox);
-    auto maxCallstackBufferSizeSpinBox = new QSpinBox();
-    maxCallstackBufferSizeSpinBox->setToolTip("Callstack buffer size (Byte, recommend 64)");
-    maxCallstackBufferSizeSpinBox->setSingleStep(16);
-    maxCallstackBufferSizeSpinBox->setRange(0, 1024);
-    maxCallstackBufferSizeSpinBox->setValue(maxCallstackBufferSize);
-    layout->addWidget(maxCallstackBufferSizeSpinBox);
-    auto libList = new QListWidget();
-    libList->addItems(desiredLibs);
-    for (int i = 0; i < libList->count(); i++) {
-        auto item = libList->item(i);
-        item->setFlags(item->flags() | Qt::ItemIsEditable);
-    }
-    libList->setMinimumHeight(200);
-    libList->setVerticalScrollBarPolicy(Qt::ScrollBarPolicy::ScrollBarAlwaysOn);
-    libList->setContextMenuPolicy(Qt::CustomContextMenu);
-    connect(libList, &QListWidget::customContextMenuRequested, [&](const QPoint &pos){
-        QMenu menu;
-        menu.addAction("New", [&]() {
-            libList->addItem("libfoo");
-            auto item = libList->item(libList->count() - 1);
-            item->setFlags(item->flags() | Qt::ItemIsEditable);
-        });
-        menu.addAction("Delete", [&]() {
-            for (int i = 0; i < libList->selectedItems().size(); ++i)
-                delete libList->takeItem(libList->currentRow());
-        });
-        menu.exec(libList->mapToGlobal(pos));
+    if (!ConfigDialog::CreateIfNoConfigFile(this))
+        return;
+    ConfigDialog dialog(this);
+    dialog.setWindowFlags(dialog.windowFlags() | Qt::WindowTitleHint | Qt::WindowCloseButtonHint);
+    dialog.setWindowModality(Qt::WindowModal);
+    dialog.LoadConfigFile(targetArch_);
+    connect(&dialog, &QDialog::finished, [this, &dialog, &settings](int) {
+        targetArch_ = dialog.GetArchString();
+        settings.setValue(SETTINGS_ARCH, targetArch_);
     });
-    layout->addWidget(libList);
-    editDialog.setLayout(layout);
-    editDialog.setWindowModality(Qt::WindowModal);
-    editDialog.setWindowTitle("Edit Configuration");
-    editDialog.setMinimumSize(400, 300);
-    editDialog.resize(400, 300);
-    editDialog.exec();
-    // save config
-    targetArch_ = archCombo->currentText();
-    settings.setValue(SETTINGS_ARCH, targetArch_);
-    if (file.open(QIODevice::ReadWrite | QIODevice::Truncate | QIODevice::Text)) {
-        QTextStream stream(&file);
-        stream << minSizeSpinBox->value() << endl;
-        auto numLibs = libList->count();
-        for (int i = 0; i < numLibs; i++) {
-            stream << libList->item(i)->text();
-            if (i != numLibs - 1) stream << ',';
-        }
-        stream << endl;
-        stream << maxCallstackBufferSizeSpinBox->value() << endl;
-        stream.flush();
-    }
+    dialog.exec();
 }
 
 class ArrowLineEdit : public QLineEdit {

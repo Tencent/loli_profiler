@@ -44,7 +44,7 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, QPro
     { // push remote folder to /data/local/tmp
         dialog->setLabelText("Pushing loli.conf to device.");
         arguments.clear();
-        arguments << "push" << "loli.conf" << "/data/local/tmp";
+        arguments << "push" << "loli2.conf" << "/data/local/tmp";
         QProcess process;
         process.setWorkingDirectory(QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).first());
         process.setProgram(execPath);
@@ -55,12 +55,12 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, QPro
 #endif
         process.start();
         if (!process.waitForStarted()) {
-            errorStr_ = "erro starting: adb push loli.conf /data/local/tmp";
+            errorStr_ = "erro starting: adb push loli2.conf /data/local/tmp";
             emit ProcessErrorOccurred();
             return;
         }
         if (!process.waitForFinished()) {
-            errorStr_ = "erro finishing: adb push loli.conf /data/local/tmp";
+            errorStr_ = "erro finishing: adb push loli2.conf /data/local/tmp";
             emit ProcessErrorOccurred();
             return;
         }

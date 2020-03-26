@@ -30,6 +30,7 @@ SOURCES += \
         src/adbprocess.cpp \
         src/addressprocess.cpp \
         src/charttooltipitem.cpp \
+        src/configdialog.cpp \
         src/customgraphicsview.cpp \
         src/fixedscrollarea.cpp \
         src/interactivechartview.cpp \
@@ -49,6 +50,7 @@ HEADERS += \
         include/adbprocess.h \
         include/addressprocess.h \
         include/charttooltipitem.h \
+        include/configdialog.h \
         include/customgraphicsview.h \
         include/fixedscrollarea.h \
         include/interactivechartview.h \
@@ -65,6 +67,7 @@ HEADERS += \
         include/treemapgraphicsview.h
 
 FORMS += \
+        configdialog.ui \
         mainwindow.ui
 
 # Default rules for deployment.

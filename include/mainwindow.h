@@ -58,8 +58,9 @@ private:
     void FilterStackTraceModel();
     void SwitchStackTraceModel(StackTraceProxyModel* model);
     void ReadSMapsFile(QFile* file);
-    bool CreateIfNoConfigFile();
     void GetMergedCallstacks(QList<QTreeWidgetItem*>& topLevelItems);
+
+    void StopCaptureProcess();
 
 private slots:
     void FixedUpdate();

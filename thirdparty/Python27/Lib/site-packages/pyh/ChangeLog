@@ -1,0 +1,10 @@
+2010-05-21 Emmanuel Turlay <turlay@cern.ch>
+	* Added <ul>, <ol> and <li> tags
+	
+2010-05-17 Emmanuel Turlay <turlay@cern.ch>
+	* Removed TagCounter class and IsLegal function
+	
+2010-05-17 Emmanuel Turlay <turlay@cern.ch>
+	* A little bit of clean-up
+	* Added README, MANIFEST, ChangeLog, img, examples
+	

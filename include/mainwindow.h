@@ -91,12 +91,9 @@ private slots:
     void on_actionShow_Merged_Callstacks_triggered();
     void on_actionShow_Callstacks_In_TreeMap_triggered();
     void on_actionAbout_triggered();
-    void on_sdkPushButton_clicked();
     void on_launchPushButton_clicked();
     void on_chartScaleHSlider_valueChanged(int value);
     void on_symbloPushButton_clicked();
-    void on_addr2LinePushButton_clicked();
-    void on_pythonPushButton_clicked();
     void on_configPushButton_clicked();
     void on_selectAppToolButton_clicked();
     void on_memSizeComboBox_currentIndexChanged(int index);
@@ -113,7 +110,6 @@ private:
     StackTraceProxyModel *filteredStacktraceProxyModel_;
     QHash<QUuid, QVector<QString>> callStackMap_;
     QSet<QString> libraries_;
-    QString adbPath_;
     QString appPid_;
     QString lastOpenDir_;
     QString lastSymbolDir_;

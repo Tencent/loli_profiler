@@ -184,7 +184,17 @@
             </size>
            </property>
            <layout class="QGridLayout" name="gridLayout">
-            <item row="5" column="1">
+            <item row="1" column="0" colspan="2">
+             <widget class="QPushButton" name="symbloPushButton">
+              <property name="toolTip">
+               <string>Load symbols after capture is done</string>
+              </property>
+              <property name="text">
+               <string>Load Symblos</string>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="1">
              <widget class="QToolButton" name="selectAppToolButton">
               <property name="toolTip">
                <string>Select Target Application</string>
@@ -203,47 +213,27 @@
               </property>
              </widget>
             </item>
-            <item row="3" column="0" colspan="2">
-             <widget class="QLineEdit" name="addr2LinePathLineEdit">
-              <property name="readOnly">
-               <bool>true</bool>
-              </property>
-              <property name="placeholderText">
-               <string>path to addr2line</string>
-              </property>
-             </widget>
-            </item>
-            <item row="1" column="0" colspan="2">
-             <widget class="QLineEdit" name="sdkPathLineEdit">
-              <property name="readOnly">
-               <bool>true</bool>
-              </property>
-              <property name="placeholderText">
-               <string>path to android sdk</string>
-              </property>
-             </widget>
-            </item>
-            <item row="2" column="0" colspan="2">
-             <widget class="QLineEdit" name="pythonPathLineEdit">
-              <property name="readOnly">
-               <bool>true</bool>
-              </property>
-              <property name="placeholderText">
-               <string>path to python</string>
-              </property>
-             </widget>
-            </item>
             <item row="1" column="2">
-             <widget class="QPushButton" name="sdkPushButton">
+             <widget class="QPushButton" name="configPushButton">
               <property name="toolTip">
-               <string>Select the root path of Android SDK</string>
+               <string>Configure injecting behaviour</string>
               </property>
               <property name="text">
-               <string>Select SDK</string>
+               <string>Configure</string>
               </property>
              </widget>
             </item>
-            <item row="5" column="2">
+            <item row="3" column="0">
+             <widget class="QWidget" name="widget_2" native="true">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Minimum" vsizetype="Expanding">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="2">
              <widget class="QPushButton" name="launchPushButton">
               <property name="text">
                <string>Launch</string>
@@ -275,17 +265,7 @@
               </property>
              </widget>
             </item>
-            <item row="4" column="0" colspan="2">
-             <widget class="QPushButton" name="symbloPushButton">
-              <property name="toolTip">
-               <string>Load symbols after capture is done</string>
-              </property>
-              <property name="text">
-               <string>Load Symblos</string>
-              </property>
-             </widget>
-            </item>
-            <item row="5" column="0">
+            <item row="2" column="0">
              <widget class="QLineEdit" name="appNameLineEdit">
               <property name="sizePolicy">
                <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
@@ -295,43 +275,6 @@
               </property>
               <property name="placeholderText">
                <string>com.company.app</string>
-              </property>
-             </widget>
-            </item>
-            <item row="2" column="2">
-             <widget class="QPushButton" name="pythonPushButton">
-              <property name="toolTip">
-               <string>Select the path of python executable</string>
-              </property>
-              <property name="text">
-               <string>Python</string>
-              </property>
-             </widget>
-            </item>
-            <item row="3" column="2">
-             <widget class="QPushButton" name="addr2LinePushButton">
-              <property name="text">
-               <string>Addr2line</string>
-              </property>
-             </widget>
-            </item>
-            <item row="4" column="2">
-             <widget class="QPushButton" name="configPushButton">
-              <property name="toolTip">
-               <string>Configure injecting behaviour</string>
-              </property>
-              <property name="text">
-               <string>Configure</string>
-              </property>
-             </widget>
-            </item>
-            <item row="6" column="0">
-             <widget class="QWidget" name="widget_2" native="true">
-              <property name="sizePolicy">
-               <sizepolicy hsizetype="Minimum" vsizetype="Expanding">
-                <horstretch>0</horstretch>
-                <verstretch>0</verstretch>
-               </sizepolicy>
               </property>
              </widget>
             </item>
@@ -631,7 +574,7 @@
      <x>0</x>
      <y>0</y>
      <width>1024</width>
-     <height>22</height>
+     <height>25</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuFile">

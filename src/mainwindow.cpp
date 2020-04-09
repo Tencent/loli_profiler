@@ -6,6 +6,7 @@
 #include "treemapgraphicsview.h"
 #include "memgraphicsview.h"
 #include "selectappdialog.h"
+#include "pathutils.h"
 
 #include <QClipboard>
 #include <QDataStream>
@@ -36,6 +37,9 @@
 
 #define APP_MAGIC 0xA4B3C2D1
 #define APP_VERSION 105
+
+#define ANDROID_SDK_NOTFOUND_MSG "Android SDK not found. Please select Android SDK's location in configuration panel."
+#define ANDROID_NDK_NOTFOUND_MSG "Android NDK not found. Please select Android NDK's location in configuration panel."
 
 enum class IOErrorCode : qint32 {
     NONE = 0,
@@ -164,16 +168,15 @@ MainWindow::~MainWindow() {
 const QString SETTINGS_WINDOW_W = "Window_W";
 const QString SETTINGS_WINDOW_H = "Window_H";
 const QString SETTINGS_APPNAME = "AppName";
-const QString SETTINGS_SDKPATH = "SdkPath";
 const QString SETTINGS_MAIN_SPLITER = "Main_Spliter";
 const QString SETTINGS_UPPER_SPLITER = "Upper_Spliter";
 const QString SETTINGS_LOWER__SPLITER = "Lower_Spliter";
 const QString SETTINGS_SCALEHSLIDER = "ChartScaleHSlider";
 const QString SETTINGS_LASTOPENDIR = "lastopen_dir";
 const QString SETTINGS_LASTSYMBOLDIR = "lastsymbol_dir";
-const QString SETTINGS_ADDR2LINEPATH = "addr2line_path";
-const QString SETTINGS_PYTHONPATH = "python_path";
 const QString SETTINGS_ARCH = "target_arch";
+const QString SETTINGS_ANDROIDSDK = "AndroidSDK";
+const QString SETTINGS_ANDROIDNDK = "AndroidNDK";
 
 void MainWindow::LoadSettings() {
     QSettings settings("MoreFun", "LoliProfiler");
@@ -183,73 +186,6 @@ void MainWindow::LoadSettings() {
         this->resize(windowWidth, windowHeight);
     }
     ui->appNameLineEdit->setText(settings.value(SETTINGS_APPNAME).toString());
-    ui->addr2LinePathLineEdit->setText(settings.value(SETTINGS_ADDR2LINEPATH).toString());
-    //auto config
-
-    //    if (!QFile::exists(pythonPath)) {
-    //QMessageBox::warning(this, "Warning", sdkPath);
-    QString python2path= "";
-    if(settings.value(SETTINGS_SDKPATH).toString().isEmpty() || settings.value(SETTINGS_SDKPATH).toString().isNull())
-    {
-            QString username;
-            bool isFindFlag = false;
-#ifdef Q_OS_WIN
-            auto name = getenv("USERNAME"); //for windows
-            username = name;
-            //android studio default path
-            QString sdkPath = "C:/Users/";
-            sdkPath.append(name);
-            sdkPath.append("/AppData/Local/Android/sdk");
-            if (QFile::exists(sdkPath)){
-                isFindFlag = true;
-                //ndk-bundle\prebuilt\windows-x86_64\bin
-                python2path = sdkPath + "/ndk-bundle/prebuilt/windows-x86_64/bin";
-                ui->pythonPathLineEdit->setText(python2path);
-            }
-            else{
-                //nvidia debugger path//
-                //NVPACK\android-sdk-windows//
-                std::vector<QString> cvec = std::vector<QString>{"C", "D", "E", "F","G"};
-
-                for(auto iter: cvec){
-                    auto path1 = iter.append(":/").append("NVPACK/android-sdk-windows");
-                    if (QFile::exists(path1)){
-                        isFindFlag = true;
-                        break;
-                    }
-                }
-
-
-                //https://developer.android.com/ndk/downloads/index.html download path//
-                //C/D/E/F/G:\NVPACK/android-sdk-windows//
-                if (QFile::exists(sdkPath.append(name).append("/Downloads"))){
-                    isFindFlag = true;
-                    //todo: some problem, the path name is android-ndk-r21, android-ndk-r16b. not const
-                }
-            }
-            //C:\Users\USER\Downloads
-#else
-            auto name = getenv("USER");
-            QString sdkPath = "Users/";
-            sdkPath.append(name);
-            sdkPath.append("/Library/Android/sdk");
-            if (QFile::exists(sdkPath)){
-                isFindFlag = true;
-                //ndk-bundle\prebuilt\darwin-x86_64\bin
-                python2path = sdkPath + "/ndk-bundle/prebuilt/darwin-x86_64/bin";
-                ui->pythonPathLineEdit->setText(python2path);
-            }
-#endif
-
-    }
-    else
-        ui->sdkPathLineEdit->setText(settings.value(SETTINGS_SDKPATH).toString());
-
-    if(settings.value(SETTINGS_PYTHONPATH).toString().isEmpty() || settings.value(SETTINGS_PYTHONPATH).toString().isNull())
-        ui->pythonPathLineEdit->setText(python2path);
-    else
-        ui->pythonPathLineEdit->setText(settings.value(SETTINGS_PYTHONPATH).toString());
-    //
     ui->main_splitter->restoreState(settings.value(SETTINGS_MAIN_SPLITER).toByteArray());
     ui->upper_splitter->restoreState(settings.value(SETTINGS_UPPER_SPLITER).toByteArray());
     ui->lower_splitter->restoreState(settings.value(SETTINGS_LOWER__SPLITER).toByteArray());
@@ -261,6 +197,12 @@ void MainWindow::LoadSettings() {
     if (QDir(lastSymbolDir).exists())
         lastSymbolDir_ = lastSymbolDir;
     targetArch_ = settings.value(SETTINGS_ARCH, "armeabi-v7a").toString();
+
+    PathUtils::SetSDKPath(settings.value(SETTINGS_ANDROIDSDK).toString());
+    PathUtils::SetNDKPath(settings.value(SETTINGS_ANDROIDNDK).toString());
+
+    qDebug() << PathUtils::GetSDKPath();
+    qDebug() << PathUtils::GetNDKPath();
 }
 
 void MainWindow::SaveSettings() {
@@ -268,9 +210,6 @@ void MainWindow::SaveSettings() {
     settings.setValue(SETTINGS_WINDOW_W, this->width());
     settings.setValue(SETTINGS_WINDOW_H, this->height());
     settings.setValue(SETTINGS_APPNAME, ui->appNameLineEdit->text());
-    settings.setValue(SETTINGS_SDKPATH, ui->sdkPathLineEdit->text());
-    settings.setValue(SETTINGS_ADDR2LINEPATH, ui->addr2LinePathLineEdit->text());
-    settings.setValue(SETTINGS_PYTHONPATH, ui->pythonPathLineEdit->text());
     settings.setValue(SETTINGS_MAIN_SPLITER, ui->main_splitter->saveState());
     settings.setValue(SETTINGS_UPPER_SPLITER, ui->upper_splitter->saveState());
     settings.setValue(SETTINGS_LOWER__SPLITER, ui->lower_splitter->saveState());
@@ -279,6 +218,8 @@ void MainWindow::SaveSettings() {
         settings.setValue(SETTINGS_LASTOPENDIR, lastOpenDir_);
     if (QDir(lastSymbolDir_).exists())
         settings.setValue(SETTINGS_LASTSYMBOLDIR, lastSymbolDir_);
+    settings.setValue(SETTINGS_ANDROIDSDK, PathUtils::GetSDKPath());
+    settings.setValue(SETTINGS_ANDROIDNDK, PathUtils::GetNDKPath());
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {
@@ -528,7 +469,6 @@ void MainWindow::ConnectionFailed() {
     stacktraceProcess_->Disconnect();
     ui->appNameLineEdit->setEnabled(true);
     ui->launchPushButton->setText("Launch");
-    ui->sdkPushButton->setEnabled(true);
     ui->actionOpen->setEnabled(true);
     ui->stackTableView->setSortingEnabled(true);
 }
@@ -820,7 +760,7 @@ void MainWindow::StopCaptureProcess() {
     QStringList arguments;
     arguments << "shell" << "run-as" << ui->appNameLineEdit->text() <<
                  "cat" << "/proc/" + memInfoProcess_->GetAppPid() + "/smaps" << ">" << "/data/local/tmp/smaps.txt";
-    process.setProgram(adbPath_);
+    process.setProgram(PathUtils::GetADBExecutablePath());
 #ifdef Q_OS_WIN
     process.setNativeArguments(arguments.join(' '));
 #else
@@ -836,7 +776,7 @@ void MainWindow::StopCaptureProcess() {
         auto smapsPath = QCoreApplication::applicationDirPath() + "/smaps.txt";
         arguments.clear();
         arguments << "pull" << "/data/local/tmp/smaps.txt" << smapsPath;
-        process.setProgram(adbPath_);
+        process.setProgram(PathUtils::GetADBExecutablePath());
 #ifdef Q_OS_WIN
         process.setNativeArguments(arguments.join(' '));
 #else
@@ -952,9 +892,9 @@ void MainWindow::StartAppProcessFinished(AdbProcess* process) {
         return;
     }
     isConnected_ = true;
-    screenshotProcess_->SetExecutablePath(adbPath_);
-    stacktraceProcess_->SetExecutablePath(adbPath_);
-    memInfoProcess_->SetExecutablePath(adbPath_);
+    screenshotProcess_->SetExecutablePath(PathUtils::GetADBExecutablePath());
+    stacktraceProcess_->SetExecutablePath(PathUtils::GetADBExecutablePath());
+    memInfoProcess_->SetExecutablePath(PathUtils::GetADBExecutablePath());
     lastScreenshotTime_ = time_ = 0;
     Print("Application Started!");
     stacktraceRetryCount_ = 30;
@@ -1367,24 +1307,20 @@ void MainWindow::on_actionAbout_triggered() {
     QMessageBox::about(this, "About Loli Profiler", "Copyright 2020 Tencent.");
 }
 
-void MainWindow::on_sdkPushButton_clicked() {
-    auto path = QFileDialog::getExistingDirectory(this, tr("Select Directory"), "",
-                                      QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
-    ui->sdkPathLineEdit->setText(path);
-}
-
 void MainWindow::on_launchPushButton_clicked() {
-    adbPath_ = ui->sdkPathLineEdit->text();
-    adbPath_ = adbPath_.size() == 0 ? "adb" : adbPath_ + "/platform-tools/adb";
-
     if (isConnected_) {
         StopCaptureProcess();
         return;
     }
 
-    auto pythonPath = ui->pythonPathLineEdit->text();
-    if (!QFile::exists(pythonPath)) {
-        QMessageBox::warning(this, "Warning", "Please select python path first.");
+    auto adbPath = PathUtils::GetADBExecutablePath();
+    if (adbPath.isEmpty() || !QFile::exists(adbPath)) {
+        QMessageBox::warning(this, "Warning", ANDROID_SDK_NOTFOUND_MSG);
+        return;
+    }
+    auto pythonPath = PathUtils::GetPythonPath();
+    if (pythonPath.isEmpty() || !QFile::exists(pythonPath)) {
+        QMessageBox::warning(this, "Warning", ANDROID_NDK_NOTFOUND_MSG);
         return;
     }
 
@@ -1410,7 +1346,6 @@ void MainWindow::on_launchPushButton_clicked() {
     ui->libraryComboBox->setCurrentIndex(0);
     while (ui->libraryComboBox->count() > 1)
         ui->libraryComboBox->removeItem(ui->libraryComboBox->count() - 1);
-    ui->sdkPushButton->setEnabled(true);
     ui->appNameLineEdit->setEnabled(false);
     ui->launchPushButton->setText("Stop Capture");
     ui->actionOpen->setEnabled(false);
@@ -1429,7 +1364,7 @@ void MainWindow::on_launchPushButton_clicked() {
     UpdateMemInfoRange();
 
     startAppProcess_->SetPythonPath(pythonPath);
-    startAppProcess_->SetExecutablePath(adbPath_);
+    startAppProcess_->SetExecutablePath(adbPath);
     startAppProcess_->StartApp(ui->appNameLineEdit->text(), targetArch_, progressDialog_);
 
     isCapturing_ = true;
@@ -1447,10 +1382,11 @@ void MainWindow::on_symbloPushButton_clicked() {
     if (!QFile::exists(symbloPath))
         return;
     lastSymbolDir_ = QFileInfo(symbloPath).dir().absolutePath();
-    auto addr2linePath = ui->addr2LinePathLineEdit->text();
-    QFile file(addr2linePath);
-    if (!file.exists())
+    auto addr2linePath = PathUtils::GetAddr2lineExecutablePath(targetArch_ == "armeabi-v7a");
+    if (addr2linePath.isEmpty() || !QFile::exists(addr2linePath)) {
+        QMessageBox::warning(this, "Warning", ANDROID_NDK_NOTFOUND_MSG);
         return;
+    }
     QFileInfo info(symbloPath);
     auto soName = info.baseName() + ".so";
     auto it = symbloMap_.find(soName);
@@ -1497,16 +1433,6 @@ void MainWindow::on_symbloPushButton_clicked() {
     progressDialog_->show();
 }
 
-void MainWindow::on_pythonPushButton_clicked() {
-    auto path = QFileDialog::getOpenFileName(this, tr("Select Executable Python"), QDir::homePath());
-    ui->pythonPathLineEdit->setText(path);
-}
-
-void MainWindow::on_addr2LinePushButton_clicked() {
-    auto path = QFileDialog::getOpenFileName(this, tr("Select Executable Addr2line"), QDir::homePath());
-    ui->addr2LinePathLineEdit->setText(path);
-}
-
 void MainWindow::on_configPushButton_clicked() {
     QSettings settings("MoreFun", "LoliProfiler");
     targetArch_ = settings.value(SETTINGS_ARCH).toString();
@@ -1524,10 +1450,14 @@ void MainWindow::on_configPushButton_clicked() {
 }
 
 void MainWindow::on_selectAppToolButton_clicked() {
-    adbPath_ = ui->sdkPathLineEdit->text();
-    adbPath_ = adbPath_.size() == 0 ? "adb" : adbPath_ + "/platform-tools/adb";
+    auto adbPath = PathUtils::GetADBExecutablePath();
+    if (adbPath.isEmpty() || !QFile::exists(adbPath)) {
+        QMessageBox::warning(this, "Warning", ANDROID_SDK_NOTFOUND_MSG);
+        return;
+    }
+
     QProcess process;
-    process.setProgram(adbPath_);
+    process.setProgram(adbPath);
     QStringList arguments;
     arguments << "shell" << "pm" << "list" << "packages";
 
@@ -1548,6 +1478,7 @@ void MainWindow::on_selectAppToolButton_clicked() {
     auto pkgStrs = QString(process.readAll());
     auto lines = pkgStrs.split('\n', QString::SkipEmptyParts);
     if (lines.count() == 0) {
+        QMessageBox::warning(this, "Warning", "No device is connected!");
         return;
     }
 

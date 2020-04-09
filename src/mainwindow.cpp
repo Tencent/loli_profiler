@@ -182,9 +182,73 @@ void MainWindow::LoadSettings() {
         this->resize(windowWidth, windowHeight);
     }
     ui->appNameLineEdit->setText(settings.value(SETTINGS_APPNAME).toString());
-    ui->sdkPathLineEdit->setText(settings.value(SETTINGS_SDKPATH).toString());
     ui->addr2LinePathLineEdit->setText(settings.value(SETTINGS_ADDR2LINEPATH).toString());
-    ui->pythonPathLineEdit->setText(settings.value(SETTINGS_PYTHONPATH).toString());
+    //auto config
+
+    //    if (!QFile::exists(pythonPath)) {
+    //QMessageBox::warning(this, "Warning", sdkPath);
+    QString python2path= "";
+    if(settings.value(SETTINGS_SDKPATH).toString().isEmpty() || settings.value(SETTINGS_SDKPATH).toString().isNull())
+    {
+            QString username;
+            bool isFindFlag = false;
+#ifdef Q_OS_WIN
+            auto name = getenv("USERNAME"); //for windows
+            username = name;
+            //android studio default path
+            QString sdkPath = "C:/Users/";
+            sdkPath.append(name);
+            sdkPath.append("/AppData/Local/Android/sdk");
+            if (QFile::exists(sdkPath)){
+                isFindFlag = true;
+                //ndk-bundle\prebuilt\windows-x86_64\bin
+                python2path = sdkPath + "/ndk-bundle/prebuilt/windows-x86_64/bin";
+                ui->pythonPathLineEdit->setText(python2path);
+            }
+            else{
+                //nvidia debugger path//
+                //NVPACK\android-sdk-windows//
+                std::vector<QString> cvec = std::vector<QString>{"C", "D", "E", "F","G"};
+
+                for(auto iter: cvec){
+                    auto path1 = iter.append(":/").append("NVPACK/android-sdk-windows");
+                    if (QFile::exists(path1)){
+                        isFindFlag = true;
+                        break;
+                    }
+                }
+
+
+                //https://developer.android.com/ndk/downloads/index.html download path//
+                //C/D/E/F/G:\NVPACK/android-sdk-windows//
+                if (QFile::exists(sdkPath.append(name).append("/Downloads"))){
+                    isFindFlag = true;
+                    //todo: some problem, the path name is android-ndk-r21, android-ndk-r16b. not const
+                }
+            }
+            //C:\Users\USER\Downloads
+#else
+            auto name = getenv("USER");
+            QString sdkPath = "Users/";
+            sdkPath.append(name);
+            sdkPath.append("/Library/Android/sdk");
+            if (QFile::exists(sdkPath)){
+                isFindFlag = true;
+                //ndk-bundle\prebuilt\darwin-x86_64\bin
+                python2path = sdkPath + "/ndk-bundle/prebuilt/darwin-x86_64/bin";
+                ui->pythonPathLineEdit->setText(python2path);
+            }
+#endif
+
+    }
+    else
+        ui->sdkPathLineEdit->setText(settings.value(SETTINGS_SDKPATH).toString());
+
+    if(settings.value(SETTINGS_PYTHONPATH).toString().isEmpty() || settings.value(SETTINGS_PYTHONPATH).toString().isNull())
+        ui->pythonPathLineEdit->setText(python2path);
+    else
+        ui->pythonPathLineEdit->setText(settings.value(SETTINGS_PYTHONPATH).toString());
+    //
     ui->main_splitter->restoreState(settings.value(SETTINGS_MAIN_SPLITER).toByteArray());
     ui->upper_splitter->restoreState(settings.value(SETTINGS_UPPER_SPLITER).toByteArray());
     ui->lower_splitter->restoreState(settings.value(SETTINGS_LOWER__SPLITER).toByteArray());
@@ -1319,6 +1383,19 @@ void MainWindow::on_launchPushButton_clicked() {
 
     auto pythonPath = ui->pythonPathLineEdit->text();
     if (!QFile::exists(pythonPath)) {
+        //getenv("USER"); ///for MAc or Linux
+        //C:\Users\<username>\AppData\Local\Android\sdk
+        //C:\Users\<username>\Downloads
+        auto name = getenv("USERNAME"); //for windows
+        QString sdkPath = "C:/Users/";
+        sdkPath.append(name);
+        sdkPath.append("/AppData/Local/Android/sdk");
+        QFileInfo fi(sdkPath);
+        if(fi.isDir())
+        {
+
+        }
+        QMessageBox::warning(this, "Warning", sdkPath);
         QMessageBox::warning(this, "Warning", "Please select python path first.");
         return;
     }

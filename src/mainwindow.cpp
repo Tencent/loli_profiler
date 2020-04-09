@@ -1383,19 +1383,6 @@ void MainWindow::on_launchPushButton_clicked() {
 
     auto pythonPath = ui->pythonPathLineEdit->text();
     if (!QFile::exists(pythonPath)) {
-        //getenv("USER"); ///for MAc or Linux
-        //C:\Users\<username>\AppData\Local\Android\sdk
-        //C:\Users\<username>\Downloads
-        auto name = getenv("USERNAME"); //for windows
-        QString sdkPath = "C:/Users/";
-        sdkPath.append(name);
-        sdkPath.append("/AppData/Local/Android/sdk");
-        QFileInfo fi(sdkPath);
-        if(fi.isDir())
-        {
-
-        }
-        QMessageBox::warning(this, "Warning", sdkPath);
         QMessageBox::warning(this, "Warning", "Please select python path first.");
         return;
     }

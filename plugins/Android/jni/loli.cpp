@@ -281,7 +281,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
     if (vm->GetEnv((void**)&env, JNI_VERSION_1_6) != JNI_OK) {
         return JNI_ERR; // JNI version not supported.
     }
-    std::ifstream infile("/data/local/tmp/loli.conf");
+    std::ifstream infile("/data/local/tmp/loli2.conf");
     std::string line;
 
     int minRecSize = 512;

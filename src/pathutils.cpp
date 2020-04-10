@@ -24,7 +24,7 @@ QString PathUtils::GetPythonExecutablePath() {
 #ifdef Q_OS_WIN
         pythonPath = ndkPath_ + "/prebuilt/windows-x86_64/bin/python.exe";
 #else
-        pythonPath = ndkPath + "/prebuilt/darwin-x86_64/bin/python";
+        pythonPath = ndkPath_ + "/prebuilt/darwin-x86_64/bin/python";
 #endif
         if (QFile::exists(pythonPath))
             return pythonPath;

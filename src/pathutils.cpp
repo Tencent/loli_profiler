@@ -18,13 +18,13 @@ QString PathUtils::GetADBExecutablePath() {
     return QString();
 }
 
-QString PathUtils::GetPythonPath() {
+QString PathUtils::GetPythonExecutablePath() {
     if (!ndkPath_.isEmpty() && QFile::exists(ndkPath_)) {
         QString pythonPath;
 #ifdef Q_OS_WIN
-        pythonPath = ndkPath_ + "/prebuilt/windows-x86_64/bin";
+        pythonPath = ndkPath_ + "/prebuilt/windows-x86_64/bin/python.exe";
 #else
-        pythonPath = ndkPath + "/prebuilt/darwin-x86_64/bin";
+        pythonPath = ndkPath + "/prebuilt/darwin-x86_64/bin/python";
 #endif
         if (QFile::exists(pythonPath))
             return pythonPath;
@@ -135,9 +135,16 @@ QString PathUtils::SearchAndroidNDK() {
     auto sdkPath = GetSDKPath();
     if (sdkPath.isEmpty() || !QFile::exists(sdkPath))
         return QString();
-    auto ndkPath = sdkPath + "/ndk-bundle";
-    if (QFile::exists(ndkPath)) {
-        return ndkPath;
+    std::vector<QString> pathes = {
+        sdkPath + "/ndk-bundle",
+        GetEnvVar("ANDROID_NDK_ROOT"),
+        GetEnvVar("NDK_ROOT"),
+        GetEnvVar("NDKROOT"),
+    };
+    for (auto& path : pathes) {
+        if (!path.isEmpty() && QFile::exists(path)) {
+            return path;
+        }
     }
     return QString();
 }

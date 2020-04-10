@@ -1318,7 +1318,7 @@ void MainWindow::on_launchPushButton_clicked() {
         QMessageBox::warning(this, "Warning", ANDROID_SDK_NOTFOUND_MSG);
         return;
     }
-    auto pythonPath = PathUtils::GetPythonPath();
+    auto pythonPath = PathUtils::GetPythonExecutablePath();
     if (pythonPath.isEmpty() || !QFile::exists(pythonPath)) {
         QMessageBox::warning(this, "Warning", ANDROID_NDK_NOTFOUND_MSG);
         return;

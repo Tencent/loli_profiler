@@ -7,7 +7,7 @@
 class PathUtils {
 public:
     static QString GetADBExecutablePath();
-    static QString GetPythonPath();
+    static QString GetPythonExecutablePath();
     static QString GetAddr2lineExecutablePath(bool armv7 = true);
     static void SetNDKPath(const QString& path);
     static void SetSDKPath(const QString& path);

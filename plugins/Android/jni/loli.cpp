@@ -273,6 +273,8 @@ void split(const std::string& str,
     do {
         tokens.push_back(p);
     } while ((p = strtok_r(nullptr, delim.c_str(), &tmp)) != nullptr);
+
+    delete[] buffer;
 }
 
 JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
@@ -281,32 +283,24 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
     if (vm->GetEnv((void**)&env, JNI_VERSION_1_6) != JNI_OK) {
         return JNI_ERR; // JNI version not supported.
     }
-    std::ifstream infile("/data/local/tmp/loli2.conf");
-    std::string line;
 
     int minRecSize = 512;
-
     std::string hookLibraries = "libil2cpp,libunity";
 
+    std::ifstream infile("/data/local/tmp/loli2.conf");
+    std::string line;
     std::vector<std::string> words;
-
     while (std::getline(infile, line)) {
-
-         words.clear();
-
          split(line, words,":");
-
-         if(words.size()<2){
+         if (words.size() < 2) {
             continue;
          }
-
-         if(words[0]=="threshold"){
+         if (words[0] == "threshold") {
             std::istringstream iss(words[1]);
             iss >> minRecSize;
-         }else if(words[0]=="libraries"){
+         } else if (words[0] == "libraries") {
             hookLibraries = words[1];
          }
-
     }
     __android_log_print(ANDROID_LOG_INFO, "Loli", "minRecSize: %i, hookLibs: %s",
         minRecSize,hookLibraries.c_str());

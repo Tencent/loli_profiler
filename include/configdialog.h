@@ -18,6 +18,8 @@ public:
     static bool CreateIfNoConfigFile(QWidget *parent = nullptr);
 private slots:
     void on_ConfigDialog_finished(int result);
+    void on_btnSDKFolder_clicked();
+    void on_btnNDKFolder_clicked();
 
 private:
     Ui::ConfigDialog *ui;

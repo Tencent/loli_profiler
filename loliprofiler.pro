@@ -39,6 +39,7 @@ SOURCES += \
         src/mainwindow.cpp \
         src/memgraphicsview.cpp \
         src/meminfoprocess.cpp \
+        src/pathutils.cpp \
         src/screenshotprocess.cpp \
         src/selectappdialog.cpp \
         src/stacktracemodel.cpp \
@@ -55,6 +56,7 @@ HEADERS += \
         include/customgraphicsview.h \
         include/fixedscrollarea.h \
         include/interactivechartview.h \
+        include/pathutils.h \
         include/selectappdialog.h \
         src/lz4/lz4.h \
         include/mainwindow.h \

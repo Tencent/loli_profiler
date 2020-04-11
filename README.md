@@ -2,6 +2,26 @@
 
 **通过最近的宣传，已有同事对继续改进LoliProfiler、继续在这个方向做研究表示出合作的兴趣（已有游戏开发、性能工具开发、安卓开发的同事感兴趣），我也会开始筹备此项目的OTeam孵化工作，如果你对安卓平台性能优化感兴趣，也想与我们合作开发性能优化工具，也欢迎与我（xinhou）联系**
 
+**当然如果仅仅是使用了LoliProfiler并觉得希望继续使用，并支持我们的开发，也可以很简单的以点Star+Watch来表示你的支持（我们也非常需要Star与Watch的支持） :smile: **
+
+**我们也将在第一个合作的[milestone](https://git.code.oa.com/xinhou/loli_profiler/-/milestones/1)实现新的功能，尽情期待**
+
+## 开发团队
+
+| Name                                                | BG                                                           |
+| --------------------------------------------------- | ------------------------------------------------------------ |
+| [xinhou](https://git.code.oa.com/u/xinhou)          | IEG互动娱乐事业群/魔方工作室群/技术中心/引擎中心/公共研发组  |
+| [ikeshi](https://git.code.oa.com/u/ikeshi)          | IEG互动娱乐事业群/品质管理部/WeTest产品中心/APM项目组        |
+| [looperzeng ](https://git.code.oa.com/u/looperzeng) | 公司其他组织/腾讯音乐娱乐/QQ音乐业务线/社区产品部/商业产品中心/Android开发组 |
+| [pisazzpan](https://git.code.oa.com/u/pisazzpan)    | 公司其他组织/腾讯音乐娱乐/QQ音乐业务线/社区产品部/平台产品中心/Android开发组 |
+| [ashenzhou](https://git.code.oa.com/u/ashenzhou)    | IEG互动娱乐事业群/研发效能部/GCloud技术服务中心/同步技术研发组 |
+| [nicochen](https://git.code.oa.com/u/nicochen)      | IEG互动娱乐事业群/魔方工作室群/魔术师工作室/S1产品中心/UA预研组/程序组/前台开发组 |
+| [togchen](https://git.code.oa.com/u/togchen)        | IEG互动娱乐事业群/魔方工作室群/技术中心/引擎中心/公共研发组  |
+| [peihualin](https://git.code.oa.com/u/peihualin)    | IEG互动娱乐事业群/光子工作室群/R工作室/X-Game项目组/前台程序组 |
+| [luckyguo](https://git.code.oa.com/u/luckyguo)      | 公司其他组织/腾讯音乐娱乐/QQ音乐业务线/音乐产品质量中心/专项测试开发组 |
+
+*排名不分先后*
+
 # Loli Profiler
 
 轻量开源内存分析工具（Lightweight Opensource profiLing Instrument）
@@ -11,8 +31,6 @@
 可前往LoliProfiler的[Wetest商店页面](https://wetest.oa.com/store/loli-profiler)下载最新版程序
 
 > [使用手册](https://git.code.oa.com/xinhou/loli_profiler/wikis/tutorial)、[常见问题](https://git.code.oa.com/xinhou/loli_profiler/wikis/faq)、[程序下载](https://git.code.oa.com/xinhou/loli_profiler/wikis/home)、[WeTest商店](https://wetest.oa.com/store/loli-profiler)
-
-**求助：目前的方案仍存在一个不同abi获取堆栈数据会[崩溃的问题](https://git.code.oa.com/xinhou/loli_profiler/issues/21)，有熟悉安卓开发的朋友，希望给一些改进建议**
 
 **提示：若您觉得Profiler工具本身或其实现原理对您所在的项目有所帮助，非常欢迎您[告诉我](https://git.code.oa.com/xinhou/loli_profiler/issues/23)项目的名称**
 

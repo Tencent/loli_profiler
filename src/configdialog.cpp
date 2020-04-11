@@ -1,8 +1,10 @@
 #include "include/configdialog.h"
 #include "ui_configdialog.h"
+#include "pathutils.h"
 
 #include <QDir>
 #include <QFile>
+#include <QFileDialog>
 #include <QStandardPaths>
 #include <QMessageBox>
 #include <QMenu>
@@ -20,6 +22,8 @@ ConfigDialog::~ConfigDialog() {
 }
 
 void ConfigDialog::LoadConfigFile(const QString& arch) {
+    ui->lineEditSDKFolder->setText(PathUtils::GetSDKPath());
+    ui->lineEditNDKFolder->setText(PathUtils::GetNDKPath());
     auto cfgPath = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).first();
     auto threshold = 128l;
     auto libraries = QStringList() << "libunity" << "libil2cpp";
@@ -113,4 +117,30 @@ void ConfigDialog::on_ConfigDialog_finished(int) {
         stream.flush();
     }
     file.close();
+}
+
+void ConfigDialog::on_btnSDKFolder_clicked() {
+    QString oldPath = PathUtils::GetSDKPath();
+    QString startPath = QDir::homePath();
+    if (!oldPath.isEmpty() && QFile::exists(oldPath))
+        startPath = oldPath;
+    auto path = QFileDialog::getExistingDirectory(this, tr("Select Android SDK Directory"), startPath,
+        QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+    if (!path.isEmpty()) {
+        PathUtils::SetSDKPath(path);
+        ui->lineEditSDKFolder->setText(path);
+    }
+}
+
+void ConfigDialog::on_btnNDKFolder_clicked() {
+    QString oldPath = PathUtils::GetNDKPath();
+    QString startPath = QDir::homePath();
+    if (!oldPath.isEmpty() && QFile::exists(oldPath))
+        startPath = oldPath;
+    auto path = QFileDialog::getExistingDirectory(this, tr("Select Android NDK Directory"), startPath,
+        QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+    if (!path.isEmpty()) {
+        PathUtils::SetNDKPath(path);
+        ui->lineEditNDKFolder->setText(path);
+    }
 }

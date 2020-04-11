@@ -15,6 +15,7 @@
 #include <vector>
 #include <unordered_set>
 #include <unordered_map>
+#include <cstring>
 
 #ifdef __cplusplus
 extern "C" {
@@ -54,7 +55,6 @@ std::chrono::system_clock::time_point startTime_;
 std::mutex cacheMutex_;
 std::vector<std::string> cache_;
 int minRecSize_ = 0;
-int maxCallstackBufferSize_ = 64;
 std::atomic<std::uint32_t> callSeq_;
 
 #define STACKBUFFERSIZE 128
@@ -257,33 +257,53 @@ void loliTrim(std::string &s) {
     }), s.end());
 }
 
+// str: 要分割的字符串
+// result: 保存分割结果的字符串数组
+// delim: 分隔字符串
+void split(const std::string& str,
+           std::vector<std::string>& tokens,
+           const std::string delim = " ") {
+    tokens.clear();
+
+    char* buffer = new char[str.size() + 1];
+    std::strcpy(buffer, str.c_str());
+
+    char* tmp;
+    char* p = strtok_r(buffer, delim.c_str(), &tmp);
+    do {
+        tokens.push_back(p);
+    } while ((p = strtok_r(nullptr, delim.c_str(), &tmp)) != nullptr);
+
+    delete[] buffer;
+}
+
 JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
     __android_log_print(ANDROID_LOG_INFO, "Loli", "JNI_OnLoad");
     JNIEnv* env;
     if (vm->GetEnv((void**)&env, JNI_VERSION_1_6) != JNI_OK) {
         return JNI_ERR; // JNI version not supported.
     }
-    std::ifstream infile("/data/local/tmp/loli.conf");
-    std::string line;
-    int count = 0;
+
     int minRecSize = 512;
-    int maxCallstackBufferSize = 64;
     std::string hookLibraries = "libil2cpp,libunity";
+
+    std::ifstream infile("/data/local/tmp/loli2.conf");
+    std::string line;
+    std::vector<std::string> words;
     while (std::getline(infile, line)) {
-        if (count == 0) {
-            std::istringstream iss(line);
+         split(line, words,":");
+         if (words.size() < 2) {
+            continue;
+         }
+         if (words[0] == "threshold") {
+            std::istringstream iss(words[1]);
             iss >> minRecSize;
-        } else if (count == 1) {
-            hookLibraries = line;
-        } else if (count == 2) {
-            std::istringstream iss(line);
-            iss >> maxCallstackBufferSize;
-            break;
-        }
-        count++;
+         } else if (words[0] == "libraries") {
+            hookLibraries = words[1];
+         }
     }
-    __android_log_print(ANDROID_LOG_INFO, "Loli", "minRecSize: %i, maxCallstackBufferSize: %i, hookLibs: %s", 
-        minRecSize, maxCallstackBufferSize, hookLibraries.c_str());
+    __android_log_print(ANDROID_LOG_INFO, "Loli", "minRecSize: %i, hookLibs: %s",
+        minRecSize,hookLibraries.c_str());
     // parse library tokens
     std::unordered_set<std::string> tokens;
     std::istringstream namess(hookLibraries);
@@ -293,7 +313,6 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
     }
     // start tcp server
     minRecSize_ = minRecSize;
-    maxCallstackBufferSize_ = maxCallstackBufferSize;
     callSeq_ = 0;
     startTime_ = std::chrono::system_clock::now();
     auto svr = loli::serverStart(7100);

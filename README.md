@@ -2,7 +2,7 @@
 
 **通过最近的宣传，已有同事对继续改进LoliProfiler、继续在这个方向做研究表示出合作的兴趣（已有游戏开发、性能工具开发、安卓开发的同事感兴趣），我也会开始筹备此项目的OTeam孵化工作，如果你对安卓平台性能优化感兴趣，也想与我们合作开发性能优化工具，也欢迎与我（xinhou）联系**
 
-**当然如果仅仅是使用了LoliProfiler并觉得希望继续使用，并支持我们的开发，也可以很简单的以点Star+Watch来表示你的支持（我们也非常需要Star与Watch的支持） :smile: **
+**当然如果仅仅是使用了LoliProfiler并觉得希望继续使用，并支持我们的开发，也可以很简单的以点Star+Watch来表示你的支持（我们也非常需要Star与Watch的支持）** :smile: 
 
 **我们也将在第一个合作的[milestone](https://git.code.oa.com/xinhou/loli_profiler/-/milestones/1)实现新的功能，尽情期待**
 

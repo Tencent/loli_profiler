@@ -27,6 +27,9 @@ CONFIG += c++11
 INCLUDEPATH += $$PWD/include $$PWD/src/lz4
 
 SOURCES += \
+        src/smaps/smapssection.cpp \
+        src/smaps/statsmapsdialog.cpp \
+        src/smaps/visualizesmapsdialog.cpp \
         src/adbprocess.cpp \
         src/addressprocess.cpp \
         src/charttooltipitem.cpp \
@@ -58,6 +61,9 @@ HEADERS += \
         include/interactivechartview.h \
         include/pathutils.h \
         include/selectappdialog.h \
+        include/smaps/smapssection.h \
+        include/smaps/statsmapsdialog.h \
+        include/smaps/visualizesmapsdialog.h \
         src/lz4/lz4.h \
         include/mainwindow.h \
         include/memgraphicsview.h \

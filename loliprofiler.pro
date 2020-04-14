@@ -27,7 +27,6 @@ CONFIG += c++11
 INCLUDEPATH += $$PWD/include $$PWD/src/lz4
 
 SOURCES += \
-        src/smaps/smapssection.cpp \
         src/smaps/statsmapsdialog.cpp \
         src/smaps/visualizesmapsdialog.cpp \
         src/adbprocess.cpp \

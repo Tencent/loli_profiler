@@ -1,7 +1,6 @@
 #ifndef SMAPSSECTION_H
 #define SMAPSSECTION_H
 
-
 #include <QVector>
 
 struct SMapsSectionAddr {

@@ -55,20 +55,20 @@ int serverStart(int port);
 void serverShutdown();
 }
 
-enum class DataMode : std::uint8_t
-{
-    STRICT, 
+enum class loliDataMode : std::uint8_t {
+    STRICT = 0, 
     LOOSE, 
 };
 
 std::chrono::system_clock::time_point startTime_;
 std::vector<std::string> cache_;
+loli::spinlock cacheLock_;
 int minRecSize_ = 0;
 std::atomic<std::uint32_t> callSeq_;
-spinlock g_spinlock;
-std::unordered_set<void*> sampleRecord_; //record the sample memory point
-DataMode mode_ = DataMode::LOOSE;
-Sampler* sampler_ = nullptr;
+
+loliDataMode mode_ = loliDataMode::STRICT;
+loli::Sampler* sampler_ = nullptr;
+loli::spinlock samplerLock_;
 
 #define STACKBUFFERSIZE 128
 
@@ -80,106 +80,77 @@ enum loliFlags {
     REALLOC_ = 4, 
 };
 
-
-void MaybeRecordAllocation(size_t size, void* addr, loliFlags flag)
-{
-    std::unique_lock<spinlock> _lock(g_spinlock);
+inline void loliMaybeRecordAllocation(size_t size, void* addr, loliFlags flag) {
     bool bRecordAllocation = false;
     size_t recordSize = size;
-    if(mode_ == DataMode::STRICT)
-    {
+    if (mode_ == loliDataMode::STRICT) {
         bRecordAllocation = size >= static_cast<size_t>(minRecSize_);
         recordSize = size;
-    }
-    else if(mode_ == DataMode::LOOSE)
-    {
-        recordSize = sampler_->SampleSize(size);
+    } else if(mode_ == loliDataMode::LOOSE) {
+        {
+            std::lock_guard<loli::spinlock> lock(samplerLock_);
+            recordSize = sampler_->SampleSize(size);
+        }
         bRecordAllocation = recordSize > 0;
-    }
-    else
-    {
+    } else {
         assert(0);
     }
-    if(!bRecordAllocation)
-    {
+    if(!bRecordAllocation) {
         return;
     }
-    sampleRecord_.emplace(addr);
     static thread_local void* buffer[STACKBUFFERSIZE];
     std::ostringstream oss;
     auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime_).count();
     oss << flag << '\\' << ++callSeq_ << ',' << time << ',' << recordSize << ',' << addr << '\\';
     loli::dump(oss, buffer, loli::capture(buffer, STACKBUFFERSIZE));
     {
-        cache_.emplace_back(oss.str());
-    }
-}
-
-void MaybeRecordFree(void* addr)
-{
-    if (addr == nullptr) 
-        return;
-    std::unique_lock<spinlock> _lock(g_spinlock);
-    bool bRecordFree = false;
-    if(mode_ == DataMode::STRICT)
-    {
-        bRecordFree = true;
-    }
-    else if(mode_ == DataMode::LOOSE)
-    {
-        auto findRecord = sampleRecord_.find(addr);
-        if(findRecord != sampleRecord_.end())
-        {
-            bRecordFree = true;
-            sampleRecord_.erase(findRecord);
-        }
-    }
-    else
-    {
-        assert(0);
-    }
-    if(!bRecordFree)
-    {
-        return;
-    }
-    
-    std::ostringstream oss;
-    // auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime_).count();
-    oss << FREE_ << '\\' << ++callSeq_ << '\\' << addr;
-    {
+        std::lock_guard<loli::spinlock> lock(cacheLock_);
         cache_.emplace_back(oss.str());
     }
 }
 
 void *loliMalloc(size_t size) {
     void* addr = malloc(size);
-    MaybeRecordAllocation(size, addr, loliFlags::MALLOC_);
+    loliMaybeRecordAllocation(size, addr, loliFlags::MALLOC_);
     return addr;
 }
 
 void loliFree(void* ptr) {
     if (ptr == nullptr) 
         return;
-    MaybeRecordFree(ptr);
+    std::ostringstream oss;
+    oss << FREE_ << '\\' << ++callSeq_ << '\\' << ptr;
+    {
+        std::lock_guard<loli::spinlock> lock(cacheLock_);
+        cache_.emplace_back(oss.str());
+    }
     free(ptr);
 }
 
 void *loliCalloc(int n, int size) {
     void* addr = calloc(n, size);
-    MaybeRecordAllocation(n*size, addr, loliFlags::CALLOC_);
+    loliMaybeRecordAllocation(n * size, addr, loliFlags::CALLOC_);
     return addr;
 }
 
 void *loliMemalign(size_t alignment, size_t size) {
     void* addr = memalign(alignment, size);
-    MaybeRecordAllocation(size, addr, loliFlags::MEMALIGN_);
+    loliMaybeRecordAllocation(size, addr, loliFlags::MEMALIGN_);
     return addr;
 }
 
 void *loliRealloc(void *ptr, size_t new_size) {
-    MaybeRecordFree(ptr);
     void* addr = realloc(ptr, new_size);
-    MaybeRecordAllocation(new_size, addr, loliFlags::REALLOC_);
+    if (addr != 0)
+    {
+        {
+            std::ostringstream oss;
+            oss << FREE_ << '\\' << ++callSeq_ << '\\' << ptr;
+            std::lock_guard<loli::spinlock> lock(cacheLock_);
+            cache_.emplace_back(oss.str());
+        }
+        loliMaybeRecordAllocation(new_size, addr, loliFlags::MALLOC_);
+    }
     return addr;
 }
 
@@ -315,6 +286,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
 
     int minRecSize = 512;
     std::string hookLibraries = "libil2cpp,libunity";
+    mode_ = loliDataMode::STRICT;
 
     std::ifstream infile("/data/local/tmp/loli2.conf");
     std::string line;
@@ -329,10 +301,15 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
             iss >> minRecSize;
          } else if (words[0] == "libraries") {
             hookLibraries = words[1];
+         } else if (words[0] == "mode") {
+            if (words[1] == "loose")
+                mode_ = loliDataMode::LOOSE;
+            else 
+                mode_ = loliDataMode::STRICT;
          }
     }
-    __android_log_print(ANDROID_LOG_INFO, "Loli", "minRecSize: %i, hookLibs: %s",
-        minRecSize,hookLibraries.c_str());
+    __android_log_print(ANDROID_LOG_INFO, "Loli", "mode: %i, minRecSize: %i, hookLibs: %s",
+        static_cast<int>(mode_), minRecSize, hookLibraries.c_str());
     // parse library tokens
     std::unordered_set<std::string> tokens;
     std::istringstream namess(hookLibraries);
@@ -342,7 +319,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
     }
     // start tcp server
     minRecSize_ = minRecSize;
-    sampler_ = new Sampler(minRecSize_);
+    sampler_ = new loli::Sampler(minRecSize_);
     callSeq_ = 0;
     startTime_ = std::chrono::system_clock::now();
     auto svr = loli::serverStart(7100);
@@ -449,6 +426,7 @@ void serverLoop(int sock) {
             auto now = std::chrono::steady_clock::now();
             if (std::chrono::duration<double, std::milli>(now - lastTickTime).count() > 66.6) {
                 lastTickTime = now;
+                std::lock_guard<loli::spinlock> lock(cacheLock_);
                 if (sendCache.size() > 0) {
                     sendCache.insert(sendCache.end(), cache_.begin(), cache_.end());
                     cache_.clear();
@@ -566,8 +544,6 @@ void serverShutdown() {
     free(buffer_);
     buffer_ = NULL;
     started_ = false;
-    delete sampler_;
-    sampler_ = nullptr;
 }
 
 } // end loli

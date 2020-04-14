@@ -19,6 +19,8 @@
 #include <atomic>
 #include <random>
 
+namespace loli {
+
 // Poisson sampler for memory allocations. We apply sampling individually to
 // each byte. The whole allocation gets accounted as often as the number of
 // sampled bytes it contains.
@@ -75,3 +77,4 @@ class Sampler {
 };
 
 
+} // namespace loli

@@ -1,6 +1,8 @@
 #pragma once
 #include <atomic>
 
+namespace loli {
+
 class spinlock {
 public:
     spinlock() { m_lock.clear(); }
@@ -19,3 +21,5 @@ public:
 private:
     std::atomic_flag m_lock;
 };
+
+} // namespace loli

@@ -20,28 +20,34 @@
    <bool>false</bool>
   </property>
   <layout class="QFormLayout" name="formLayout">
+   <property name="fieldGrowthPolicy">
+    <enum>QFormLayout::ExpandingFieldsGrow</enum>
+   </property>
    <property name="horizontalSpacing">
-    <number>4</number>
+    <number>6</number>
    </property>
    <property name="verticalSpacing">
-    <number>4</number>
+    <number>6</number>
    </property>
    <property name="leftMargin">
-    <number>4</number>
+    <number>9</number>
    </property>
    <property name="topMargin">
-    <number>4</number>
+    <number>9</number>
    </property>
    <property name="rightMargin">
-    <number>4</number>
+    <number>9</number>
    </property>
    <property name="bottomMargin">
-    <number>4</number>
+    <number>9</number>
    </property>
    <item row="3" column="0">
     <widget class="QLabel" name="label">
      <property name="text">
       <string>Architecture</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
      </property>
     </widget>
    </item>
@@ -64,10 +70,19 @@
      <property name="text">
       <string>Threshold</string>
      </property>
+     <property name="alignment">
+      <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
+     </property>
     </widget>
    </item>
    <item row="4" column="1">
     <widget class="QSpinBox" name="thresholdSpinBox">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
      <property name="toolTip">
       <string>Malloc stacktrace collect threshold.</string>
      </property>
@@ -88,7 +103,10 @@
    <item row="5" column="0">
     <widget class="QLabel" name="label_4">
      <property name="text">
-      <string>libraries</string>
+      <string>Libraries</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
      </property>
     </widget>
    </item>
@@ -100,12 +118,18 @@
      <property name="text">
       <string>Android SDK</string>
      </property>
+     <property name="alignment">
+      <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
+     </property>
     </widget>
    </item>
    <item row="1" column="0">
     <widget class="QLabel" name="label_5">
      <property name="text">
       <string>Android NDK</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
      </property>
     </widget>
    </item>
@@ -166,6 +190,12 @@
      </item>
      <item>
       <widget class="QPushButton" name="btnNDKFolder">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
        <property name="text">
         <string/>
        </property>
@@ -181,6 +211,9 @@
     <widget class="QLabel" name="label_6">
      <property name="text">
       <string>Mode</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
      </property>
     </widget>
    </item>

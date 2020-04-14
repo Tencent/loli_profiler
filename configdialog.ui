@@ -20,14 +20,32 @@
    <bool>false</bool>
   </property>
   <layout class="QFormLayout" name="formLayout">
-   <item row="2" column="0">
+   <property name="horizontalSpacing">
+    <number>4</number>
+   </property>
+   <property name="verticalSpacing">
+    <number>4</number>
+   </property>
+   <property name="leftMargin">
+    <number>4</number>
+   </property>
+   <property name="topMargin">
+    <number>4</number>
+   </property>
+   <property name="rightMargin">
+    <number>4</number>
+   </property>
+   <property name="bottomMargin">
+    <number>4</number>
+   </property>
+   <item row="3" column="0">
     <widget class="QLabel" name="label">
      <property name="text">
       <string>Architecture</string>
      </property>
     </widget>
    </item>
-   <item row="2" column="1">
+   <item row="3" column="1">
     <widget class="QComboBox" name="archComboBox">
      <item>
       <property name="text">
@@ -41,14 +59,14 @@
      </item>
     </widget>
    </item>
-   <item row="3" column="0">
+   <item row="4" column="0">
     <widget class="QLabel" name="label_2">
      <property name="text">
       <string>Threshold</string>
      </property>
     </widget>
    </item>
-   <item row="3" column="1">
+   <item row="4" column="1">
     <widget class="QSpinBox" name="thresholdSpinBox">
      <property name="toolTip">
       <string>Malloc stacktrace collect threshold.</string>
@@ -67,14 +85,14 @@
      </property>
     </widget>
    </item>
-   <item row="4" column="0">
+   <item row="5" column="0">
     <widget class="QLabel" name="label_4">
      <property name="text">
       <string>libraries</string>
      </property>
     </widget>
    </item>
-   <item row="4" column="1">
+   <item row="5" column="1">
     <widget class="QListWidget" name="libraryListWidget"/>
    </item>
    <item row="0" column="0">
@@ -158,6 +176,27 @@
       </widget>
      </item>
     </layout>
+   </item>
+   <item row="2" column="0">
+    <widget class="QLabel" name="label_6">
+     <property name="text">
+      <string>Mode</string>
+     </property>
+    </widget>
+   </item>
+   <item row="2" column="1">
+    <widget class="QComboBox" name="modeComboBox">
+     <item>
+      <property name="text">
+       <string>strict</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>loose</string>
+      </property>
+     </item>
+    </widget>
    </item>
   </layout>
  </widget>

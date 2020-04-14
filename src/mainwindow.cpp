@@ -202,9 +202,6 @@ void MainWindow::LoadSettings() {
 
     PathUtils::SetSDKPath(settings.value(SETTINGS_ANDROIDSDK).toString());
     PathUtils::SetNDKPath(settings.value(SETTINGS_ANDROIDNDK).toString());
-
-    qDebug() << PathUtils::GetSDKPath();
-    qDebug() << PathUtils::GetNDKPath();
 }
 
 void MainWindow::SaveSettings() {

@@ -27,6 +27,7 @@ void ConfigDialog::LoadConfigFile(const QString& arch) {
     auto cfgPath = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).first();
     auto threshold = 128l;
     auto libraries = QStringList() << "libunity" << "libil2cpp";
+    auto mode = QString("strict");
     QFile file(cfgPath + "/loli2.conf");
     file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
     if (file.open(QIODevice::ReadOnly)) {
@@ -41,11 +42,14 @@ void ConfigDialog::LoadConfigFile(const QString& arch) {
                 threshold = words[1].toLong();
             } else if (words[0] == "libraries") {
                 libraries = words[1].split(',', QString::SplitBehavior::SkipEmptyParts);
+            } else if (words[0] == "mode") {
+                mode = words[1];
             }
             lineNum++;
         }
     }
     file.close();
+    ui->modeComboBox->setCurrentText(mode);
     ui->archComboBox->setCurrentText(arch);
     ui->libraryListWidget->addItems(libraries);
     for (int i = 0; i < ui->libraryListWidget->count(); i++) {
@@ -85,7 +89,7 @@ bool ConfigDialog::CreateIfNoConfigFile(QWidget *parent) {
         file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
         if (file.open(QIODevice::ReadWrite | QIODevice::Truncate | QIODevice::Text)) {
             QTextStream stream(&file);
-            stream << "threshold:256" << endl << "libraries:libunity,libil2cpp";
+            stream << "threshold:256" << endl << "libraries:libunity,libil2cpp" << endl << "mode:strict";
             stream.flush();
             return true;
         } else {
@@ -109,6 +113,7 @@ void ConfigDialog::on_ConfigDialog_finished(int) {
             if (i != numLibs - 1) stream << ',';
         }
         stream << endl;
+        stream << "mode:" << ui->modeComboBox->currentText();
         stream.flush();
     }
     file.close();

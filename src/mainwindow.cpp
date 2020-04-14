@@ -6,6 +6,8 @@
 #include "treemapgraphicsview.h"
 #include "memgraphicsview.h"
 #include "selectappdialog.h"
+#include "smaps/statsmapsdialog.h"
+#include "smaps/visualizesmapsdialog.h"
 #include "pathutils.h"
 
 #include <QClipboard>
@@ -1061,100 +1063,14 @@ void MainWindow::on_actionExit_triggered() {
     this->close();
 }
 
-class MemoryTableWidgetItem : public QTableWidgetItem {
-public:
-    MemoryTableWidgetItem(quint32 size) : QTableWidgetItem(), size_(size) { setText(sizeToString(size)); }
-    bool operator< (const QTableWidgetItem &other) const;
-    quint32 size_ = 0;
-};
-
-bool MemoryTableWidgetItem::operator< (const QTableWidgetItem &other) const {
-    return size_ < static_cast<const MemoryTableWidgetItem&>(other).size_;
-}
-
-class MemoryTableWidget : public QTableWidget {
-public:
-    MemoryTableWidget(int rows, int columns, QWidget* parent) : QTableWidget(rows, columns, parent) {}
-    void keyPressEvent(QKeyEvent *event);
-};
-
-void MemoryTableWidget::keyPressEvent(QKeyEvent *event) {
-    if (event == QKeySequence::Copy) {
-        QString output;
-        QTextStream stream(&output);
-        stream << "Name, Virtual Memory, Rss, Pss, Private Clean, Private Dirty, Shared Clean, Shared Dirty" << endl;
-        auto ranges = selectedRanges();
-        for (auto& range : ranges) {
-            int top = range.topRow();
-            int bottom = range.bottomRow();
-            for (int row = top; row <= bottom; row++) {
-                stream << item(row, 0)->text() << ", " << item(row, 1)->text() << ", " << item(row, 2)->text() << ", " <<
-                          item(row, 3)->text() << ", " << item(row, 4)->text() << ", " << item(row, 5)->text() << ", " <<
-                          item(row, 6)->text() << ", " << item(row, 7)->text() << endl;
-            }
-        }
-        stream.flush();
-        QApplication::clipboard()->setText(output);
-        event->accept();
-        return;
-    }
-    QTableWidget::keyPressEvent(event);
-}
 
 void MainWindow::on_actionStat_SMaps_triggered() {
     if (sMapsSections_.size() == 0) {
         QMessageBox::warning(this, "Warning", "No smaps data found!", QMessageBox::StandardButton::Ok);
         return;
     }
-    QDialog fragDialog(this, Qt::WindowTitleHint | Qt::WindowCloseButtonHint);
-    auto layout = new QVBoxLayout(&fragDialog);
-    fragDialog.setLayout(layout);
-    auto tableWidget = new MemoryTableWidget(sMapsSections_.size(), 8, &fragDialog);
-    tableWidget->setEditTriggers(QTableWidget::EditTrigger::NoEditTriggers);
-    tableWidget->setSelectionMode(QTableWidget::SelectionMode::ExtendedSelection);
-    tableWidget->setSelectionBehavior(QTableWidget::SelectionBehavior::SelectRows);
-    tableWidget->setWordWrap(false);
-    tableWidget->setHorizontalHeaderLabels(
-                QStringList() << "Name" << "Virtual Memory" << "Rss" << "Pss" <<
-                "Private Clean" << "Private Dirty" << "Shared Clean" << "Shared Dirty");
-    int row = 0;
-    // smaps size data is in kilo-byte by default
-    SMapsSection total;
-    for (auto it = sMapsSections_.begin(); it != sMapsSections_.end(); ++it) {
-        auto& name = it.key();
-        auto& data = it.value();
-        tableWidget->setItem(row, 0, new QTableWidgetItem(name));
-        tableWidget->setItem(row, 1, new MemoryTableWidgetItem(data.virtual_ * 1024));
-        tableWidget->setItem(row, 2, new MemoryTableWidgetItem(data.rss_ * 1024));
-        tableWidget->setItem(row, 3, new MemoryTableWidgetItem(data.pss_ * 1024));
-        tableWidget->setItem(row, 4, new MemoryTableWidgetItem(data.privateClean_ * 1024));
-        tableWidget->setItem(row, 5, new MemoryTableWidgetItem(data.privateDirty_ * 1024));
-        tableWidget->setItem(row, 6, new MemoryTableWidgetItem(data.sharedClean_ * 1024));
-        tableWidget->setItem(row, 7, new MemoryTableWidgetItem(data.sharedDirty_ * 1024));
-        total.virtual_ += data.virtual_;
-        total.rss_ += data.rss_;
-        total.pss_ += data.pss_;
-        total.privateClean_ += data.privateClean_;
-        total.privateDirty_ += data.privateDirty_;
-        total.sharedClean_ += data.sharedClean_;
-        total.sharedDirty_ += data.sharedDirty_;
-        row++;
-    }
-    tableWidget->setSortingEnabled(true);
-    tableWidget->setTextElideMode(Qt::TextElideMode::ElideLeft);
-    tableWidget->sortByColumn(3, Qt::SortOrder::DescendingOrder);
-    tableWidget->show();
-    auto statusBar = new QStatusBar(&fragDialog);
-    statusBar->showMessage(QString("VM: %1, Rss: %2, Pss: %3, PC: %4, PD: %5, SC: %6, SD: %7")
-                             .arg(sizeToString(total.virtual_ * 1024), sizeToString(total.rss_ * 1024), sizeToString(total.pss_ * 1024), sizeToString(total.privateClean_ * 1024),
-                                  sizeToString(total.privateDirty_ * 1024), sizeToString(total.sharedClean_ * 1024), sizeToString(total.sharedDirty_ * 1024)));
-    layout->addWidget(tableWidget);
-    layout->addWidget(statusBar);
-    layout->setMargin(0);
-    fragDialog.setWindowTitle("Stat proc/pid/smaps");
-    fragDialog.resize(900, 400);
-    fragDialog.setMinimumSize(900, 400);
-    fragDialog.exec();
+    StatSmapsDialog fragDialog;
+    fragDialog.ShowSmap(sMapsSections_);
 }
 
 void MainWindow::on_actionVisualize_SMaps_triggered() {
@@ -1172,91 +1088,10 @@ void MainWindow::on_actionVisualize_SMaps_triggered() {
     ui->libraryComboBox->setCurrentIndex(0); // show all libraries
     ui->allocComboBox->setCurrentIndex(1); // show only persisient
     // show dialog
-    QDialog fragDialog(this, Qt::WindowTitleHint | Qt::WindowCloseButtonHint);
-    auto layout = new QVBoxLayout(&fragDialog);
-    layout->setSpacing(2);
-    fragDialog.setLayout(layout);
-    auto statusBar = new QStatusBar(&fragDialog);
-    auto fragView = new MemGraphicsView(&fragDialog);
-    auto fragScene = new QGraphicsScene(&fragDialog);
-    auto sectionComboBox = new QComboBox(&fragDialog);
+    VisualizeSmapsDialog fragDialog;
     auto curModel = ui->stackTableView->model();
-    connect(sectionComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), [&](int index){
-        fragScene->clear();
-        auto sectionit = sMapsSections_.find(sectionComboBox->itemText(index));
-        if (sectionit == sMapsSections_.end()) {
-            return;
-        }
-        auto& section = *sectionit;
-        auto sectionsCount = section.addrs_.size();
-        auto recordsCount = 0;
-        auto totalUsedSize = 0ul;
-        auto totalSize = 0ul;
-        auto curY = 0.0;
-        for (int i = 0; i < sectionsCount; i++) {
-            auto& addr = section.addrs_[i];
-            auto start = addr.start_ - addr.offset_;
-            auto end = addr.end_ - addr.offset_;
-            auto size = end - start;
-            auto sectionItem = new MemSectionItem(1024, static_cast<double>(size) / 1024);
-            sectionItem->setY(curY);
-            auto rowCount = curModel->rowCount();
-            auto usedSize = 0ul;
-            for (int i = 0; i < rowCount; i++) {
-                auto recSize = curModel->data(curModel->index(i, 1), Qt::UserRole).toUInt();
-                auto recAddr = curModel->data(curModel->index(i, 2)).toString().toULongLong(nullptr, 0);
-                if (recAddr >= start && recAddr < end && recAddr + recSize <= end) {
-                    sectionItem->addAllocation((recAddr - start) / 1024, recSize / 1024);
-                    recordsCount++;
-                    usedSize += recSize;
-                }
-            }
-            fragScene->addItem(sectionItem);
-            curY += sectionItem->boundingRect().height() + 16;
-            totalUsedSize += usedSize;
-            totalSize += size;
-        }
-        statusBar->showMessage(QString("%1 sections with %2 allocation records, total: %3 used: %4 (%5%)")
-                               .arg(QString::number(sectionsCount), QString::number(recordsCount), sizeToString(totalSize), sizeToString(totalUsedSize),
-                                    QString::number((static_cast<double>(totalUsedSize) / totalSize) * 100.0)));
-    });
-    QSet<QString> visibleSections;
-    auto recordCount = curModel->rowCount();
-    for (int i = 0; i < recordCount; i++) {
-        auto recAddr = curModel->data(curModel->index(i, 2)).toString().toULongLong(nullptr, 0);
-        for (auto it = sMapsSections_.begin(); it != sMapsSections_.end(); ++it) {
-            auto& section = *it;
-            if (visibleSections.contains(it.key()))
-                continue;
-            for (int i = 0; i < section.addrs_.size(); i++) {
-                auto& addr = section.addrs_[i];
-                auto start = addr.start_ - addr.offset_;
-                auto end = addr.end_ - addr.offset_;
-                if (recAddr >= start && recAddr < end) {
-                    visibleSections.insert(it.key());
-                    break;
-                }
-            }
-        }
-        if (visibleSections.count() == sMapsSections_.count())
-            break;
-    }
-    auto sectionNames = visibleSections.values();
-    sectionNames.sort(Qt::CaseSensitivity::CaseInsensitive);
-    sectionComboBox->addItems(sectionNames);
-    fragView->setScene(fragScene);
-    fragView->setViewport(new QGLWidget(QGLFormat(QGL::SampleBuffers)));
-    fragView->setInteractive(false);
-    fragView->show();
-    layout->addWidget(sectionComboBox);
-    layout->addWidget(fragView);
-    layout->addWidget(statusBar);
-    layout->setMargin(0);
-    fragView->setFocus();
-    fragDialog.setWindowTitle("Visualize proc/pid/smaps");
-    fragDialog.resize(900, 400);
-    fragDialog.setMinimumSize(900, 400);
-    fragDialog.exec();
+
+    fragDialog.VisualizeSmap(sMapsSections_, curModel);
 }
 
 void MainWindow::on_actionShow_Merged_Callstacks_triggered() {

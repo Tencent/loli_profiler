@@ -66,7 +66,7 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, QPro
         }
         dialog->setValue(dialog->value() + 1);
     }
-    { // set app as debugable for next launch
+    if (false) { // set app as debugable for next launch
         dialog->setLabelText("Marking apk debugable for next launch.");
         arguments.clear();
         arguments << "shell" << "am" << "set-debug-app" << "-w" << appName;
@@ -90,7 +90,7 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, QPro
         }
         dialog->setValue(dialog->value() + 1);
     }
-    { // launch the app
+    if (false) { // launch the app
         dialog->setLabelText("Launching apk.");
         arguments.clear();
         arguments << "shell" << "monkey -p" << appName << "-c android.intent.category.LAUNCHER 1";
@@ -115,7 +115,31 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, QPro
         dialog->setValue(dialog->value() + 1);
     }
     unsigned int pid = 0;
-    { // adb jdwp
+    { // pid of
+        arguments.clear();
+        arguments << "shell" << "pidof" << appName;
+        QProcess process;
+        process.setProgram(execPath);
+#ifdef Q_OS_WIN
+        process.setNativeArguments(arguments.join(' '));
+#else
+        process.setArguments(arguments);
+#endif
+        process.start();
+        if (!process.waitForStarted()) {
+            errorStr_ = "erro starting: adb shell pidof";
+            emit ProcessErrorOccurred();
+            return;
+        }
+        if (!process.waitForFinished()) {
+            errorStr_ = "erro interpreting: adb jdwp";
+            emit ProcessErrorOccurred();
+            return;
+        }
+        pid = process.readAll().trimmed().toUInt();
+        dialog->setValue(dialog->value() + 1);
+    }
+    if (false) { // adb jdwp
         QThread::sleep(1);
         dialog->setLabelText("Gettting jdwp id.");
         arguments.clear();

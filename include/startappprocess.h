@@ -20,13 +20,14 @@ public:
         return errorStr_;
     }
 
-    void StartApp(const QString& appName, const QString& arch, QProgressDialog* dialog);
+    void StartApp(const QString& appName, const QString& arch, bool interceptMode, QProgressDialog* dialog);
 
 protected:
     void OnProcessFinihed() override;
     void OnProcessErrorOccurred() override;
 
 private:
+    bool interceptMode_ = false;
     bool startResult_ = false;
     QString errorStr_;
     QString pythonPath_;

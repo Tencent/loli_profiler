@@ -1215,9 +1215,12 @@ void MainWindow::on_launchPushButton_clicked() {
     maxMemInfoValue_ = 128;
     UpdateMemInfoRange();
 
+    auto mode = QMessageBox::information(this, "Launch Mode",
+                                         "Launch or intercept running app?", "Launch", "Intercept");
+
     startAppProcess_->SetPythonPath(pythonPath);
     startAppProcess_->SetExecutablePath(adbPath);
-    startAppProcess_->StartApp(ui->appNameLineEdit->text(), targetArch_, progressDialog_);
+    startAppProcess_->StartApp(ui->appNameLineEdit->text(), targetArch_, mode == 1, progressDialog_);
 
     isCapturing_ = true;
     Print("Starting application ...");

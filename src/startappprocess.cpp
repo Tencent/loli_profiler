@@ -12,8 +12,9 @@ StartAppProcess::StartAppProcess(QObject* parent)
 
 }
 
-void StartAppProcess::StartApp(const QString& appName, const QString& arch, QProgressDialog* dialog) {
+void StartAppProcess::StartApp(const QString& appName, const QString& arch, bool interceptMode, QProgressDialog* dialog) {
     startResult_ = false;
+    interceptMode_ = interceptMode;
     errorStr_ = QString();
     auto execPath = GetExecutablePath();
     QStringList arguments;
@@ -66,7 +67,7 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, QPro
         }
         dialog->setValue(dialog->value() + 1);
     }
-    if (false) { // set app as debugable for next launch
+    if (!interceptMode) { // set app as debugable for next launch
         dialog->setLabelText("Marking apk debugable for next launch.");
         arguments.clear();
         arguments << "shell" << "am" << "set-debug-app" << "-w" << appName;
@@ -90,7 +91,7 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, QPro
         }
         dialog->setValue(dialog->value() + 1);
     }
-    if (false) { // launch the app
+    if (!interceptMode) { // launch the app
         dialog->setLabelText("Launching apk.");
         arguments.clear();
         arguments << "shell" << "monkey -p" << appName << "-c android.intent.category.LAUNCHER 1";
@@ -115,7 +116,7 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, QPro
         dialog->setValue(dialog->value() + 1);
     }
     unsigned int pid = 0;
-    { // pid of
+    if (interceptMode) { // pid of
         arguments.clear();
         arguments << "shell" << "pidof" << appName;
         QProcess process;
@@ -139,7 +140,7 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, QPro
         pid = process.readAll().trimmed().toUInt();
         dialog->setValue(dialog->value() + 1);
     }
-    if (false) { // adb jdwp
+    if (!interceptMode) { // adb jdwp
         QThread::sleep(1);
         dialog->setLabelText("Gettting jdwp id.");
         arguments.clear();

@@ -905,6 +905,26 @@ void MainWindow::StartAppProcessErrorOccurred() {
     progressDialog_->setValue(progressDialog_->maximum());
     progressDialog_->close();
     Print("Error starting app: " + startAppProcess_->ErrorStr());
+    Print("View logs under executable's folder for more details.");
+    QFile file(QCoreApplication::applicationDirPath() + "/profiler.log");
+    if (!file.exists() || !file.open(QIODevice::ReadOnly)) {
+        return;
+    }
+    QDialog errorLog(this);
+    errorLog.setLayout(new QVBoxLayout(&errorLog));
+    auto loglist = new QListWidget(&errorLog);
+    errorLog.layout()->addWidget(loglist);
+    errorLog.layout()->setMargin(0);
+    QTextStream stream(file.readAll());
+    QString line;
+    while (stream.readLineInto(&line)) {
+        loglist->addItem(line);
+    }
+    loglist->setCurrentRow(loglist->count() - 1);
+    errorLog.setWindowTitle("Process injection log");
+    errorLog.resize(600, 400);
+    errorLog.setMinimumSize(600, 400);
+    errorLog.exec();
 }
 
 void MainWindow::MemInfoProcessFinished(AdbProcess* process) {

@@ -357,7 +357,7 @@ size_t capture(void** buffer, size_t max) {
 
 void dump(std::ostream& os, void** buffer, size_t count) {
     const void* prevAddr = nullptr;
-    for (size_t idx = 0; idx < count; ++idx) {
+    for (size_t idx = 1; idx < count; ++idx) { // idx = 1 to ignore loli's hook function
         const void* addr = buffer[idx];
         if (addr == prevAddr) // skip same addr
             continue;

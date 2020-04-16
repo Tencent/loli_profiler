@@ -25,7 +25,7 @@ void ConfigDialog::LoadConfigFile(const QString& arch) {
     ui->lineEditSDKFolder->setText(PathUtils::GetSDKPath());
     ui->lineEditNDKFolder->setText(PathUtils::GetNDKPath());
     auto cfgPath = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).first();
-    auto threshold = 128l;
+    auto threshold = 128;
     auto libraries = QStringList() << "libunity" << "libil2cpp";
     auto mode = QString("strict");
     QFile file(cfgPath + "/loli2.conf");
@@ -39,7 +39,7 @@ void ConfigDialog::LoadConfigFile(const QString& arch) {
             if (words.size() < 2)
                 continue;
             if (words[0] == "threshold") {
-                threshold = words[1].toLong();
+                threshold = words[1].toInt();
             } else if (words[0] == "libraries") {
                 libraries = words[1].split(',', QString::SplitBehavior::SkipEmptyParts);
             } else if (words[0] == "mode") {

@@ -159,8 +159,8 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, bool
             return;
         }
         if (!process.waitForFinished(3000)) {
-            process.kill();
             QString retStr = process.readAll();
+            process.close();
             auto lines = retStr.split('\n', QString::SkipEmptyParts);
             if (lines.count() == 0) {
                 errorStr_ = "erro interpreting: adb jdwp";

@@ -62,6 +62,7 @@ private:
     void GetMergedCallstacks(QList<QTreeWidgetItem*>& topLevelItems);
 
     void StopCaptureProcess();
+    void InterpretRecordsLibrary(int start, int count);
     void InterpretRecordLibrary(StackRecord& record);
     void InterpretStacktraceData();
 

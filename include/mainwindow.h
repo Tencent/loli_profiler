@@ -62,6 +62,8 @@ private:
     void GetMergedCallstacks(QList<QTreeWidgetItem*>& topLevelItems);
 
     void StopCaptureProcess();
+    void InterpretRecordLibrary(StackRecord& record);
+    void InterpretStacktraceData();
 
 private slots:
     void FixedUpdate();
@@ -132,6 +134,7 @@ private:
     // stacktrace process
     StackTraceProcess *stacktraceProcess_;
     int stacktraceRetryCount_ = 0;
+    QVector<StackRecord> recordsCache_;
 
     // address process
     QVector<AddressProcess*> addrProcesses_;

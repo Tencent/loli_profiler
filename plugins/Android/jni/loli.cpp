@@ -356,35 +356,42 @@ size_t capture(void** buffer, size_t max) {
 }
 
 void dump(std::ostream& os, void** buffer, size_t count) {
-    const void* prevAddr = nullptr;
     for (size_t idx = 1; idx < count; ++idx) { // idx = 1 to ignore loli's hook function
         const void* addr = buffer[idx];
-        if (addr == prevAddr) // skip same addr
-            continue;
-        static thread_local std::unordered_map<const void*, Dl_info> dlInfoCache;
-        auto it = dlInfoCache.find(addr);
-        if (it == dlInfoCache.end()) {
-            Dl_info info;
-            if (dladdr(addr, &info)) {
-                it = dlInfoCache.emplace(addr, info).first;
-            } else {
-                continue;
-            }
-        }
-        Dl_info& info = it->second;
-        int status = 0;
-        {
-            auto demangled = __cxxabiv1::__cxa_demangle(info.dli_fname, 0, 0, &status);
-            const char* dlname = (status == 0 && demangled != nullptr) ? demangled : info.dli_fname;
-            auto shortdlname = strrchr(dlname, '/');
-            os << (shortdlname ? shortdlname + 1 : dlname) << '\\';
-            if (demangled != nullptr) free(demangled);
-        }
-        const void* reladdr = (void*)((_Unwind_Word)addr - (_Unwind_Word)info.dli_fbase);
-        os << reladdr << '\\';
-        prevAddr = addr;
+        os << addr << '\\';
     }
 }
+
+// void dump(std::ostream& os, void** buffer, size_t count) {
+//     const void* prevAddr = nullptr;
+//     for (size_t idx = 1; idx < count; ++idx) { // idx = 1 to ignore loli's hook function
+//         const void* addr = buffer[idx];
+//         if (addr == prevAddr) // skip same addr
+//             continue;
+//         static thread_local std::unordered_map<const void*, Dl_info> dlInfoCache;
+//         auto it = dlInfoCache.find(addr);
+//         if (it == dlInfoCache.end()) {
+//             Dl_info info;
+//             if (dladdr(addr, &info)) {
+//                 it = dlInfoCache.emplace(addr, info).first;
+//             } else {
+//                 continue;
+//             }
+//         }
+//         Dl_info& info = it->second;
+//         int status = 0;
+//         {
+//             auto demangled = __cxxabiv1::__cxa_demangle(info.dli_fname, 0, 0, &status);
+//             const char* dlname = (status == 0 && demangled != nullptr) ? demangled : info.dli_fname;
+//             auto shortdlname = strrchr(dlname, '/');
+//             os << (shortdlname ? shortdlname + 1 : dlname) << '\\';
+//             if (demangled != nullptr) free(demangled);
+//         }
+//         const void* reladdr = (void*)((_Unwind_Word)addr - (_Unwind_Word)info.dli_fbase);
+//         os << reladdr << '\\';
+//         prevAddr = addr;
+//     }
+// }
 
 char* buffer_ = NULL;
 const std::size_t bandwidth_ = 3000;

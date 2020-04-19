@@ -80,7 +80,7 @@ void StackTraceProcess::Interpret(const QByteArray& bytes) {
     QString line;
     int lineCount = 0;
     while (stream.readLineInto(&line)) {
-        auto words = line.split('\\');
+        auto words = line.split('\\', QString::SplitBehavior::SkipEmptyParts);
         if (words.size() == 0)
             continue;
         auto type = words[0].toInt();

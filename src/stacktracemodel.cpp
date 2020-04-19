@@ -96,12 +96,15 @@ QVariant StackTraceModel::headerData(int section, Qt::Orientation orientation, i
 }
 
 void StackTraceModel::clear() {
-    auto size = records_.size();
-    if (size == 0)
-        return;
-    beginRemoveRows({}, 0, size);
+//    auto size = records_.size();
+//    if (size == 0)
+//        return;
+    beginResetModel();
     records_.clear();
-    endRemoveRows();
+    endResetModel();
+//    beginRemoveRows({}, 0, size);
+//    records_.clear();
+//    endRemoveRows();
 }
 
 void StackTraceModel::append(const QVector<StackRecord>& records) {

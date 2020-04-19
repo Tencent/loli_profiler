@@ -31,6 +31,8 @@
 #include <QGLWidget>
 #include <QStatusBar>
 #include <QStandardPaths>
+#include <QtConcurrent>
+#include <QMutexLocker>
 
 #include <algorithm>
 #include <cmath>
@@ -613,6 +615,13 @@ void MainWindow::SwitchStackTraceModel(StackTraceProxyModel* model) {
     connect(ui->stackTableView->selectionModel(), &QItemSelectionModel::selectionChanged, this, &MainWindow::OnStackTableViewSelectionChanged);
 }
 
+QString Demangle(const QString& name) {
+    auto slashIndex = name.lastIndexOf('/');
+    if (slashIndex > 0)
+        return name.right(name.size() - slashIndex - 1);
+    return name;
+}
+
 void MainWindow::ReadSMapsFile(QFile* file) {
     QTextStream stream(file);
     SMapsSection total;
@@ -623,7 +632,8 @@ void MainWindow::ReadSMapsFile(QFile* file) {
             continue;
         auto strList = line.split(' ', QString::SplitBehavior::SkipEmptyParts);
         if (strList.size() >= 6) {
-            curSection = &sMapsSections_[strList[5]];
+            auto libName = Demangle(strList[5]);
+            curSection = &sMapsSections_[libName];
             auto addrs = strList[0].split('-');
             if (addrs.size() > 1) {
                 auto start = addrs[0].toULongLong(nullptr, 16);
@@ -741,18 +751,13 @@ void MainWindow::GetMergedCallstacks(QList<QTreeWidgetItem*>& topLevelItems) {
 }
 
 void MainWindow::StopCaptureProcess() {
+    ConnectionFailed();
     progressDialog_->setWindowTitle("Stop Capture Progress");
     progressDialog_->setLabelText(QString("Stopping capture ..."));
     progressDialog_->setMinimum(0);
     progressDialog_->setMaximum(2);
     progressDialog_->setValue(0);
     progressDialog_->show();
-    Print(QString("Captured %1 records.").arg(stacktraceModel_->rowCount()));
-    ConnectionFailed();
-    for (auto& library : libraries_)
-        ui->libraryComboBox->addItem(library);
-    OnTimelineRubberBandHide();
-    ShowSummary();
     progressDialog_->setValue(1);
     progressDialog_->setLabelText("Requesting smaps info from device.");
     QProcess process;
@@ -796,8 +801,92 @@ void MainWindow::StopCaptureProcess() {
     }
     if (!readSMaps) {
         Print("Failed to cat proc/pid/smaps");
+    } else {
+        InterpretStacktraceData();
     }
+    Print(QString("Captured %1 records.").arg(stacktraceModel_->rowCount()));
+    for (auto& library : libraries_)
+        ui->libraryComboBox->addItem(library);
+    OnTimelineRubberBandHide();
+    ShowSummary();
     progressDialog_->setValue(2);
+}
+
+static QMutex addrMutex_, libMutex_;
+static QVector<QPair<QString, SMapsSection*>> sMapsCache_;
+
+void MainWindow::InterpretRecordLibrary(StackRecord& record) {
+    auto it = callStackMap_.find(record.uuid_);
+    if (it == callStackMap_.end())
+        return;
+    auto& callStack = it.value();
+    for (int i = 0; i + 1 < callStack.size(); i += 2) {
+        auto& libName = callStack[i];
+        auto& funcAddr = callStack[i + 1];
+        quint64 addr = funcAddr.toULongLong(nullptr, 16);
+        bool found = false;
+        for (int i = 0; i < sMapsCache_.size(); i++) {
+            const auto& cache = sMapsCache_[i];
+            quint64 baseAddr;
+            if (cache.second->Contains(addr, record.size_, baseAddr)) {
+                funcAddr = "0x" + QString().setNum(addr - baseAddr, 16);
+                libName = cache.first;
+                QMutexLocker locker(&addrMutex_);
+                TryAddNewAddress(libName, funcAddr);
+                found = true;
+                break;
+            }
+        }
+        if (!found)
+            libName = "unknown";
+    }
+    if (callStack.size() == 0)
+        return;
+    record.library_ = callStack[0];
+    record.funcAddr_ = callStack[1];
+    if (record.library_.isEmpty())
+        record.library_ = callStack[0] = "unknown";
+    QMutexLocker locker(&libMutex_);
+    if (!libraries_.contains(record.library_))
+        libraries_.insert(record.library_);
+}
+
+void MainWindow::InterpretRecordsLibrary(int start, int count) {
+    for (int i = 0; i < count; i++)
+        InterpretRecordLibrary(recordsCache_[start + i]);
+}
+
+void MainWindow::InterpretStacktraceData() {
+    for (auto it = sMapsSections_.begin(); it != sMapsSections_.end(); ++it) {
+        auto& library = it.key();
+        auto& sections = it.value();
+        if (library.endsWith(".so"))
+            sMapsCache_.push_back(qMakePair(library, &sections));
+    }
+    auto threadCount = QThread::idealThreadCount();
+    auto payload = recordsCache_.size() / threadCount;
+    QVector<QFuture<void>> futures;
+    int currentIndex = 0;
+    for (int i = 0; i < threadCount - 1; i++) {
+        futures.push_back(QtConcurrent::run(this, &MainWindow::InterpretRecordsLibrary, currentIndex, payload));
+        currentIndex += payload;
+    }
+    futures.push_back(QtConcurrent::run(this, &MainWindow::InterpretRecordsLibrary, currentIndex, recordsCache_.size() - currentIndex));
+    progressDialog_->setWindowTitle("Translating data");
+    progressDialog_->setLabelText(QString("Translating %1 records by %2 jobs").arg(recordsCache_.size()).arg(threadCount));
+    progressDialog_->setMinimum(0);
+    progressDialog_->setMaximum(threadCount);
+    progressDialog_->setValue(0);
+    progressDialog_->show();
+    qApp->processEvents();
+    for (int i = 0; i < futures.size(); i++) {
+        progressDialog_->setValue(i);
+        futures[i].waitForFinished();
+    }
+    progressDialog_->hide();
+    stacktraceModel_->append(recordsCache_);
+    recordsCache_.clear();
+    sMapsCache_.clear();
 }
 
 void MainWindow::FixedUpdate() {
@@ -958,10 +1047,11 @@ void MainWindow::ScreenshotProcessErrorOccurred() {
 }
 
 void MainWindow::StacktraceDataReceived() {
+    if (!isConnected_ || !isCapturing_)
+        return;
     stacktraceRetryCount_ = 5;
     const auto& stacks = stacktraceProcess_->GetStackInfo();
     if (stacks.size() > 0) {
-        QVector<StackRecord> records;
         for (const auto& stack : stacks) {
             if (stack.size() < 3)
                 continue;
@@ -972,32 +1062,19 @@ void MainWindow::StacktraceDataReceived() {
             const auto& rootTime = root[1];
             const auto& rootSize = root[2];
             const auto& rootMemAddr = root[3];
-            const auto& rootLibrary = stack[1];
-            const auto& rootFuncAddr = TryAddNewAddress(rootLibrary, stack[2]);
             StackRecord record;
             record.uuid_ = QUuid::createUuid();
             record.seq_ = rootSeq.toUInt();
             record.time_ = rootTime.toInt();
             record.size_ = rootSize.toInt();
             record.addr_ = rootMemAddr;
-            // begin record full callstack, and find which lib starts this callstack
             auto& callStack = callStackMap_[record.uuid_];
-            for (int i = 3; i < stack.size() && i + 1 < stack.size(); i += 2) {
-                const auto& libName = stack[i];
-                const auto& funcAddr = stack[i + 1];
-                TryAddNewAddress(libName, funcAddr);
-                callStack.append(libName);
-                callStack.append(funcAddr);
+            for (int i = 3; i < stack.size(); i++) {
+                callStack.append(QString());
+                callStack.append(stack[i]);
             }
-            auto callStackLib = callStack.size() > 0 ? callStack[0] : rootLibrary;
-            // end record callstack
-            if (!libraries_.contains(callStackLib))
-                libraries_.insert(callStackLib);
-            record.library_ = callStackLib;
-            record.funcAddr_ = rootFuncAddr;
-            records.push_back(record);
+            recordsCache_.push_back(record);
         }
-        stacktraceModel_->append(records);
     }
     // read free call infos
     const auto& frees = stacktraceProcess_->GetFreeInfo();
@@ -1208,6 +1285,7 @@ void MainWindow::on_launchPushButton_clicked() {
         series->clear();
     screenshots_.clear();
     symbloMap_.clear();
+    recordsCache_.clear();
     freeAddrMap_.clear();
     callStackMap_.clear();
     callStackModel_->clear();

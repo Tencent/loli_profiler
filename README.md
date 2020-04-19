@@ -19,6 +19,7 @@
 | [togchen](https://git.code.oa.com/u/togchen)        | IEG互动娱乐事业群/魔方工作室群/技术中心/引擎中心/公共研发组  |
 | [peihualin](https://git.code.oa.com/u/peihualin)    | IEG互动娱乐事业群/光子工作室群/R工作室/X-Game项目组/前台程序组 |
 | [luckyguo](https://git.code.oa.com/u/luckyguo)      | 公司其他组织/腾讯音乐娱乐/QQ音乐业务线/音乐产品质量中心/专项测试开发组 |
+| [georgehu](https://git.code.oa.com/georgehu)        | IEG互动娱乐事业群/光子工作室群/量子工作室/国际化开发中心/统筹支持组/预研支持组 |
 
 *排名不分先后*
 

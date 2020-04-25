@@ -60,6 +60,7 @@ private:
     void SwitchStackTraceModel(StackTraceProxyModel* model);
     void ReadSMapsFile(QFile* file);
     void GetMergedCallstacks(QList<QTreeWidgetItem*>& topLevelItems);
+    void ResetFilters();
 
     void StopCaptureProcess();
     void InterpretRecordsLibrary(int start, int count);

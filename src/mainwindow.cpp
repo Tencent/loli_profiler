@@ -348,6 +348,7 @@ int MainWindow::LoadFromFile(QFile *file) {
     QSet<QString> libraries;
     filteredStacktraceModel_->clear();
     stacktraceModel_->clear();
+    ResetFilters();
     SwitchStackTraceModel(stacktraceProxyModel_);
     stream >> value;
     QVector<StackRecord> records;
@@ -750,6 +751,14 @@ void MainWindow::GetMergedCallstacks(QList<QTreeWidgetItem*>& topLevelItems) {
     }
 }
 
+void MainWindow::ResetFilters() {
+   minTime_ = 0;
+   maxTime_ = std::numeric_limits<double>::max();
+   ui->memSizeComboBox->setCurrentIndex(0);
+   ui->allocComboBox->setCurrentIndex(0);
+   ui->libraryComboBox->setCurrentIndex(0);
+}
+
 void MainWindow::StopCaptureProcess() {
     ConnectionFailed();
     progressDialog_->setWindowTitle("Stop Capture Progress");
@@ -884,6 +893,7 @@ void MainWindow::InterpretStacktraceData() {
         futures[i].waitForFinished();
     }
     progressDialog_->hide();
+    ResetFilters();
     stacktraceModel_->append(recordsCache_);
     FilterStackTraceModel();
     recordsCache_.clear();
@@ -1271,9 +1281,7 @@ void MainWindow::on_launchPushButton_clicked() {
     stacktraceModel_->clear();
     sMapsSections_.clear();
     SwitchStackTraceModel(stacktraceProxyModel_);
-    ui->memSizeComboBox->setCurrentIndex(0);
-    ui->allocComboBox->setCurrentIndex(0);
-    ui->libraryComboBox->setCurrentIndex(0);
+    ResetFilters();
     while (ui->libraryComboBox->count() > 1)
         ui->libraryComboBox->removeItem(ui->libraryComboBox->count() - 1);
     ui->appNameLineEdit->setEnabled(false);

@@ -410,7 +410,8 @@ void serverLoop(int sock) {
     uint32_t compressBufferSize = 1024;
     char* compressBuffer = new char[compressBufferSize];
     struct timeval time;
-    time.tv_usec = 33;
+    time.tv_sec = 0; // must initialize this value to prevent uninitialised memory
+    time.tv_usec = 100;
     fd_set fds;
     int clientSock = -1;
     auto lastTickTime = std::chrono::steady_clock::now();
@@ -425,6 +426,7 @@ void serverLoop(int sock) {
             if (FD_ISSET(sock, &fds)) {
                 clientSock = accept(sock, NULL, NULL);
                 if (clientSock >= 0) {
+                    __android_log_print(ANDROID_LOG_INFO, "Loli", "Client connected");
                     hasClient_ = true;
                 }
             }
@@ -449,6 +451,7 @@ void serverLoop(int sock) {
                 int ecode = recv(clientSock, buffer_, BUFSIZ, 0);
                 if (ecode <= 0) {
                     hasClient_ = false;
+                    __android_log_print(ANDROID_LOG_INFO, "Loli", "Client disconnected, ecode: %i", ecode);
                     continue;
                 }
             }
@@ -476,6 +479,7 @@ void serverLoop(int sock) {
                     compressBufferSize = static_cast<std::uint32_t>(requiredSize * 1.5f);
                     delete[] compressBuffer;
                     compressBuffer = new char[compressBufferSize];
+                    // __android_log_print(ANDROID_LOG_INFO, "Loli", "Buffer exapnding: %i", static_cast<uint32_t>(compressBufferSize));
                 }
                 uint32_t compressSize = LZ4_compress_default(str.c_str(), compressBuffer, srcSize, requiredSize);
                 if (compressSize == 0) {

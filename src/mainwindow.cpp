@@ -885,6 +885,7 @@ void MainWindow::InterpretStacktraceData() {
     }
     progressDialog_->hide();
     stacktraceModel_->append(recordsCache_);
+    FilterStackTraceModel();
     recordsCache_.clear();
     sMapsCache_.clear();
 }

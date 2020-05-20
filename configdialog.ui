@@ -10,7 +10,7 @@
     <x>0</x>
     <y>0</y>
     <width>400</width>
-    <height>300</height>
+    <height>400</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -35,13 +35,76 @@
    <property name="spacing">
     <number>6</number>
    </property>
-   <item row="0" column="0">
-    <widget class="QLabel" name="label_3">
+   <item row="6" column="0">
+    <widget class="QLabel" name="label_4">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
      <property name="text">
-      <string>Android SDK</string>
+      <string>Libraries</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
+     </property>
+    </widget>
+   </item>
+   <item row="6" column="1">
+    <widget class="ConfigListWidget" name="libraryListWidget">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="contextMenuPolicy">
+      <enum>Qt::CustomContextMenu</enum>
+     </property>
+     <property name="verticalScrollBarPolicy">
+      <enum>Qt::ScrollBarAlwaysOn</enum>
+     </property>
+     <property name="selectionMode">
+      <enum>QAbstractItemView::ExtendedSelection</enum>
+     </property>
+     <property name="horizontalScrollMode">
+      <enum>QAbstractItemView::ScrollPerPixel</enum>
+     </property>
+    </widget>
+   </item>
+   <item row="1" column="0">
+    <widget class="QLabel" name="label_5">
+     <property name="text">
+      <string>Android NDK</string>
      </property>
      <property name="alignment">
       <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
+     </property>
+    </widget>
+   </item>
+   <item row="4" column="1">
+    <widget class="QSpinBox" name="thresholdSpinBox">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="toolTip">
+      <string>Malloc stacktrace collect threshold.</string>
+     </property>
+     <property name="suffix">
+      <string> byte</string>
+     </property>
+     <property name="prefix">
+      <string/>
+     </property>
+     <property name="maximum">
+      <number>1048576</number>
+     </property>
+     <property name="value">
+      <number>1024</number>
      </property>
     </widget>
    </item>
@@ -91,16 +154,6 @@
      </item>
     </layout>
    </item>
-   <item row="1" column="0">
-    <widget class="QLabel" name="label_5">
-     <property name="text">
-      <string>Android NDK</string>
-     </property>
-     <property name="alignment">
-      <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
-     </property>
-    </widget>
-   </item>
    <item row="1" column="1">
     <layout class="QHBoxLayout" name="horizontalLayout_2">
      <property name="sizeConstraint">
@@ -138,34 +191,10 @@
      </item>
     </layout>
    </item>
-   <item row="2" column="0">
-    <widget class="QLabel" name="label_6">
+   <item row="4" column="0">
+    <widget class="QLabel" name="label_2">
      <property name="text">
-      <string>Mode</string>
-     </property>
-     <property name="alignment">
-      <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
-     </property>
-    </widget>
-   </item>
-   <item row="2" column="1">
-    <widget class="QComboBox" name="modeComboBox">
-     <item>
-      <property name="text">
-       <string>strict</string>
-      </property>
-     </item>
-     <item>
-      <property name="text">
-       <string>loose</string>
-      </property>
-     </item>
-    </widget>
-   </item>
-   <item row="3" column="0">
-    <widget class="QLabel" name="label">
-     <property name="text">
-      <string>Architecture</string>
+      <string>Threshold</string>
      </property>
      <property name="alignment">
       <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
@@ -186,69 +215,83 @@
      </item>
     </widget>
    </item>
-   <item row="4" column="0">
-    <widget class="QLabel" name="label_2">
+   <item row="3" column="0">
+    <widget class="QLabel" name="label">
      <property name="text">
-      <string>Threshold</string>
+      <string>Architecture</string>
      </property>
      <property name="alignment">
       <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
      </property>
     </widget>
    </item>
-   <item row="4" column="1">
-    <widget class="QSpinBox" name="thresholdSpinBox">
-     <property name="sizePolicy">
-      <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-       <horstretch>0</horstretch>
-       <verstretch>0</verstretch>
-      </sizepolicy>
+   <item row="2" column="1">
+    <widget class="QComboBox" name="modeComboBox">
+     <item>
+      <property name="text">
+       <string>strict</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>loose</string>
+      </property>
+     </item>
+    </widget>
+   </item>
+   <item row="0" column="0">
+    <widget class="QLabel" name="label_3">
+     <property name="text">
+      <string>Android SDK</string>
      </property>
-     <property name="toolTip">
-      <string>Malloc stacktrace collect threshold.</string>
+     <property name="alignment">
+      <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
      </property>
-     <property name="suffix">
-      <string> byte</string>
+    </widget>
+   </item>
+   <item row="2" column="0">
+    <widget class="QLabel" name="label_6">
+     <property name="text">
+      <string>Mode</string>
      </property>
-     <property name="prefix">
-      <string/>
-     </property>
-     <property name="maximum">
-      <number>1048576</number>
-     </property>
-     <property name="value">
-      <number>1024</number>
+     <property name="alignment">
+      <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
      </property>
     </widget>
    </item>
    <item row="5" column="0">
-    <widget class="QLabel" name="label_4">
-     <property name="sizePolicy">
-      <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
-       <horstretch>0</horstretch>
-       <verstretch>0</verstretch>
-      </sizepolicy>
-     </property>
+    <widget class="QLabel" name="label_7">
      <property name="text">
-      <string>Libraries</string>
-     </property>
-     <property name="alignment">
-      <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
+      <string>Type</string>
      </property>
     </widget>
    </item>
    <item row="5" column="1">
-    <widget class="QListWidget" name="libraryListWidget">
-     <property name="sizePolicy">
-      <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-       <horstretch>0</horstretch>
-       <verstretch>0</verstretch>
-      </sizepolicy>
+    <widget class="QComboBox" name="typeComboBox">
+     <property name="toolTip">
+      <string/>
      </property>
+     <item>
+      <property name="text">
+       <string>white list</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>black list</string>
+      </property>
+     </item>
     </widget>
    </item>
   </layout>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>ConfigListWidget</class>
+   <extends>QListWidget</extends>
+   <header>configlistwidget.h</header>
+  </customwidget>
+ </customwidgets>
  <resources>
   <include location="res/icon.qrc"/>
  </resources>

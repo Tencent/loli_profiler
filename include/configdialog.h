@@ -13,6 +13,7 @@ public:
     explicit ConfigDialog(QWidget *parent = nullptr);
     ~ConfigDialog();
     void LoadConfigFile(const QString& arch);
+    void OnPasteClipboard();
     QString GetArchString() const;
 
     static bool CreateIfNoConfigFile(QWidget *parent = nullptr);

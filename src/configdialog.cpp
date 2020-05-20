@@ -2,6 +2,8 @@
 #include "ui_configdialog.h"
 #include "pathutils.h"
 
+#include <QClipboard>
+#include <QMimeData>
 #include <QDir>
 #include <QFile>
 #include <QFileDialog>
@@ -28,6 +30,7 @@ void ConfigDialog::LoadConfigFile(const QString& arch) {
     auto threshold = 128;
     auto libraries = QStringList() << "libunity" << "libil2cpp";
     auto mode = QString("strict");
+    auto type = QString("white list");
     QFile file(cfgPath + "/loli2.conf");
     file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
     if (file.open(QIODevice::ReadOnly)) {
@@ -44,6 +47,8 @@ void ConfigDialog::LoadConfigFile(const QString& arch) {
                 libraries = words[1].split(',', QString::SplitBehavior::SkipEmptyParts);
             } else if (words[0] == "mode") {
                 mode = words[1];
+            } else if (words[0] == "type") {
+                type = words[1];
             }
             lineNum++;
         }
@@ -51,27 +56,31 @@ void ConfigDialog::LoadConfigFile(const QString& arch) {
     file.close();
     ui->modeComboBox->setCurrentText(mode);
     ui->archComboBox->setCurrentText(arch);
+    ui->typeComboBox->setCurrentText(type);
     ui->libraryListWidget->addItems(libraries);
     for (int i = 0; i < ui->libraryListWidget->count(); i++) {
         auto item = ui->libraryListWidget->item(i);
         item->setFlags(item->flags() | Qt::ItemIsEditable);
     }
-    ui->libraryListWidget->setVerticalScrollBarPolicy(Qt::ScrollBarPolicy::ScrollBarAlwaysOn);
-    ui->libraryListWidget->setContextMenuPolicy(Qt::CustomContextMenu);
-    connect(ui->libraryListWidget, &QListWidget::customContextMenuRequested, [&](const QPoint &pos){
-        QMenu menu;
-        menu.addAction("New", [&]() {
-            ui->libraryListWidget->addItem("libfoo");
+    ui->thresholdSpinBox->setValue(threshold);
+}
+
+void ConfigDialog::OnPasteClipboard() {
+    const auto clipboard = QApplication::clipboard();
+    const auto mimeData = clipboard->mimeData();
+    if (!mimeData->hasText()) {
+        QMessageBox::warning(this, "Warning", "Invalide clipboard data!");
+        return;
+    }
+    auto textData = mimeData->text();
+    auto parts = textData.split(',', QString::SplitBehavior::SkipEmptyParts);
+    for (auto& part : parts) {
+        if (part.size() > 0) {
+            ui->libraryListWidget->addItem(part);
             auto item = ui->libraryListWidget->item(ui->libraryListWidget->count() - 1);
             item->setFlags(item->flags() | Qt::ItemIsEditable);
-        });
-        menu.addAction("Delete", [&]() {
-            for (int i = 0; i < ui->libraryListWidget->selectedItems().size(); ++i)
-                delete ui->libraryListWidget->takeItem(ui->libraryListWidget->currentRow());
-        });
-        menu.exec(ui->libraryListWidget->mapToGlobal(pos));
-    });
-    ui->thresholdSpinBox->setValue(threshold);
+        }
+    }
 }
 
 QString ConfigDialog::GetArchString() const {
@@ -89,7 +98,7 @@ bool ConfigDialog::CreateIfNoConfigFile(QWidget *parent) {
         file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
         if (file.open(QIODevice::ReadWrite | QIODevice::Truncate | QIODevice::Text)) {
             QTextStream stream(&file);
-            stream << "threshold:256" << endl << "libraries:libunity,libil2cpp" << endl << "mode:strict";
+            stream << "threshold:256" << endl << "libraries:libunity,libil2cpp" << endl << "mode:strict" << endl << "type:white list";
             stream.flush();
             return true;
         } else {
@@ -114,6 +123,8 @@ void ConfigDialog::on_ConfigDialog_finished(int) {
         }
         stream << endl;
         stream << "mode:" << ui->modeComboBox->currentText();
+        stream << endl;
+        stream << "type:" << ui->typeComboBox->currentText();
         stream.flush();
     }
     file.close();

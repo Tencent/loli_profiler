@@ -27,6 +27,7 @@ CONFIG += c++11
 INCLUDEPATH += $$PWD/include $$PWD/src/lz4
 
 SOURCES += \
+        src/configlistwidget.cpp \
         src/smaps/statsmapsdialog.cpp \
         src/smaps/visualizesmapsdialog.cpp \
         src/adbprocess.cpp \
@@ -55,6 +56,7 @@ HEADERS += \
         include/addressprocess.h \
         include/charttooltipitem.h \
         include/configdialog.h \
+        include/configlistwidget.h \
         include/customgraphicsview.h \
         include/fixedscrollarea.h \
         include/interactivechartview.h \

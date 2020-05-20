@@ -68,6 +68,7 @@ int minRecSize_ = 0;
 std::atomic<std::uint32_t> callSeq_;
 
 loliDataMode mode_ = loliDataMode::STRICT;
+bool isBlacklist_ = false;
 loli::Sampler* sampler_ = nullptr;
 loli::spinlock samplerLock_;
 
@@ -158,38 +159,55 @@ void *loliRealloc(void *ptr, size_t new_size) {
 int loliHook(std::unordered_set<std::string>& tokens) {
     xhook_enable_debug(1);
     xhook_clear();
-    int ecode = 0;
-    for (auto& token : tokens) {
-        auto soReg = ".*/" + token + "\\.so$";
-        // __android_log_print(ANDROID_LOG_INFO, "Loli", "hooking %s", token.c_str());
-        ecode = xhook_register(soReg.c_str(), "malloc", (void*)loliMalloc, nullptr);
+    auto hookLibrary = [](const char* soRegex) -> bool {
+        int ecode = xhook_register(soRegex, "malloc", (void*)loliMalloc, nullptr);
         if (ecode != 0) {
-            __android_log_print(ANDROID_LOG_INFO, "Loli", "error hooking %s's malloc()", token.c_str());
+            __android_log_print(ANDROID_LOG_INFO, "Loli", "error hooking %s's malloc()", soRegex);
             return ecode;
         }
-        ecode = xhook_register(soReg.c_str(), "free", (void*)loliFree, nullptr);
+        ecode = xhook_register(soRegex, "free", (void*)loliFree, nullptr);
         if (ecode != 0) {
-            __android_log_print(ANDROID_LOG_INFO, "Loli", "error hooking %s's free()", token.c_str());
+            __android_log_print(ANDROID_LOG_INFO, "Loli", "error hooking %s's free()", soRegex);
             return ecode;
         }
-        ecode = xhook_register(soReg.c_str(), "calloc", (void*)loliCalloc, nullptr);
+        ecode = xhook_register(soRegex, "calloc", (void*)loliCalloc, nullptr);
         if (ecode != 0) {
-            __android_log_print(ANDROID_LOG_INFO, "Loli", "error hooking %s's calloc()", token.c_str());
+            __android_log_print(ANDROID_LOG_INFO, "Loli", "error hooking %s's calloc()", soRegex);
             return ecode;
         }
-        ecode = xhook_register(soReg.c_str(), "memalign", (void*)loliMemalign, nullptr);
+        ecode = xhook_register(soRegex, "memalign", (void*)loliMemalign, nullptr);
         if (ecode != 0) {
-            __android_log_print(ANDROID_LOG_INFO, "Loli", "error hooking %s's memalign()", token.c_str());
+            __android_log_print(ANDROID_LOG_INFO, "Loli", "error hooking %s's memalign()", soRegex);
             return ecode;
         }
-        ecode = xhook_register(soReg.c_str(), "realloc", (void*)loliRealloc, nullptr);
+        ecode = xhook_register(soRegex, "realloc", (void*)loliRealloc, nullptr);
         if (ecode != 0) {
-            __android_log_print(ANDROID_LOG_INFO, "Loli", "error hooking %s's realloc()", token.c_str());
+            __android_log_print(ANDROID_LOG_INFO, "Loli", "error hooking %s's realloc()", soRegex);
             return ecode;
+        }
+        return ecode;
+    };
+    if (isBlacklist_) {
+        for (auto& token : tokens) {
+            auto tokenRegex = ".*/" + token + "\\.so$";
+            xhook_ignore(tokenRegex.c_str(), NULL);
+        }
+        int ecode = hookLibrary(".*\\.so$");
+        if (ecode != 0) {
+            return ecode;
+        }
+    } else {
+        for (auto& token : tokens) {
+            auto tokenRegex = ".*/" + token + "\\.so$";
+            // __android_log_print(ANDROID_LOG_INFO, "Loli", "hooking %s", token.c_str());
+            int ecode = hookLibrary(tokenRegex.c_str());
+            if (ecode != 0) {
+                return ecode;
+            }
         }
     }
     xhook_refresh(0);
-    return ecode;
+    return 0;
 }
 
 void loliProcMapsThread(const std::unordered_set<std::string>& libs) {
@@ -232,11 +250,20 @@ void loliProcMapsThread(const std::unordered_set<std::string>& libs) {
             auto pathnameStr = std::string(pathName);
             if (loaded.find(pathnameStr) == loaded.end()) {
                 loaded.insert(pathnameStr);
-                for (auto& token : desired) {
-                    if (pathnameStr.find(token) != std::string::npos) {
-                        loadedDesiredCount--;
-                        shouldHook = true;
-                        __android_log_print(ANDROID_LOG_INFO, "Loli", "%s is loaded", token.c_str());
+                if (isBlacklist_) {
+                    for (auto& token : desired) {
+                        if (pathnameStr.find(token) == std::string::npos) {
+                            shouldHook = true;
+                            break;
+                        }
+                    }
+                } else {
+                    for (auto& token : desired) {
+                        if (pathnameStr.find(token) != std::string::npos) {
+                            loadedDesiredCount--;
+                            shouldHook = true;
+                            __android_log_print(ANDROID_LOG_INFO, "Loli", "%s is loaded", token.c_str());
+                        }
                     }
                 }
             }
@@ -309,10 +336,12 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
                 mode_ = loliDataMode::LOOSE;
             else 
                 mode_ = loliDataMode::STRICT;
+         } else if (words[0] == "type") {
+            isBlacklist_ = words[1] == "black list";
          }
     }
-    __android_log_print(ANDROID_LOG_INFO, "Loli", "mode: %i, minRecSize: %i, hookLibs: %s",
-        static_cast<int>(mode_), minRecSize, hookLibraries.c_str());
+    __android_log_print(ANDROID_LOG_INFO, "Loli", "mode: %i, minRecSize: %i, blacklist: %i, hookLibs: %s",
+        static_cast<int>(mode_), minRecSize, isBlacklist_ ? 1 : 0, hookLibraries.c_str());
     // parse library tokens
     std::unordered_set<std::string> tokens;
     std::istringstream namess(hookLibraries);

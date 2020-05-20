@@ -52,12 +52,24 @@
     </widget>
    </item>
    <item row="6" column="1">
-    <widget class="QListWidget" name="libraryListWidget">
+    <widget class="ConfigListWidget" name="libraryListWidget">
      <property name="sizePolicy">
       <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
        <horstretch>0</horstretch>
        <verstretch>0</verstretch>
       </sizepolicy>
+     </property>
+     <property name="contextMenuPolicy">
+      <enum>Qt::CustomContextMenu</enum>
+     </property>
+     <property name="verticalScrollBarPolicy">
+      <enum>Qt::ScrollBarAlwaysOn</enum>
+     </property>
+     <property name="selectionMode">
+      <enum>QAbstractItemView::ExtendedSelection</enum>
+     </property>
+     <property name="horizontalScrollMode">
+      <enum>QAbstractItemView::ScrollPerPixel</enum>
      </property>
     </widget>
    </item>
@@ -273,6 +285,13 @@
    </item>
   </layout>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>ConfigListWidget</class>
+   <extends>QListWidget</extends>
+   <header>configlistwidget.h</header>
+  </customwidget>
+ </customwidgets>
  <resources>
   <include location="res/icon.qrc"/>
  </resources>

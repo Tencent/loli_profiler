@@ -62,36 +62,6 @@ void ConfigDialog::LoadConfigFile(const QString& arch) {
         auto item = ui->libraryListWidget->item(i);
         item->setFlags(item->flags() | Qt::ItemIsEditable);
     }
-    ui->libraryListWidget->setVerticalScrollBarPolicy(Qt::ScrollBarPolicy::ScrollBarAlwaysOn);
-    ui->libraryListWidget->setContextMenuPolicy(Qt::CustomContextMenu);
-    ui->libraryListWidget->setSelectionMode(QAbstractItemView::SelectionMode::ExtendedSelection);
-    connect(ui->libraryListWidget, &QListWidget::customContextMenuRequested, [&](const QPoint &pos){
-        QMenu menu;
-        menu.addAction("New", [this]() {
-            ui->libraryListWidget->addItem("libfoo");
-            auto item = ui->libraryListWidget->item(ui->libraryListWidget->count() - 1);
-            item->setFlags(item->flags() | Qt::ItemIsEditable);
-        });
-        menu.addAction("Delete", [this]() {
-            auto items = ui->libraryListWidget->selectedItems();
-            for (auto item : items) {
-                delete ui->libraryListWidget->takeItem(ui->libraryListWidget->row(item));
-            }
-        });
-        menu.addAction("Clear", [this]() {
-            while (ui->libraryListWidget->count() > 0) {
-                delete ui->libraryListWidget->takeItem(0);
-            }
-        });
-        menu.addAction("Paste", [this]() { OnPasteClipboard(); });
-        menu.addAction("Clear And Paste", [this]() {
-            while (ui->libraryListWidget->count() > 0) {
-                delete ui->libraryListWidget->takeItem(0);
-            }
-            OnPasteClipboard();
-        });
-        menu.exec(ui->libraryListWidget->mapToGlobal(pos));
-    });
     ui->thresholdSpinBox->setValue(threshold);
 }
 

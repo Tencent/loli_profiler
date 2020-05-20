@@ -2,6 +2,8 @@
 #include "ui_configdialog.h"
 #include "pathutils.h"
 
+#include <QClipboard>
+#include <QMimeData>
 #include <QDir>
 #include <QFile>
 #include <QFileDialog>
@@ -62,20 +64,53 @@ void ConfigDialog::LoadConfigFile(const QString& arch) {
     }
     ui->libraryListWidget->setVerticalScrollBarPolicy(Qt::ScrollBarPolicy::ScrollBarAlwaysOn);
     ui->libraryListWidget->setContextMenuPolicy(Qt::CustomContextMenu);
+    ui->libraryListWidget->setSelectionMode(QAbstractItemView::SelectionMode::ExtendedSelection);
     connect(ui->libraryListWidget, &QListWidget::customContextMenuRequested, [&](const QPoint &pos){
         QMenu menu;
-        menu.addAction("New", [&]() {
+        menu.addAction("New", [this]() {
             ui->libraryListWidget->addItem("libfoo");
             auto item = ui->libraryListWidget->item(ui->libraryListWidget->count() - 1);
             item->setFlags(item->flags() | Qt::ItemIsEditable);
         });
-        menu.addAction("Delete", [&]() {
-            for (int i = 0; i < ui->libraryListWidget->selectedItems().size(); ++i)
-                delete ui->libraryListWidget->takeItem(ui->libraryListWidget->currentRow());
+        menu.addAction("Delete", [this]() {
+            auto items = ui->libraryListWidget->selectedItems();
+            for (auto item : items) {
+                delete ui->libraryListWidget->takeItem(ui->libraryListWidget->row(item));
+            }
+        });
+        menu.addAction("Clear", [this]() {
+            while (ui->libraryListWidget->count() > 0) {
+                delete ui->libraryListWidget->takeItem(0);
+            }
+        });
+        menu.addAction("Paste", [this]() { OnPasteClipboard(); });
+        menu.addAction("Clear And Paste", [this]() {
+            while (ui->libraryListWidget->count() > 0) {
+                delete ui->libraryListWidget->takeItem(0);
+            }
+            OnPasteClipboard();
         });
         menu.exec(ui->libraryListWidget->mapToGlobal(pos));
     });
     ui->thresholdSpinBox->setValue(threshold);
+}
+
+void ConfigDialog::OnPasteClipboard() {
+    const auto clipboard = QApplication::clipboard();
+    const auto mimeData = clipboard->mimeData();
+    if (!mimeData->hasText()) {
+        QMessageBox::warning(this, "Warning", "Invalide clipboard data!");
+        return;
+    }
+    auto textData = mimeData->text();
+    auto parts = textData.split(',', QString::SplitBehavior::SkipEmptyParts);
+    for (auto& part : parts) {
+        if (part.size() > 0) {
+            ui->libraryListWidget->addItem(part);
+            auto item = ui->libraryListWidget->item(ui->libraryListWidget->count() - 1);
+            item->setFlags(item->flags() | Qt::ItemIsEditable);
+        }
+    }
 }
 
 QString ConfigDialog::GetArchString() const {

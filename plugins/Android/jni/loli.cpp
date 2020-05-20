@@ -48,6 +48,7 @@ extern "C" {
 #include "spinlock.h"
 #include "sampler.h"
 
+#include "wrapper/wrapper.h"
 namespace loli {
 size_t capture(void** buffer, size_t max);
 void dump(std::ostream& os, void** buffer, size_t count);
@@ -278,6 +279,8 @@ void split(const std::string& str,
 }
 
 JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
+
+    test();
     __android_log_print(ANDROID_LOG_INFO, "Loli", "JNI_OnLoad");
     JNIEnv* env;
     if (vm->GetEnv((void**)&env, JNI_VERSION_1_6) != JNI_OK) {

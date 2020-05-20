@@ -14,7 +14,8 @@ LOCAL_SRC_FILES  := loli.cpp \
                     xh_jni.c \
                     xh_log.c \
                     xh_util.c \
-                    xh_version.c
+                    xh_version.c\
+                    wrapper/wrapper.cpp
 LOCAL_LDLIBS     := -llog -latomic
 
 include $(BUILD_SHARED_LIBRARY)

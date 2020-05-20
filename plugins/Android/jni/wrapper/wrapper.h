@@ -9,6 +9,8 @@
 #ifndef wrapper_h
 #define wrapper_h
 
+#define SLOT_NUM 128
+
 #define _8_MACRO(MACRO, INDEX,...)\
 MACRO(INDEX##0,##__VA_ARGS__)\
 MACRO(INDEX##1,##__VA_ARGS__)\
@@ -48,4 +50,10 @@ _512_MACRO(MACRO, INDEX##4,##__VA_ARGS__)\
 _512_MACRO(MACRO, INDEX##5,##__VA_ARGS__)\
 _512_MACRO(MACRO, INDEX##6,##__VA_ARGS__)\
 _512_MACRO(MACRO, INDEX##7,##__VA_ARGS__)
+
+
+extern "C"
+{
+int test();
+}
 #endif /* wrapper_h */

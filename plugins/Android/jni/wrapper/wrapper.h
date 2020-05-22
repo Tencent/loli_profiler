@@ -6,54 +6,45 @@
 //  Copyright © 2020 ashenzhou(周星). All rights reserved.
 //
 
-#ifndef wrapper_h
-#define wrapper_h
+#ifndef WRAPPER_H
+#define WRAPPER_H
 
-#define SLOT_NUM 128
+#include <stdlib.h>
 
-#define _8_MACRO(MACRO, INDEX,...)\
-MACRO(INDEX##0,##__VA_ARGS__)\
-MACRO(INDEX##1,##__VA_ARGS__)\
-MACRO(INDEX##2,##__VA_ARGS__)\
-MACRO(INDEX##3,##__VA_ARGS__)\
-MACRO(INDEX##4,##__VA_ARGS__)\
-MACRO(INDEX##5,##__VA_ARGS__)\
-MACRO(INDEX##6,##__VA_ARGS__)\
-MACRO(INDEX##7,##__VA_ARGS__)
+#ifdef __cplusplus
+extern "C" {
+#endif // __cplusplus
 
-#define _64_MACRO(MACRO, INDEX, ...)\
-_8_MACRO(MACRO, INDEX##0,##__VA_ARGS__)\
-_8_MACRO(MACRO, INDEX##1,##__VA_ARGS__)\
-_8_MACRO(MACRO, INDEX##2,##__VA_ARGS__)\
-_8_MACRO(MACRO, INDEX##3,##__VA_ARGS__)\
-_8_MACRO(MACRO, INDEX##4,##__VA_ARGS__)\
-_8_MACRO(MACRO, INDEX##5,##__VA_ARGS__)\
-_8_MACRO(MACRO, INDEX##6,##__VA_ARGS__)\
-_8_MACRO(MACRO, INDEX##7,##__VA_ARGS__)
+typedef void* (*MALLOC_FPTR)(size_t);
+typedef void (*FREE_FPTR)(void*);
+typedef void* (*CALLOC_FPTR)(int,int);
+typedef void* (*MEMALIGN_FPTR)(size_t, size_t);
+typedef void* (*REALLOC_FPTR)(void*, size_t);
 
-#define _128_MACRO(MACRO, INDEX, ...)\
-_64_MACRO(MACRO, INDEX##0,##__VA_ARGS__)\
-_64_MACRO(MACRO, INDEX##1,##__VA_ARGS__)\
+typedef struct _hook_info {
+    char* so_name = nullptr;
+    uintptr_t so_baseaddr = 0;
+    MALLOC_FPTR malloc;
+    FREE_FPTR free;
+    CALLOC_FPTR calloc;
+    MEMALIGN_FPTR memalign;
+    REALLOC_FPTR realloc;
+    ~_hook_info() {
+        if (so_name) {
+            delete so_name;
+            so_name = nullptr;
+        }
+    }
+} HOOK_INFO;
 
-#define _256_MACRO(MACRO, INDEX, ...)\
-_64_MACRO(MACRO, INDEX##0,##__VA_ARGS__)\
-_64_MACRO(MACRO, INDEX##1,##__VA_ARGS__)\
-_64_MACRO(MACRO, INDEX##2,##__VA_ARGS__)\
-_64_MACRO(MACRO, INDEX##3,##__VA_ARGS__)\
+bool wrapper_init();
+HOOK_INFO* wrapper_by_index(int index);
+HOOK_INFO* wrapper_by_name(const char* name);
 
-#define _512_MACRO(MACRO, INDEX, ...)\
-_512_MACRO(MACRO, INDEX##0,##__VA_ARGS__)\
-_512_MACRO(MACRO, INDEX##1,##__VA_ARGS__)\
-_512_MACRO(MACRO, INDEX##2,##__VA_ARGS__)\
-_512_MACRO(MACRO, INDEX##3,##__VA_ARGS__)\
-_512_MACRO(MACRO, INDEX##4,##__VA_ARGS__)\
-_512_MACRO(MACRO, INDEX##5,##__VA_ARGS__)\
-_512_MACRO(MACRO, INDEX##6,##__VA_ARGS__)\
-_512_MACRO(MACRO, INDEX##7,##__VA_ARGS__)
+// int test();
 
-
-extern "C"
-{
-int test();
+#ifdef __cplusplus
 }
-#endif /* wrapper_h */
+#endif // __cplusplus
+
+#endif /* WRAPPER_H */

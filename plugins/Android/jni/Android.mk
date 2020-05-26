@@ -4,9 +4,11 @@ include $(CLEAR_VARS)
 
 LOCAL_MODULE     := libloli
 LOCAL_C_INCLUDES := $(LOCAL_PATH)
-LOCAL_CFLAGS     := -Wall -Wextra -Werror -fvisibility=hidden -std=c11 -O0
-LOCAL_CXXFLAGS   := -Wall -Wextra -Werror -fvisibility=hidden -std=c++11 -O0
+LOCAL_CFLAGS     := -Wall -Wextra -Werror -fvisibility=hidden -std=c11
+LOCAL_CXXFLAGS   := -Wall -Wextra -Werror -fvisibility=hidden -std=c++11
 LOCAL_SRC_FILES  := loli.cpp \
+                    loli_server.cpp \
+                    loli_utils.cpp \
                     lz4/lz4.c \
                     xhook.c \
                     xh_core.c \

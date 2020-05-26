@@ -18,6 +18,13 @@ extern "C" {
 
 #include <android/log.h>
 
+HOOK_INFO::~_hook_info() {
+    if (so_name) {
+        delete so_name;
+        so_name = nullptr;
+    }
+}
+
 #define SLOT_NUM 512
 
 #define _8_MACRO(MACRO, INDEX,...)\
@@ -63,25 +70,25 @@ _64_MACRO(MACRO, INDEX##7,##__VA_ARGS__)
 #define _MALLOC_WRAPPER(INDEX)\
 void *_MALLOC##INDEX(size_t size)\
 {\
-    return loliIndexMalloc(size, INDEX);\
+    return loli_index_malloc(size, INDEX);\
 }
 
 #define _CALLOC_WRAPPER(INDEX)\
 void *_CALLOC##INDEX(int n, int size)\
 {\
-    return loliIndexCalloc(n, size, INDEX);\
+    return loli_index_calloc(n, size, INDEX);\
 }
 
 #define _MEMALIGN_WRAPPER(INDEX)\
 void *_MEMALIGN##INDEX(size_t alignment, size_t size)\
 {\
-    return loliIndexMemalign(alignment, size, INDEX);\
+    return loli_index_memalign(alignment, size, INDEX);\
 }
 
 #define _REALLOC_WRAPPER(INDEX)\
 void *_REALLOC##INDEX(void *ptr, size_t new_size)\
 {\
-    return loliIndexRealloc(ptr, new_size, INDEX);\
+    return loli_index_realloc(ptr, new_size, INDEX);\
 }
 
 #define NSLOT_MACRO(NUM)\

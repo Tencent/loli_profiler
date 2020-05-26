@@ -14,6 +14,9 @@
 #include <QSettings>
 #include <QDebug>
 
+static ConfigDialog::Settings currentSettings_;
+static bool settingsInitialized_ = false;
+
 ConfigDialog::ConfigDialog(QWidget *parent) :
     QDialog(parent), ui(new Ui::ConfigDialog) {
     ui->setupUi(this);
@@ -26,43 +29,16 @@ ConfigDialog::~ConfigDialog() {
 void ConfigDialog::LoadConfigFile(const QString& arch) {
     ui->lineEditSDKFolder->setText(PathUtils::GetSDKPath());
     ui->lineEditNDKFolder->setText(PathUtils::GetNDKPath());
-    auto cfgPath = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).first();
-    auto threshold = 128;
-    auto libraries = QStringList() << "libunity" << "libil2cpp";
-    auto mode = QString("strict");
-    auto type = QString("white list");
-    QFile file(cfgPath + "/loli2.conf");
-    file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
-    if (file.open(QIODevice::ReadOnly)) {
-        QTextStream stream(file.readAll());
-        QString line;
-        int lineNum = 0;
-        while (stream.readLineInto(&line)) {
-            auto words = line.split(':');
-            if (words.size() < 2)
-                continue;
-            if (words[0] == "threshold") {
-                threshold = words[1].toInt();
-            } else if (words[0] == "libraries") {
-                libraries = words[1].split(',', QString::SplitBehavior::SkipEmptyParts);
-            } else if (words[0] == "mode") {
-                mode = words[1];
-            } else if (words[0] == "type") {
-                type = words[1];
-            }
-            lineNum++;
-        }
-    }
-    file.close();
-    ui->modeComboBox->setCurrentText(mode);
+    ParseConfigFile();
+    ui->modeComboBox->setCurrentText(currentSettings_.mode_);
     ui->archComboBox->setCurrentText(arch);
-    ui->typeComboBox->setCurrentText(type);
-    ui->libraryListWidget->addItems(libraries);
+    ui->typeComboBox->setCurrentText(currentSettings_.type_);
+    ui->libraryListWidget->addItems(currentSettings_.libraries_);
     for (int i = 0; i < ui->libraryListWidget->count(); i++) {
         auto item = ui->libraryListWidget->item(i);
         item->setFlags(item->flags() | Qt::ItemIsEditable);
     }
-    ui->thresholdSpinBox->setValue(threshold);
+    ui->thresholdSpinBox->setValue(currentSettings_.threshold_);
 }
 
 void ConfigDialog::OnPasteClipboard() {
@@ -85,6 +61,47 @@ void ConfigDialog::OnPasteClipboard() {
 
 QString ConfigDialog::GetArchString() const {
     return ui->archComboBox->currentText();
+}
+
+ConfigDialog::Settings ConfigDialog::ParseConfigFile() {
+    if (!CreateIfNoConfigFile(nullptr)) {
+        return currentSettings_;
+    }
+    auto cfgPath = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).first();
+    QFile file(cfgPath + "/loli2.conf");
+    file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+    if (file.open(QIODevice::ReadOnly)) {
+        QTextStream stream(file.readAll());
+        QString line;
+        while (stream.readLineInto(&line)) {
+            auto words = line.split(':');
+            if (words.size() < 2)
+                continue;
+            if (words[0] == "threshold") {
+                currentSettings_.threshold_ = words[1].toInt();
+            } else if (words[0] == "libraries") {
+                currentSettings_.libraries_ = words[1].split(',', QString::SplitBehavior::SkipEmptyParts);
+            } else if (words[0] == "mode") {
+                currentSettings_.mode_ = words[1];
+            } else if (words[0] == "type") {
+                currentSettings_.type_ = words[1];
+            }
+        }
+    }
+    file.close();
+    settingsInitialized_ = true;
+    return currentSettings_;
+}
+
+ConfigDialog::Settings ConfigDialog::GetCurrentSettings() {
+    if (!settingsInitialized_) {
+        ParseConfigFile();
+    }
+    return currentSettings_;
+}
+
+bool ConfigDialog::IsNoStackMode() {
+    return GetCurrentSettings().mode_ == "nostack";
 }
 
 bool ConfigDialog::CreateIfNoConfigFile(QWidget *parent) {
@@ -110,6 +127,7 @@ bool ConfigDialog::CreateIfNoConfigFile(QWidget *parent) {
 
 void ConfigDialog::on_ConfigDialog_finished(int) {
     auto cfgPath = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).first();
+    QStringList libraries;
     QFile file(cfgPath + "/loli2.conf");
     file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
     if (file.open(QIODevice::ReadWrite | QIODevice::Truncate | QIODevice::Text)) {
@@ -118,6 +136,7 @@ void ConfigDialog::on_ConfigDialog_finished(int) {
         stream << "libraries:";
         auto numLibs = ui->libraryListWidget->count();
         for (int i = 0; i < numLibs; i++) {
+            libraries << ui->libraryListWidget->item(i)->text();
             stream << ui->libraryListWidget->item(i)->text();
             if (i != numLibs - 1) stream << ',';
         }
@@ -127,6 +146,10 @@ void ConfigDialog::on_ConfigDialog_finished(int) {
         stream << "type:" << ui->typeComboBox->currentText();
         stream.flush();
     }
+    currentSettings_.mode_ = ui->modeComboBox->currentText();
+    currentSettings_.type_ = ui->typeComboBox->currentText();
+    currentSettings_.libraries_ = libraries;
+    currentSettings_.threshold_ = ui->thresholdSpinBox->value();
     file.close();
 }
 
@@ -154,4 +177,8 @@ void ConfigDialog::on_btnNDKFolder_clicked() {
         PathUtils::SetNDKPath(path);
         ui->lineEditNDKFolder->setText(path);
     }
+}
+
+void ConfigDialog::on_modeComboBox_currentIndexChanged(const QString &arg) {
+    ui->thresholdSpinBox->setEnabled(arg != "nostack");
 }

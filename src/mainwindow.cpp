@@ -471,7 +471,11 @@ void MainWindow::ConnectionFailed() {
     stacktraceProcess_->Disconnect();
     ui->appNameLineEdit->setEnabled(true);
     ui->launchPushButton->setText("Launch");
-    ui->actionOpen->setEnabled(true);
+    ui->menuFile->setEnabled(true);
+    ui->menuTools->setEnabled(true);
+    ui->configPushButton->setEnabled(true);
+    ui->symbloPushButton->setEnabled(true);
+    ui->toolBar->setEnabled(true);
     ui->stackTableView->setSortingEnabled(true);
 }
 
@@ -866,33 +870,42 @@ void MainWindow::InterpretRecordsLibrary(int start, int count) {
 }
 
 void MainWindow::InterpretStacktraceData() {
-    for (auto it = sMapsSections_.begin(); it != sMapsSections_.end(); ++it) {
-        auto& library = it.key();
-        auto& sections = it.value();
-        if (library.endsWith(".so"))
-            sMapsCache_.push_back(qMakePair(library, &sections));
+    if (ConfigDialog::IsNoStackMode()) {
+        for (int i = 0; i < recordsCache_.size(); i++) {
+            auto& record = recordsCache_[i];
+            if (!libraries_.contains(record.library_)) {
+                libraries_.insert(record.library_);
+            }
+        }
+    } else {
+        for (auto it = sMapsSections_.begin(); it != sMapsSections_.end(); ++it) {
+            auto& library = it.key();
+            auto& sections = it.value();
+            if (library.endsWith(".so"))
+                sMapsCache_.push_back(qMakePair(library, &sections));
+        }
+        auto threadCount = QThread::idealThreadCount();
+        auto payload = recordsCache_.size() / threadCount;
+        QVector<QFuture<void>> futures;
+        int currentIndex = 0;
+        for (int i = 0; i < threadCount - 1; i++) {
+            futures.push_back(QtConcurrent::run(this, &MainWindow::InterpretRecordsLibrary, currentIndex, payload));
+            currentIndex += payload;
+        }
+        futures.push_back(QtConcurrent::run(this, &MainWindow::InterpretRecordsLibrary, currentIndex, recordsCache_.size() - currentIndex));
+        progressDialog_->setWindowTitle("Translating data");
+        progressDialog_->setLabelText(QString("Translating %1 records by %2 jobs").arg(recordsCache_.size()).arg(threadCount));
+        progressDialog_->setMinimum(0);
+        progressDialog_->setMaximum(threadCount);
+        progressDialog_->setValue(0);
+        progressDialog_->show();
+        qApp->processEvents();
+        for (int i = 0; i < futures.size(); i++) {
+            progressDialog_->setValue(i);
+            futures[i].waitForFinished();
+        }
+        progressDialog_->hide();
     }
-    auto threadCount = QThread::idealThreadCount();
-    auto payload = recordsCache_.size() / threadCount;
-    QVector<QFuture<void>> futures;
-    int currentIndex = 0;
-    for (int i = 0; i < threadCount - 1; i++) {
-        futures.push_back(QtConcurrent::run(this, &MainWindow::InterpretRecordsLibrary, currentIndex, payload));
-        currentIndex += payload;
-    }
-    futures.push_back(QtConcurrent::run(this, &MainWindow::InterpretRecordsLibrary, currentIndex, recordsCache_.size() - currentIndex));
-    progressDialog_->setWindowTitle("Translating data");
-    progressDialog_->setLabelText(QString("Translating %1 records by %2 jobs").arg(recordsCache_.size()).arg(threadCount));
-    progressDialog_->setMinimum(0);
-    progressDialog_->setMaximum(threadCount);
-    progressDialog_->setValue(0);
-    progressDialog_->show();
-    qApp->processEvents();
-    for (int i = 0; i < futures.size(); i++) {
-        progressDialog_->setValue(i);
-        futures[i].waitForFinished();
-    }
-    progressDialog_->hide();
     ResetFilters();
     stacktraceModel_->append(recordsCache_);
     FilterStackTraceModel();
@@ -1062,9 +1075,11 @@ void MainWindow::StacktraceDataReceived() {
         return;
     stacktraceRetryCount_ = 5;
     const auto& stacks = stacktraceProcess_->GetStackInfo();
+    auto isNoStack = ConfigDialog::IsNoStackMode();
+    auto minStackNum = isNoStack ? 2 : 3;
     if (stacks.size() > 0) {
         for (const auto& stack : stacks) {
-            if (stack.size() < 3)
+            if (stack.size() < minStackNum)
                 continue;
             auto root = stack[0].split(',');
             if (root.size() < 4)
@@ -1079,10 +1094,14 @@ void MainWindow::StacktraceDataReceived() {
             record.time_ = rootTime.toInt();
             record.size_ = rootSize.toInt();
             record.addr_ = rootMemAddr;
-            auto& callStack = callStackMap_[record.uuid_];
-            for (int i = 3; i < stack.size(); i++) {
-                callStack.append(QString());
-                callStack.append(stack[i]);
+            if (isNoStack) {
+                record.library_ = stack[1];
+            } else {
+                auto& callStack = callStackMap_[record.uuid_];
+                for (int i = 3; i < stack.size(); i++) {
+                    callStack.append(QString());
+                    callStack.append(stack[i]);
+                }
             }
             recordsCache_.push_back(record);
         }
@@ -1264,8 +1283,8 @@ void MainWindow::on_launchPushButton_clicked() {
         return;
     }
 
-    if (!ConfigDialog::CreateIfNoConfigFile(this))
-        return;
+    // make sure config file exists
+    ConfigDialog::ParseConfigFile();
 
     progressDialog_->setWindowTitle("Launch Progress");
     progressDialog_->setLabelText("Preparing ...");
@@ -1286,7 +1305,11 @@ void MainWindow::on_launchPushButton_clicked() {
         ui->libraryComboBox->removeItem(ui->libraryComboBox->count() - 1);
     ui->appNameLineEdit->setEnabled(false);
     ui->launchPushButton->setText("Stop Capture");
-    ui->actionOpen->setEnabled(false);
+    ui->configPushButton->setEnabled(false);
+    ui->symbloPushButton->setEnabled(false);
+    ui->toolBar->setEnabled(false);
+    ui->menuFile->setEnabled(false);
+    ui->menuTools->setEnabled(false);
     ui->statusBar->clearMessage();
 
     ui->stackTableView->setSortingEnabled(false);
@@ -1378,8 +1401,6 @@ void MainWindow::on_symbloPushButton_clicked() {
 void MainWindow::on_configPushButton_clicked() {
     QSettings settings("MoreFun", "LoliProfiler");
     targetArch_ = settings.value(SETTINGS_ARCH).toString();
-    if (!ConfigDialog::CreateIfNoConfigFile(this))
-        return;
     ConfigDialog dialog(this);
     dialog.setWindowFlags(dialog.windowFlags() | Qt::WindowTitleHint | Qt::WindowCloseButtonHint);
     dialog.setWindowModality(Qt::WindowModal);

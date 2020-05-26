@@ -29,12 +29,7 @@ typedef struct _hook_info {
     CALLOC_FPTR calloc;
     MEMALIGN_FPTR memalign;
     REALLOC_FPTR realloc;
-    ~_hook_info() {
-        if (so_name) {
-            delete so_name;
-            so_name = nullptr;
-        }
-    }
+    ~_hook_info();
 } HOOK_INFO;
 
 bool wrapper_init();

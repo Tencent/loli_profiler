@@ -237,6 +237,11 @@
        <string>loose</string>
       </property>
      </item>
+     <item>
+      <property name="text">
+       <string>nostack</string>
+      </property>
+     </item>
     </widget>
    </item>
    <item row="0" column="0">

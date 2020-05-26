@@ -16,11 +16,23 @@ public:
     void OnPasteClipboard();
     QString GetArchString() const;
 
+    struct Settings {
+        int threshold_ = 128;
+        QStringList libraries_;
+        QString mode_ = "strict";
+        QString type_ = "white list";
+    };
+    static Settings ParseConfigFile();
+    static bool IsNoStackMode();
+    static Settings GetCurrentSettings();
+private:
     static bool CreateIfNoConfigFile(QWidget *parent = nullptr);
+
 private slots:
     void on_ConfigDialog_finished(int result);
     void on_btnSDKFolder_clicked();
     void on_btnNDKFolder_clicked();
+    void on_modeComboBox_currentIndexChanged(const QString &arg);
 
 private:
     Ui::ConfigDialog *ui;

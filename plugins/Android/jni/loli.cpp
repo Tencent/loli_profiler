@@ -361,19 +361,18 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
     std::string line;
     std::vector<std::string> words;
     while (std::getline(infile, line)) {
-        __android_log_print(ANDROID_LOG_INFO, "Loli", "mode: %s", line.c_str());
-         loli_split(line, words, ":");
-         if (words.size() < 2) {
+        loli_split(line, words, ":");
+        if (words.size() < 2) {
             continue;
-         }
-         // remove unnecessary characters like \n \t
-         loli_trim(words[1]);
-         if (words[0] == "threshold") {
+        }
+        // remove unnecessary characters like \n \t
+        loli_trim(words[1]);
+        if (words[0] == "threshold") {
             std::istringstream iss(words[1]);
             iss >> minRecSize;
-         } else if (words[0] == "libraries") {
+        } else if (words[0] == "libraries") {
             hookLibraries = words[1];
-         } else if (words[0] == "mode") {
+        } else if (words[0] == "mode") {
             if (words[1] == "loose") {
                 mode_ = loliDataMode::LOOSE;
             } else if (words[1] == "strict") {
@@ -381,9 +380,9 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
             } else {
                 mode_ = loliDataMode::NOSTACK;
             }
-         } else if (words[0] == "type") {
+        } else if (words[0] == "type") {
             isBlacklist_ = words[1] == "blacklist";
-         }
+        }
     }
     __android_log_print(ANDROID_LOG_INFO, "Loli", "mode: %i, minRecSize: %i, blacklist: %i, hookLibs: %s",
         static_cast<int>(mode_), minRecSize, isBlacklist_ ? 1 : 0, hookLibraries.c_str());
@@ -391,7 +390,6 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
     std::unordered_set<std::string> tokens;
     std::istringstream namess(hookLibraries);
     while (std::getline(namess, line, ',')) {
-        loli_trim(line);
         tokens.insert(line);
     }
     if (isBlacklist_) {

@@ -1360,6 +1360,7 @@ void MainWindow::on_launchPushButton_clicked() {
     ResetFilters();
     while (ui->libraryComboBox->count() > 1)
         ui->libraryComboBox->removeItem(ui->libraryComboBox->count() - 1);
+    ui->recordCountLineEdit->setText("");
     ui->appNameLineEdit->setEnabled(false);
     ui->launchPushButton->setText("Stop Capture");
     ui->configPushButton->setEnabled(false);

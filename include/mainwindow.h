@@ -42,6 +42,7 @@ public:
 
 private:
     void Print(const QString& str);
+    void ExportToText(QFile *file, bool optimal);
     void SaveToFile(QFile *file);
     int LoadFromFile(QFile *file);
     QString GetLastOpenDir() const;
@@ -104,6 +105,8 @@ private slots:
     void on_memSizeComboBox_currentIndexChanged(int index);
     void on_libraryComboBox_currentIndexChanged(int index);
     void on_allocComboBox_currentIndexChanged(int index);
+
+    void on_actionExport_To_Text_triggered();
 
 private:
     Ui::MainWindow *ui;

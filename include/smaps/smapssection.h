@@ -20,11 +20,11 @@ struct SMapsSection {
     quint32 privateClean_ = 0;
     quint32 privateDirty_ = 0;
     bool Contains(quint64 addr, qint32 size, quint64& baseAddr) const  {
+        (void)size;
         for (auto& sectionAddr : addrs_) {
             auto start = sectionAddr.start_ - sectionAddr.offset_;
             auto end = sectionAddr.end_ - sectionAddr.offset_;
-            if (addr >= start &&
-                addr + static_cast<quint64>(size) <= end) {
+            if (addr >= start && addr < end) {
                 baseAddr = start;
                 return true;
             }

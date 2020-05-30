@@ -237,6 +237,46 @@ void MainWindow::Print(const QString& str) {
     ui->consolePlainTextEdit->appendPlainText(str);
 }
 
+void MainWindow::ExportToText(QFile* file, bool optimal) {
+    QTextStream stream(file);
+    qint32 count = stacktraceModel_->rowCount();
+    stream << "[seq,time,size,addr,library,funcaddr]" << endl;
+    for (int i = 0; i < count; i++) {
+        auto& record = stacktraceModel_->recordAt(i);
+        stream << record.seq_ << ',' << record.time_ << ',' << record.size_ << ','
+               << record.addr_ << ',' << record.library_ << ',' << record.funcAddr_ << endl;
+        auto it = callStackMap_.find(record.uuid_);
+        if (it != callStackMap_.end()) {
+            auto stackCount = it.value().size();
+            for (int i = 0; i < stackCount; i += 2) {
+                const auto& libName = it.value()[i];
+                const auto& funcAddr = it.value()[i + 1];
+                if (optimal) {
+                    stream << libName << ',' << funcAddr << ',';
+                } else {
+                    const auto& funcName = TryAddNewAddress(libName, funcAddr);
+                    stream << libName << ',' << funcName << ',';
+                }
+            }
+            if (it.value().size() > 0) {
+                stream << endl;
+            }
+        }
+        stream << endl;
+    }
+    if (optimal) {
+        stream << "[stackAddrMap]" << endl;
+        for (auto libIt = symbloMap_.begin(); libIt != symbloMap_.end(); ++libIt) {
+            stream << libIt.key() << ":" << endl;
+            auto& addrs = libIt.value();
+            for (auto addrIt = addrs.begin(); addrIt != addrs.end(); ++addrIt) {
+                stream << addrIt.key() << ", " << addrIt.value() << endl;
+            }
+        }
+        stream << endl;
+    }
+}
+
 void MainWindow::SaveToFile(QFile *file) {
     QDataStream stream(file);
     stream << static_cast<quint32>(APP_MAGIC);
@@ -1522,4 +1562,31 @@ void MainWindow::on_libraryComboBox_currentIndexChanged(int) {
 void MainWindow::on_allocComboBox_currentIndexChanged(int) {
     FilterStackTraceModel();
     ShowSummary();
+}
+
+void MainWindow::on_actionExport_To_Text_triggered() {
+    QString fileName = QFileDialog::getSaveFileName(nullptr, tr("Save Text File"),
+                                                    GetLastOpenDir(), tr("Text files (*.txt)"));
+    if (fileName.isEmpty())
+        return;
+    if (!fileName.endsWith("txt", Qt::CaseInsensitive))
+        fileName += ".txt";
+    QTemporaryFile tempFile;
+    if (!tempFile.open()) {
+        QMessageBox::warning(this, "Warning", "Can't create file!", QMessageBox::StandardButton::Ok);
+        return;
+    }
+    bool optimal = QMessageBox::information(this, "Export Option",
+                             "Export smaller text file?",
+                             QMessageBox::StandardButton::Yes | QMessageBox::StandardButton::No) == QMessageBox::StandardButton::Yes;
+    ExportToText(&tempFile, optimal);
+    if (QFileInfo::exists(fileName) && !QFile(fileName).remove()) {
+        QMessageBox::warning(this, "Warning", "Error removing file!", QMessageBox::StandardButton::Ok);
+        return;
+    }
+    if (!tempFile.rename(fileName)) {
+        QMessageBox::warning(this, "Warning", "Error renaming file!", QMessageBox::StandardButton::Ok);
+        return;
+    }
+    tempFile.setAutoRemove(false);
 }

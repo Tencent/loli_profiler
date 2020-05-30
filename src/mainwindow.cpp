@@ -370,6 +370,7 @@ int MainWindow::LoadFromFile(QFile *file) {
         record.funcAddr_ = str;
         records.push_back(record);
     }
+    ui->recordCountLineEdit->setText("");
     ui->libraryComboBox->setCurrentIndex(0);
     for (int i = 1; i < ui->libraryComboBox->count(); i++)
         ui->libraryComboBox->removeItem(i);
@@ -1360,6 +1361,7 @@ void MainWindow::on_launchPushButton_clicked() {
     ResetFilters();
     while (ui->libraryComboBox->count() > 1)
         ui->libraryComboBox->removeItem(ui->libraryComboBox->count() - 1);
+    ui->recordCountLineEdit->setText("");
     ui->appNameLineEdit->setEnabled(false);
     ui->launchPushButton->setText("Stop Capture");
     ui->configPushButton->setEnabled(false);

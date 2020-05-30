@@ -697,25 +697,34 @@ void MainWindow::GetMergedCallstacks(QList<QTreeWidgetItem*>& topLevelItems) {
             setData(0, Qt::DisplayRole, funcName_);
             setData(1, Qt::DisplayRole, sizeToString(size_));
             setData(1, Qt::UserRole, size_);
+            setData(2, Qt::DisplayRole, count_);
         }
         void setSize(quint64 size) {
             size_ = size;
             setData(1, Qt::DisplayRole, sizeToString(size_));
             setData(1, Qt::UserRole, size_);
         }
+        void setCount(quint64 count) {
+            count_ = count;
+            setData(2, Qt::DisplayRole, count_);
+        }
         quint64 size() const { return size_; }
+        quint64 count() const { return count_; }
         bool operator<(const QTreeWidgetItem &other) const {
             auto casted = static_cast<const CustomTreeWidgetItem&>(other);
             int column = treeWidget()->sortColumn();
             if (column == 0) {
                 return funcName_ < casted.funcName_;
-            } else {
+            } else if (column == 1) {
                 return size_ < casted.size_;
+            } else {
+                return count_ < casted.count_;
             }
         }
     private:
         QString funcName_;
         quint64 size_;
+        quint64 count_ = 1;
     };
     QHash<uint, CustomTreeWidgetItem*> itemMap;
     for (int i = 0; i < count; i++) {
@@ -738,6 +747,7 @@ void MainWindow::GetMergedCallstacks(QList<QTreeWidgetItem*>& topLevelItems) {
                 auto parent = item;
                 while (parent != nullptr) {
                     parent->setSize(parent->size() + static_cast<quint64>(record.size_));
+                    parent->setCount(parent->count() + 1);
                     parent = static_cast<CustomTreeWidgetItem*>(parent->parent());
                 }
                 if (child != nullptr)
@@ -1231,11 +1241,58 @@ void MainWindow::on_actionShow_Merged_Callstacks_triggered() {
     layout->setSpacing(2);
     fragDialog.setLayout(layout);
     auto treeWidget = new QTreeWidget(&fragDialog);
-    treeWidget->setHeaderLabels(QStringList() << "Function" << "Size");
+    treeWidget->setHeaderLabels(QStringList() << "Function" << "Size" << "Count");
     treeWidget->addTopLevelItems(topLevelItems);
+    treeWidget->resizeColumnToContents(0);
     treeWidget->header()->resizeSections(QHeaderView::ResizeMode::ResizeToContents);
     treeWidget->setSortingEnabled(true);
+    auto searchLineEdit = new QLineEdit(&fragDialog);
+    searchLineEdit->setPlaceholderText("Type keyword to do fuzzy search, then press enter to review one by one.");
+    searchLineEdit->setClearButtonEnabled(true);
+    QString prevKeyword;
+    int matchIndex = 0;
+    QList<QTreeWidgetItem*> matches;
+    connect(searchLineEdit, &QLineEdit::editingFinished, [&](){
+        auto keyword = searchLineEdit->text();
+        if (prevKeyword == keyword)
+            return;
+        treeWidget->clearSelection();
+        matches.clear();
+        matchIndex = 0;
+        prevKeyword = keyword;
+        if (keyword.size() == 0)
+            return;
+        auto startTime = sclock::now();
+        matches = treeWidget->findItems(keyword, Qt::MatchContains | Qt::MatchRecursive, 0);
+        auto ms = std::chrono::duration<double, std::milli>(sclock::now() - startTime).count();
+        ui->statusBar->showMessage(QString("Found %1 matches in %2 ms, press enter to review one by one").arg(matches.size()).arg(ms), 10000);
+    });
+    connect(searchLineEdit, &QLineEdit::returnPressed, [&](){
+        if (matches.size() <= 0) {
+            return;
+        }
+        auto item = matches[matchIndex];
+        item->setSelected(true);
+        auto rowCount = 1;
+        auto curItem = item->parent();
+        while (curItem) {
+            rowCount++;
+            if (!curItem->isExpanded())
+                curItem->setExpanded(true);
+            curItem = curItem->parent();
+        }
+        // scroll to item
+        treeWidget->scrollToItem(item, QAbstractItemView::ScrollHint::PositionAtCenter);
+        auto itemRect = treeWidget->visualItemRect(item);
+        auto hscrollbar = treeWidget->horizontalScrollBar();
+        hscrollbar->setValue(hscrollbar->value() + itemRect.x());
+        matchIndex++;
+        if (matchIndex > matches.size() - 1) {
+            matchIndex = 0;
+        }
+    });
     layout->addWidget(treeWidget);
+    layout->addWidget(searchLineEdit);
     layout->setMargin(0);
     fragDialog.setWindowTitle("Show Merged Callstacks");
     fragDialog.resize(900, 400);

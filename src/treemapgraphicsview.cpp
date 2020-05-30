@@ -276,9 +276,10 @@ int TreeMapGraphicsView::GetChildCount(QTreeWidgetItem* item) const {
 TreeMapNode* TreeMapGraphicsView::GetTreeMapNode(ItemInfo& info, QRectF rect) {
     QString title;
     if (info.treeItem_) {
+        auto countStr = info.treeItem_->data(2, Qt::DisplayRole).toString();
         auto sizeStr = info.treeItem_->data(1, Qt::DisplayRole).toString();
         auto nameStr = info.treeItem_->data(0, Qt::DisplayRole).toString();
-        title = sizeStr + ": " + nameStr;
+        title = sizeStr + " (" + countStr + "): " + nameStr;
     }
     auto node = new TreeMapNode(rect, title);
     scene_->addItem(node);

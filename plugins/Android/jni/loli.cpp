@@ -355,6 +355,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
 
     int minRecSize = 512;
     std::string hookLibraries = "libil2cpp,libunity";
+    std::string whitelist, blacklist;
     mode_ = loliDataMode::STRICT;
 
     std::ifstream infile("/data/local/tmp/loli2.conf");
@@ -370,8 +371,10 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
         if (words[0] == "threshold") {
             std::istringstream iss(words[1]);
             iss >> minRecSize;
-        } else if (words[0] == "libraries") {
-            hookLibraries = words[1];
+        } else if (words[0] == "whitelist") {
+            whitelist = words[1];
+        } else if (words[0] == "blacklist") {
+            blacklist = words[1];
         } else if (words[0] == "mode") {
             if (words[1] == "loose") {
                 mode_ = loliDataMode::LOOSE;
@@ -384,6 +387,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
             isBlacklist_ = words[1] == "blacklist";
         }
     }
+    hookLibraries = isBlacklist_ ? blacklist : whitelist;
     __android_log_print(ANDROID_LOG_INFO, "Loli", "mode: %i, minRecSize: %i, blacklist: %i, hookLibs: %s",
         static_cast<int>(mode_), minRecSize, isBlacklist_ ? 1 : 0, hookLibraries.c_str());
     // parse library tokens

@@ -33,12 +33,18 @@ void ConfigDialog::LoadConfigFile(const QString& arch) {
     ui->modeComboBox->setCurrentText(currentSettings_.mode_);
     ui->archComboBox->setCurrentText(arch);
     ui->typeComboBox->setCurrentText(currentSettings_.type_);
-    ui->libraryListWidget->addItems(currentSettings_.libraries_);
-    for (int i = 0; i < ui->libraryListWidget->count(); i++) {
-        auto item = ui->libraryListWidget->item(i);
+    ui->blacklistWidget->addItems(currentSettings_.blacklist_);
+    ui->whitelistWidget->addItems(currentSettings_.whitelist_);
+    for (int i = 0; i < ui->blacklistWidget->count(); i++) {
+        auto item = ui->blacklistWidget->item(i);
+        item->setFlags(item->flags() | Qt::ItemIsEditable);
+    }
+    for (int i = 0; i < ui->whitelistWidget->count(); i++) {
+        auto item = ui->whitelistWidget->item(i);
         item->setFlags(item->flags() | Qt::ItemIsEditable);
     }
     ui->thresholdSpinBox->setValue(currentSettings_.threshold_);
+    ui->libraryStackedWidget->setCurrentIndex(ui->typeComboBox->currentIndex());
 }
 
 void ConfigDialog::OnPasteClipboard() {
@@ -50,10 +56,11 @@ void ConfigDialog::OnPasteClipboard() {
     }
     auto textData = mimeData->text();
     auto parts = textData.split(',', QString::SplitBehavior::SkipEmptyParts);
+    auto listwidget = ui->libraryStackedWidget->currentIndex() == 0 ? ui->whitelistWidget : ui->blacklistWidget;
     for (auto& part : parts) {
         if (part.size() > 0) {
-            ui->libraryListWidget->addItem(part);
-            auto item = ui->libraryListWidget->item(ui->libraryListWidget->count() - 1);
+            listwidget->addItem(part);
+            auto item = listwidget->item(listwidget->count() - 1);
             item->setFlags(item->flags() | Qt::ItemIsEditable);
         }
     }
@@ -79,8 +86,10 @@ ConfigDialog::Settings ConfigDialog::ParseConfigFile() {
                 continue;
             if (words[0] == "threshold") {
                 currentSettings_.threshold_ = words[1].toInt();
-            } else if (words[0] == "libraries") {
-                currentSettings_.libraries_ = words[1].split(',', QString::SplitBehavior::SkipEmptyParts);
+            } else if (words[0] == "whitelist") {
+                currentSettings_.whitelist_ = words[1].split(',', QString::SplitBehavior::SkipEmptyParts);
+            } else if (words[0] == "blacklist") {
+                currentSettings_.blacklist_ = words[1].split(',', QString::SplitBehavior::SkipEmptyParts);
             } else if (words[0] == "mode") {
                 currentSettings_.mode_ = words[1];
             } else if (words[0] == "type") {
@@ -115,7 +124,10 @@ bool ConfigDialog::CreateIfNoConfigFile(QWidget *parent) {
         file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
         if (file.open(QIODevice::ReadWrite | QIODevice::Truncate | QIODevice::Text)) {
             QTextStream stream(&file);
-            stream << "threshold:256" << endl << "libraries:libunity,libil2cpp" << endl << "mode:strict" << endl << "type:white list";
+            stream << "threshold:256" << endl <<
+                      "whitelist:libunity,libil2cpp" << endl <<
+                      "blacklist:libloli,libart,libc++,libc,libcutils" << endl <<
+                      "mode:strict" << endl << "type:white list";
             stream.flush();
             return true;
         } else {
@@ -133,11 +145,19 @@ void ConfigDialog::on_ConfigDialog_finished(int) {
     if (file.open(QIODevice::ReadWrite | QIODevice::Truncate | QIODevice::Text)) {
         QTextStream stream(&file);
         stream << "threshold:" << ui->thresholdSpinBox->value() << endl;
-        stream << "libraries:";
-        auto numLibs = ui->libraryListWidget->count();
+        stream << "whitelist:";
+        auto numLibs = ui->whitelistWidget->count();
         for (int i = 0; i < numLibs; i++) {
-            libraries << ui->libraryListWidget->item(i)->text();
-            stream << ui->libraryListWidget->item(i)->text();
+            libraries << ui->whitelistWidget->item(i)->text();
+            stream << ui->whitelistWidget->item(i)->text();
+            if (i != numLibs - 1) stream << ',';
+        }
+        stream << endl;
+        stream << "blacklist:";
+        numLibs = ui->blacklistWidget->count();
+        for (int i = 0; i < numLibs; i++) {
+            libraries << ui->blacklistWidget->item(i)->text();
+            stream << ui->blacklistWidget->item(i)->text();
             if (i != numLibs - 1) stream << ',';
         }
         stream << endl;
@@ -148,7 +168,7 @@ void ConfigDialog::on_ConfigDialog_finished(int) {
     }
     currentSettings_.mode_ = ui->modeComboBox->currentText();
     currentSettings_.type_ = ui->typeComboBox->currentText();
-    currentSettings_.libraries_ = libraries;
+    currentSettings_.whitelist_ = libraries;
     currentSettings_.threshold_ = ui->thresholdSpinBox->value();
     file.close();
 }
@@ -181,4 +201,8 @@ void ConfigDialog::on_btnNDKFolder_clicked() {
 
 void ConfigDialog::on_modeComboBox_currentIndexChanged(const QString &arg) {
     ui->thresholdSpinBox->setEnabled(arg != "nostack");
+}
+
+void ConfigDialog::on_typeComboBox_currentIndexChanged(int index) {
+    ui->libraryStackedWidget->setCurrentIndex(index);
 }

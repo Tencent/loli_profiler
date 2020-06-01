@@ -105,7 +105,6 @@ private slots:
     void on_memSizeComboBox_currentIndexChanged(int index);
     void on_libraryComboBox_currentIndexChanged(int index);
     void on_allocComboBox_currentIndexChanged(int index);
-
     void on_actionExport_To_Text_triggered();
 
 private:

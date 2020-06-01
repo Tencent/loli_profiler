@@ -18,7 +18,8 @@ public:
 
     struct Settings {
         int threshold_ = 128;
-        QStringList libraries_;
+        QStringList whitelist_;
+        QStringList blacklist_;
         QString mode_ = "strict";
         QString type_ = "white list";
     };
@@ -33,6 +34,7 @@ private slots:
     void on_btnSDKFolder_clicked();
     void on_btnNDKFolder_clicked();
     void on_modeComboBox_currentIndexChanged(const QString &arg);
+    void on_typeComboBox_currentIndexChanged(int index);
 
 private:
     Ui::ConfigDialog *ui;

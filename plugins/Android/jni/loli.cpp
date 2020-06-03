@@ -158,33 +158,22 @@ void loli_free(void* ptr) {
 }
 
 BACKTRACE_FPTR loli_get_backtrace(const char* path) {
-    LOLILOGI("dlsym at %s", path);
     BACKTRACE_FPTR backtrace = nullptr;
     void *handle = fake_dlopen(path, RTLD_LAZY);
     if (handle) {
         void (*set_loli_ignore_func)(void (*funcPtr)(bool)) = nullptr;
         *(void **) (&set_loli_ignore_func) = fake_dlsym(handle, "set_loli_ignore_func");
          if (set_loli_ignore_func == nullptr) {
-            LOLILOGE("Error dlsym set_loli_ignore_func");
+            LOLILOGI("Error dlsym set_loli_ignore_func: %s", path);
             return backtrace;
         }
         (*set_loli_ignore_func)(toggle_ignore_current);
-        // void (*setFreeFunc)(void (*freePtr)(void*)) = nullptr;
-        // void (*setMallocFunc)(void* (*mallocPtr)(size_t)) = nullptr;
-        // *(void **) (&setFreeFunc) = fake_dlsym(handle, "set_free_func");
-        // *(void **) (&setMallocFunc) = fake_dlsym(handle, "set_malloc_func");
-        // if (setFreeFunc == nullptr || setMallocFunc == nullptr) {
-        //     LOLILOGE("Error dlsym set_free_func or set_malloc_func");
-        //     return backtrace;
-        // }
-        // (*setFreeFunc)(&free);
-        // (*setMallocFunc)(&malloc);
         *(void **) (&backtrace) = fake_dlsym(handle, "get_stack_backtrace");
         if (backtrace == nullptr) {
-            LOLILOGE("Error dlsym get_stack_backtrace");
+            LOLILOGI("Error dlsym get_stack_backtrace: %s", path);
         }
     } else {
-        LOLILOGE("Error dlopen: %s", dlerror());
+        LOLILOGI("Error dlopen: %s", path);
     }
     return backtrace;
 }
@@ -196,7 +185,9 @@ bool loli_hook_library(const char* library, so_info_map& infoMap) {
     if (auto info = wrapper_by_name(library)) {
         auto brief = infoMap[std::string(info->so_name)];
         info->so_baseaddr = brief.second;
-        info->backtrace = loli_get_backtrace(brief.first.c_str());
+        if (mode_ != loliDataMode::NOSTACK) {
+            info->backtrace = loli_get_backtrace(brief.first.c_str());
+        }
         auto regex = std::string(".*/") + library + "\\.so$";
         xhook_register(regex.c_str(), "malloc", (void*)info->malloc, nullptr);
         xhook_register(regex.c_str(), "free", (void*)loli_free, nullptr);
@@ -205,7 +196,7 @@ bool loli_hook_library(const char* library, so_info_map& infoMap) {
         xhook_register(regex.c_str(), "realloc", (void*)info->realloc, nullptr);
         return true;
     } else {
-        __android_log_print(ANDROID_LOG_INFO, "Loli", "Out of wrappers!");
+        LOLILOGE("Out of wrappers!");
         return false;
     }
 }
@@ -232,7 +223,6 @@ void loli_hook_whitelist(const std::unordered_set<std::string>& whitelist, so_in
 
 void loli_hook(const std::unordered_set<std::string>& tokens, std::unordered_map<std::string, uintptr_t> infoMap) {
     // xhook_enable_debug(1);
-    // xhook_enable_sigsegv_protection(1);
     xhook_clear();
     // convert absolute path to relative ones, ie: system/lib/libc.so -> libc
     so_info_map demangledMap;
@@ -303,7 +293,7 @@ void loli_smaps_thread(std::unordered_set<std::string> libs) {
                         if (pathnameStr.find(token) != std::string::npos) {
                             shouldHook = true;
                             loadedDesiredCount--;
-                            __android_log_print(ANDROID_LOG_INFO, "Loli", "%s (%s) is loaded", token.c_str(), pathnameStr.c_str());
+                            LOLILOGI("%s (%s) is loaded", token.c_str(), pathnameStr.c_str());
                         }
                     }
                 }
@@ -315,7 +305,7 @@ void loli_smaps_thread(std::unordered_set<std::string> libs) {
             loli_hook(desired, libBaseAddrMap);
         }
         if (loadedDesiredCount <= 0) {
-            __android_log_print(ANDROID_LOG_INFO, "Loli", "All desired libraries are loaded.");
+            LOLILOGI("All desired libraries are loaded.");
             break;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
@@ -323,14 +313,14 @@ void loli_smaps_thread(std::unordered_set<std::string> libs) {
 }
 
 JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
-    __android_log_print(ANDROID_LOG_INFO, "Loli", "JNI_OnLoad");
+    LOLILOGI("JNI_OnLoad");
     JNIEnv* env;
     if (vm->GetEnv((void**)&env, JNI_VERSION_1_6) != JNI_OK) {
         return JNI_ERR; // JNI version not supported.
     }
 
     if (!wrapper_init()) {
-        __android_log_print(ANDROID_LOG_INFO, "Loli", "wrapper_init failed!");
+        LOLILOGI("wrapper_init failed!");
         return JNI_VERSION_1_6;
     }
 
@@ -369,7 +359,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
         }
     }
     hookLibraries = isBlacklist_ ? blacklist : whitelist;
-    __android_log_print(ANDROID_LOG_INFO, "Loli", "mode: %i, minRecSize: %i, blacklist: %i, hookLibs: %s",
+    LOLILOGI("mode: %i, minRecSize: %i, blacklist: %i, hookLibs: %s",
         static_cast<int>(mode_), minRecSize, isBlacklist_ ? 1 : 0, hookLibraries.c_str());
     // parse library tokens
     std::unordered_set<std::string> tokens;
@@ -386,7 +376,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
     callSeq_ = 0;
     startTime_ = std::chrono::system_clock::now();
     auto svr = loli_server_start(7100);
-    __android_log_print(ANDROID_LOG_INFO, "Loli", "loli start status %i", svr);
+    LOLILOGI("loli start status %i", svr);
     // start proc/self/maps check thread
     std::thread(loli_smaps_thread, tokens).detach();
     return JNI_VERSION_1_6;

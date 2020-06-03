@@ -31,6 +31,7 @@ void ConfigDialog::LoadConfigFile(const QString& arch) {
     ui->lineEditNDKFolder->setText(PathUtils::GetNDKPath());
     ParseConfigFile();
     ui->modeComboBox->setCurrentText(currentSettings_.mode_);
+    ui->buildComboBox->setCurrentText(currentSettings_.build_);
     ui->archComboBox->setCurrentText(arch);
     ui->typeComboBox->setCurrentText(currentSettings_.type_);
     ui->blacklistWidget->addItems(currentSettings_.blacklist_);
@@ -92,6 +93,8 @@ ConfigDialog::Settings ConfigDialog::ParseConfigFile() {
                 currentSettings_.blacklist_ = words[1].split(',', QString::SplitBehavior::SkipEmptyParts);
             } else if (words[0] == "mode") {
                 currentSettings_.mode_ = words[1];
+            } else if (words[0] == "build") {
+                currentSettings_.build_ = words[1];
             } else if (words[0] == "type") {
                 currentSettings_.type_ = words[1];
             }
@@ -127,7 +130,7 @@ bool ConfigDialog::CreateIfNoConfigFile(QWidget *parent) {
             stream << "threshold:256" << endl <<
                       "whitelist:libunity,libil2cpp" << endl <<
                       "blacklist:libloli,libart,libc++,libc,libcutils" << endl <<
-                      "mode:strict" << endl << "type:white list";
+                      "mode:strict" << endl << "build:default" << endl << "type:white list";
             stream.flush();
             return true;
         } else {
@@ -163,10 +166,13 @@ void ConfigDialog::on_ConfigDialog_finished(int) {
         stream << endl;
         stream << "mode:" << ui->modeComboBox->currentText();
         stream << endl;
+        stream << "build:" << ui->buildComboBox->currentText();
+        stream << endl;
         stream << "type:" << ui->typeComboBox->currentText();
         stream.flush();
     }
     currentSettings_.mode_ = ui->modeComboBox->currentText();
+    currentSettings_.build_ = ui->buildComboBox->currentText();
     currentSettings_.type_ = ui->typeComboBox->currentText();
     currentSettings_.whitelist_ = libraries;
     currentSettings_.threshold_ = ui->thresholdSpinBox->value();
@@ -201,6 +207,7 @@ void ConfigDialog::on_btnNDKFolder_clicked() {
 
 void ConfigDialog::on_modeComboBox_currentIndexChanged(const QString &arg) {
     ui->thresholdSpinBox->setEnabled(arg != "nostack");
+    ui->buildComboBox->setEnabled(arg != "nostack");
 }
 
 void ConfigDialog::on_typeComboBox_currentIndexChanged(int index) {

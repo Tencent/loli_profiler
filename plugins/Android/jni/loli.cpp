@@ -55,6 +55,7 @@ std::atomic<std::uint32_t> callSeq_;
 
 loliDataMode mode_ = loliDataMode::STRICT;
 bool isBlacklist_ = false;
+bool isInstrumented_ = false;
 loli::Sampler* sampler_ = nullptr;
 loli::spinlock samplerLock_;
 
@@ -185,7 +186,7 @@ bool loli_hook_library(const char* library, so_info_map& infoMap) {
     if (auto info = wrapper_by_name(library)) {
         auto brief = infoMap[std::string(info->so_name)];
         info->so_baseaddr = brief.second;
-        if (mode_ != loliDataMode::NOSTACK) {
+        if (mode_ != loliDataMode::NOSTACK && isInstrumented_) {
             info->backtrace = loli_get_backtrace(brief.first.c_str());
         }
         auto regex = std::string(".*/") + library + "\\.so$";
@@ -356,6 +357,8 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
             }
         } else if (words[0] == "type") {
             isBlacklist_ = words[1] == "blacklist";
+        } else if (words[0] == "build") {
+            isInstrumented_ = words[1] != "default";
         }
     }
     hookLibraries = isBlacklist_ ? blacklist : whitelist;

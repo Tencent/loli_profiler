@@ -8,6 +8,12 @@
 extern "C" {
 #endif // __cplusplus
 
+#include <android/log.h>
+
+#define LOLILOGI(...) __android_log_print(ANDROID_LOG_INFO, "Loli", __VA_ARGS__)
+#define LOLILOGW(...) __android_log_print(ANDROID_LOG_WARN, "Loli", __VA_ARGS__)
+#define LOLILOGE(...) __android_log_print(ANDROID_LOG_ERROR, "Loli", __VA_ARGS__)
+
 void loli_trim(std::string &str);
 
 // str: 要分割的字符串

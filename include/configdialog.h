@@ -21,6 +21,7 @@ public:
         QStringList whitelist_;
         QStringList blacklist_;
         QString mode_ = "strict";
+        QString build_ = "default";
         QString type_ = "white list";
     };
     static Settings ParseConfigFile();

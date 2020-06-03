@@ -38,6 +38,7 @@ extern "C" {
 #include "wrapper/wrapper.h"
 #include "loli_server.h"
 #include "loli_utils.h"
+#include "loli_dlfcn.h"
 #include "spinlock.h"
 #include "sampler.h"
 #include "xhook.h"
@@ -67,12 +68,20 @@ enum loliFlags {
     REALLOC_ = 4, 
 };
 
-inline void loli_maybe_record_alloc(size_t size, void* addr, loliFlags flag) {
+static thread_local bool ignore_current_ = false;
+void toggle_ignore_current(bool value) {
+    ignore_current_ = value;
+}
+
+inline void loli_maybe_record_alloc(size_t size, void* addr, loliFlags flag, int index) {
+    if (ignore_current_) {
+        return;
+    }
+
     bool bRecordAllocation = false;
     size_t recordSize = size;
     if (mode_ == loliDataMode::STRICT) {
         bRecordAllocation = size >= static_cast<size_t>(minRecSize_);
-        recordSize = size;
     } else if(mode_ == loliDataMode::LOOSE) {
         {
             std::lock_guard<loli::spinlock> lock(samplerLock_);
@@ -80,22 +89,62 @@ inline void loli_maybe_record_alloc(size_t size, void* addr, loliFlags flag) {
         }
         bRecordAllocation = recordSize > 0;
     } else {
-        assert(0);
+        bRecordAllocation = true;
     }
+
     if(!bRecordAllocation) {
         return;
     }
-    static thread_local void* buffer[STACKBUFFERSIZE];
+
+    auto hookInfo = wrapper_by_index(index);
+    if (hookInfo == nullptr) {
+        return;
+    }
+
     std::ostringstream oss;
     auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime_).count();
-    oss << flag << '\\' << ++callSeq_ << ',' << time << ',' << recordSize << ',' << addr << '\\';
-    loli_dump(oss, buffer, loli_capture(buffer, STACKBUFFERSIZE));
+    if (mode_ == loliDataMode::NOSTACK) {
+        oss << flag << '\\' << ++callSeq_ << ',' << time << ',' << size << ',' << addr << '\\' 
+            << hookInfo->so_name << ".so";
+    } else {
+        static thread_local void* buffer[STACKBUFFERSIZE];
+        oss << flag << '\\' << ++callSeq_ << ',' << time << ',' << recordSize << ',' << addr << '\\';
+        if (hookInfo->backtrace != nullptr) {
+            loli_dump(oss, buffer, hookInfo->backtrace(buffer, STACKBUFFERSIZE));
+        } else {
+            loli_dump(oss, buffer, loli_capture(buffer, STACKBUFFERSIZE));
+        }
+    }
     loli_server_send(oss.str().c_str());
 }
 
-void *loli_malloc(size_t size) {
+void *loli_index_malloc(size_t size, int index) {
     void* addr = malloc(size);
-    loli_maybe_record_alloc(size, addr, loliFlags::MALLOC_);
+    loli_maybe_record_alloc(size, addr, loliFlags::MALLOC_, index);
+    return addr;
+}
+
+void *loli_index_calloc(int n, int size, int index) {
+    void* addr = calloc(n, size);
+    loli_maybe_record_alloc(n * size, addr, loliFlags::CALLOC_, index);
+    return addr;
+}
+
+void *loli_index_memalign(size_t alignment, size_t size, int index) {
+    void* addr = memalign(alignment, size);
+    loli_maybe_record_alloc(size, addr, loliFlags::MEMALIGN_, index);
+    return addr;
+}
+
+void *loli_index_realloc(void *ptr, size_t new_size, int index) {
+    void* addr = realloc(ptr, new_size);
+    if (addr != 0)
+    {
+        std::ostringstream oss;
+        oss << FREE_ << '\\' << ++callSeq_ << '\\' << ptr;
+        loli_server_send(oss.str().c_str());
+        loli_maybe_record_alloc(new_size, addr, loliFlags::MALLOC_, index);
+    }
     return addr;
 }
 
@@ -108,112 +157,46 @@ void loli_free(void* ptr) {
     free(ptr);
 }
 
-void *loli_calloc(int n, int size) {
-    void* addr = calloc(n, size);
-    loli_maybe_record_alloc(n * size, addr, loliFlags::CALLOC_);
-    return addr;
-}
-
-void *loli_memalign(size_t alignment, size_t size) {
-    void* addr = memalign(alignment, size);
-    loli_maybe_record_alloc(size, addr, loliFlags::MEMALIGN_);
-    return addr;
-}
-
-void *loli_realloc(void *ptr, size_t new_size) {
-    void* addr = realloc(ptr, new_size);
-    if (addr != 0)
-    {
-        std::ostringstream oss;
-        oss << FREE_ << '\\' << ++callSeq_ << '\\' << ptr;
-        loli_server_send(oss.str().c_str());
-        loli_maybe_record_alloc(new_size, addr, loliFlags::MALLOC_);
-    }
-    return addr;
-}
-
-void loli_hook_library(const char* regex) {
-    xhook_register(regex, "malloc", (void*)loli_malloc, nullptr);
-    xhook_register(regex, "free", (void*)loli_free, nullptr);
-    xhook_register(regex, "calloc", (void*)loli_calloc, nullptr);
-    xhook_register(regex, "memalign", (void*)loli_memalign, nullptr);
-    xhook_register(regex, "realloc", (void*)loli_realloc, nullptr);
-}
-
-void loli_hook_blacklist(std::unordered_set<std::string>& blacklist) {
-    for (auto& token : blacklist) {
-        auto regex = ".*/" + token + "\\.so$";
-        xhook_ignore(regex.c_str(), NULL);
-    }
-    loli_hook_library(".*\\.so$");
-}
-
-void loli_hook_whitelist(std::unordered_set<std::string>& whitelist) {
-    for (auto& token : whitelist) {
-        auto regex = ".*/" + token + "\\.so$";
-        loli_hook_library(regex.c_str());
-    }
-}
-
-void loli_hook(std::unordered_set<std::string>& tokens) {
-    // xhook_enable_debug(1);
-    xhook_clear();
-    if (isBlacklist_) {
-        loli_hook_blacklist(tokens);
+BACKTRACE_FPTR loli_get_backtrace(const char* path) {
+    LOLILOGI("dlsym at %s", path);
+    BACKTRACE_FPTR backtrace = nullptr;
+    void *handle = fake_dlopen(path, RTLD_LAZY);
+    if (handle) {
+        void (*set_loli_ignore_func)(void (*funcPtr)(bool)) = nullptr;
+        *(void **) (&set_loli_ignore_func) = fake_dlsym(handle, "set_loli_ignore_func");
+         if (set_loli_ignore_func == nullptr) {
+            LOLILOGE("Error dlsym set_loli_ignore_func");
+            return backtrace;
+        }
+        (*set_loli_ignore_func)(toggle_ignore_current);
+        // void (*setFreeFunc)(void (*freePtr)(void*)) = nullptr;
+        // void (*setMallocFunc)(void* (*mallocPtr)(size_t)) = nullptr;
+        // *(void **) (&setFreeFunc) = fake_dlsym(handle, "set_free_func");
+        // *(void **) (&setMallocFunc) = fake_dlsym(handle, "set_malloc_func");
+        // if (setFreeFunc == nullptr || setMallocFunc == nullptr) {
+        //     LOLILOGE("Error dlsym set_free_func or set_malloc_func");
+        //     return backtrace;
+        // }
+        // (*setFreeFunc)(&free);
+        // (*setMallocFunc)(&malloc);
+        *(void **) (&backtrace) = fake_dlsym(handle, "get_stack_backtrace");
+        if (backtrace == nullptr) {
+            LOLILOGE("Error dlsym get_stack_backtrace");
+        }
     } else {
-        loli_hook_whitelist(tokens);
+        LOLILOGE("Error dlopen: %s", dlerror());
     }
-    xhook_refresh(0);
+    return backtrace;
 }
 
-inline void loli_nostack_maybe_record_alloc(size_t size, void* addr, loliFlags flag, int index) {
-    if (size == 0 || addr == nullptr) {
-        return;
-    }
-    auto hookInfo = wrapper_by_index(index);
-    if (hookInfo == nullptr) {
-        return;
-    }
-    std::ostringstream oss;
-    auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime_).count();
-    oss << flag << '\\' << ++callSeq_ << ',' << time << ',' << size << ',' << addr << '\\' 
-        << hookInfo->so_name << ".so";
-    loli_server_send(oss.str().c_str());
-}
+// demangled name, <full name, base address>
+using so_info_map = std::unordered_map<std::string, std::pair<std::string, uintptr_t>>;
 
-void *loli_index_malloc(size_t size, int index) {
-    void* addr = malloc(size);
-    loli_nostack_maybe_record_alloc(size, addr, loliFlags::MALLOC_, index);
-    return addr;
-}
-
-void *loli_index_calloc(int n, int size, int index) {
-    void* addr = calloc(n, size);
-    loli_nostack_maybe_record_alloc(n * size, addr, loliFlags::CALLOC_, index);
-    return addr;
-}
-
-void *loli_index_memalign(size_t alignment, size_t size, int index) {
-    void* addr = memalign(alignment, size);
-    loli_nostack_maybe_record_alloc(size, addr, loliFlags::MEMALIGN_, index);
-    return addr;
-}
-
-void *loli_index_realloc(void *ptr, size_t new_size, int index) {
-    void* addr = realloc(ptr, new_size);
-    if (addr != 0)
-    {
-        std::ostringstream oss;
-        oss << FREE_ << '\\' << ++callSeq_ << '\\' << ptr;
-        loli_server_send(oss.str().c_str());
-        loli_nostack_maybe_record_alloc(new_size, addr, loliFlags::MALLOC_, index);
-    }
-    return addr;
-}
-
-bool loli_nostack_hook_library(const char* library, std::unordered_map<std::string, uintptr_t>& baseAddrMap) {
+bool loli_hook_library(const char* library, so_info_map& infoMap) {
     if (auto info = wrapper_by_name(library)) {
-        info->so_baseaddr = baseAddrMap[std::string(info->so_name)];
+        auto brief = infoMap[std::string(info->so_name)];
+        info->so_baseaddr = brief.second;
+        info->backtrace = loli_get_backtrace(brief.first.c_str());
         auto regex = std::string(".*/") + library + "\\.so$";
         xhook_register(regex.c_str(), "malloc", (void*)info->malloc, nullptr);
         xhook_register(regex.c_str(), "free", (void*)loli_free, nullptr);
@@ -227,44 +210,45 @@ bool loli_nostack_hook_library(const char* library, std::unordered_map<std::stri
     }
 }
 
-void loli_nostack_hook_blacklist(const std::unordered_set<std::string>& blacklist, std::unordered_map<std::string, uintptr_t>& baseAddrMap) {
+void loli_hook_blacklist(const std::unordered_set<std::string>& blacklist, so_info_map& infoMap) {
     for (auto& token : blacklist) {
         auto regex = ".*/" + token + "\\.so$";
         xhook_ignore(regex.c_str(), NULL);
     }
-    for (auto& pair : baseAddrMap) {
-        if (!loli_nostack_hook_library(pair.first.c_str(), baseAddrMap)) {
+    for (auto& pair : infoMap) {
+        if (!loli_hook_library(pair.first.c_str(), infoMap)) {
             return;
         }
     }
 }
 
-void loli_nostack_hook_whitelist(const std::unordered_set<std::string>& whitelist, std::unordered_map<std::string, uintptr_t>& baseAddrMap) {
+void loli_hook_whitelist(const std::unordered_set<std::string>& whitelist, so_info_map& infoMap) {
     for (auto& token : whitelist) {
-        if (!loli_nostack_hook_library(token.c_str(), baseAddrMap)) {
+        if (!loli_hook_library(token.c_str(), infoMap)) {
             return;
         }
     }
 }
 
-void loli_nostack_hook(const std::unordered_set<std::string>& tokens, std::unordered_map<std::string, uintptr_t> baseAddrMap) {
+void loli_hook(const std::unordered_set<std::string>& tokens, std::unordered_map<std::string, uintptr_t> infoMap) {
     // xhook_enable_debug(1);
+    // xhook_enable_sigsegv_protection(1);
     xhook_clear();
     // convert absolute path to relative ones, ie: system/lib/libc.so -> libc
-    std::unordered_map<std::string, uintptr_t> demangledAddrMap;
-    for (auto& pair : baseAddrMap) {
+    so_info_map demangledMap;
+    for (auto& pair : infoMap) {
         auto origion = pair.first;
         if (origion.find(".so") == std::string::npos) {
             continue;
         }
         std::string demangled;
         loli_demangle(origion, demangled);
-        demangledAddrMap[demangled] = pair.second;
+        demangledMap[demangled] = std::make_pair(origion, pair.second);
     }
     if (isBlacklist_) {
-        loli_nostack_hook_blacklist(tokens, demangledAddrMap);
+        loli_hook_blacklist(tokens, demangledMap);
     } else {
-        loli_nostack_hook_whitelist(tokens, demangledAddrMap);
+        loli_hook_whitelist(tokens, demangledMap);
     }
     xhook_refresh(0);
 }
@@ -323,15 +307,12 @@ void loli_smaps_thread(std::unordered_set<std::string> libs) {
                         }
                     }
                 }
+
             }
         }
         fclose(fp);
         if (shouldHook) {
-            if (mode_ == loliDataMode::NOSTACK) {
-                loli_nostack_hook(desired, libBaseAddrMap);
-            } else {
-                loli_hook(desired);
-            }
+            loli_hook(desired, libBaseAddrMap);
         }
         if (loadedDesiredCount <= 0) {
             __android_log_print(ANDROID_LOG_INFO, "Loli", "All desired libraries are loaded.");

@@ -20,6 +20,7 @@ typedef void (*FREE_FPTR)(void*);
 typedef void* (*CALLOC_FPTR)(int,int);
 typedef void* (*MEMALIGN_FPTR)(size_t, size_t);
 typedef void* (*REALLOC_FPTR)(void*, size_t);
+typedef int (*BACKTRACE_FPTR)(void** buffer, size_t max);
 
 typedef struct _hook_info {
     char* so_name = nullptr;
@@ -29,6 +30,7 @@ typedef struct _hook_info {
     CALLOC_FPTR calloc;
     MEMALIGN_FPTR memalign;
     REALLOC_FPTR realloc;
+    BACKTRACE_FPTR backtrace = nullptr;
     ~_hook_info();
 } HOOK_INFO;
 

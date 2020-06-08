@@ -1474,7 +1474,14 @@ void MainWindow::on_symbloPushButton_clicked() {
         addrProcesses_.push_back(process);
         avaliableProcesses.push_back(process);
     }
+    progressDialog_->setWindowTitle("Symbol Load Progress");
+    progressDialog_->setLabelText(QString("Loading symbols for %1 addresses by %2 process").arg(addrMap.size()).arg(avaliableProcesses.size()));
+    progressDialog_->setMinimum(0);
+    progressDialog_->setMaximum(avaliableProcesses.size());
+    progressDialog_->setValue(0);
+    progressDialog_->show();
     auto addrMapIt = addrMap.begin();
+    int processCount = 0;
     for (auto& process : avaliableProcesses) {
         QStringList addrs;
         int count = 0;
@@ -1488,13 +1495,12 @@ void MainWindow::on_symbloPushButton_clicked() {
         }
         process->SetExecutablePath(addr2linePath);
         process->DumpAsync(symbloPath, addrs, &addrMap);
+        processCount++;
+        if (processCount >= 4) { // run max 4 processes at the sametime
+            processCount = 0;
+            process->WaitForFinished();
+        }
     }
-    progressDialog_->setWindowTitle("Symbol Load Progress");
-    progressDialog_->setLabelText(QString("Loading symbols for %1 addresses by %2 process").arg(addrMap.size()).arg(avaliableProcesses.size()));
-    progressDialog_->setMinimum(0);
-    progressDialog_->setMaximum(avaliableProcesses.size());
-    progressDialog_->setValue(0);
-    progressDialog_->show();
 }
 
 void MainWindow::on_configPushButton_clicked() {

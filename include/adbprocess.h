@@ -49,6 +49,10 @@ public:
         process_->start();
     }
 
+    void WaitForFinished(int mills = 10000) {
+        process_->waitForFinished(mills);
+    }
+
     bool IsRunning() const {
         return running_;
     }

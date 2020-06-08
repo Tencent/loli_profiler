@@ -8,6 +8,14 @@
 
 OTeam地址：https://techmap.oa.com/oteam/8618
 
+### New Feature
+
+2020/06/08
+
+最新的体验版本支持调试经过编译器插桩优化的UE4的APK，可将多线程情况下的堆栈获取速度提升10倍
+
+可参考[此教程](https://git.code.oa.com/xinhou/loli_profiler/wikis/tutorial/ue4-integration)对您的UE4项目进行打包，即可对APK进行更高效的调试
+
 # Loli Profiler
 
 轻量开源内存分析工具（Lightweight Opensource profiLing Instrument）
@@ -44,6 +52,7 @@ OTeam地址：https://techmap.oa.com/oteam/8618
 - 网络包使用LZ4压缩以加快收发速度
 - 运行流畅（使用C++与QT开发）
 - 同时支持Windows 10与Mac OSX（Mojave+）操作系统
+- 支持通过[编译器插桩](https://git.code.oa.com/xinhou/loli_profiler/wikis/tutorial/ue4-integration)来优化获取堆栈的性能
 
 ![](res/images/screenshot.gif)
 

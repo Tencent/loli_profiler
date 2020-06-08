@@ -1482,6 +1482,15 @@ void MainWindow::on_symbloPushButton_clicked() {
     progressDialog_->show();
     auto addrMapIt = addrMap.begin();
     int processCount = 0;
+    int maxProcessCount = 4;
+    auto symbolFileSize = info.size() / 1024 / 1024; // MiB
+    if (symbolFileSize <= 512) {
+        maxProcessCount = 4;
+    } else if (symbolFileSize <= 1024) {
+        maxProcessCount = 2;
+    } else {
+        maxProcessCount = 1;
+    }
     for (auto& process : avaliableProcesses) {
         QStringList addrs;
         int count = 0;
@@ -1496,7 +1505,7 @@ void MainWindow::on_symbloPushButton_clicked() {
         process->SetExecutablePath(addr2linePath);
         process->DumpAsync(symbloPath, addrs, &addrMap);
         processCount++;
-        if (processCount >= 4) { // run max 4 processes at the sametime
+        if (processCount >= maxProcessCount) { // run max maxProcessCount processes at the sametime
             processCount = 0;
             process->WaitForFinished();
         }

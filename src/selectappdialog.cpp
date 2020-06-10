@@ -1,4 +1,4 @@
-#include "include/selectappdialog.h"
+#include "selectappdialog.h"
 #include <QVBoxLayout>
 #include <QListWidget>
 #include <QLineEdit>

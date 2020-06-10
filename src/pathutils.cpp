@@ -1,4 +1,4 @@
-#include "include/pathutils.h"
+#include "pathutils.h"
 
 #include <QFile>
 

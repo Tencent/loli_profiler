@@ -78,8 +78,8 @@ HEADERS += \
         include/treemapgraphicsview.h
 
 FORMS += \
-        configdialog.ui \
-        mainwindow.ui
+        src/configdialog.ui \
+        src/mainwindow.ui
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin

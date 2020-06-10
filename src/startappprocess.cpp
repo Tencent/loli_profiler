@@ -118,7 +118,8 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, bool
     unsigned int pid = 0;
     if (interceptMode) { // pid of
         arguments.clear();
-        arguments << "shell" << "pidof" << appName;
+//        arguments << "shell" << "pidof" << appName;
+        arguments << "shell" << "ps" << "|" << "grep" << appName;
         QProcess process;
         process.setProgram(execPath);
 #ifdef Q_OS_WIN
@@ -137,7 +138,13 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, bool
             emit ProcessErrorOccurred();
             return;
         }
-        pid = process.readAll().trimmed().toUInt();
+        QString retStr = process.readAll();
+        auto tokens = retStr.split(' ', QString::SplitBehavior::SkipEmptyParts);
+        if (tokens.size() > 0) {
+            pid = tokens[1].toUInt();
+        }
+//        pid = process.readAll().trimmed().toUInt();
+        qDebug() << pid;
         dialog->setValue(dialog->value() + 1);
     }
     if (!interceptMode) { // adb jdwp

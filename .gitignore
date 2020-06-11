@@ -41,6 +41,8 @@ bin/
 build/
 obj/
 libs/
+CMakeFiles/
 .vs/
 .vscode/
 .DS_Store
+CMakeCache.txt

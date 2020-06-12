@@ -843,7 +843,7 @@ void MainWindow::StopCaptureProcess() {
         process.close();
         auto smapsPath = QCoreApplication::applicationDirPath() + "/smaps.txt";
         arguments.clear();
-        arguments << "pull" << "/data/local/tmp/smaps.txt" << smapsPath;
+        arguments << "pull" << "/data/local/tmp/smaps.txt" << "\"" + smapsPath + "\"";
         process.setProgram(PathUtils::GetADBExecutablePath());
 #ifdef Q_OS_WIN
         process.setNativeArguments(arguments.join(' '));

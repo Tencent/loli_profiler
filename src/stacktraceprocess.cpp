@@ -52,13 +52,9 @@ void StackTraceProcess::Disconnect() {
     packetSize_ = 0;
 }
 
-enum loliFlags {
-    FREE_ = 0,
-    MALLOC_ = 1,
-    CALLOC_ = 2,
-    MEMALIGN_ = 3,
-    REALLOC_ = 4,
-};
+void StackTraceProcess::Send(const char* data, int length) {
+    socket_->write(data, length);
+}
 
 void StackTraceProcess::Interpret(const QByteArray& bytes) {
     quint32 originSize = *reinterpret_cast<const quint32*>(bytes.data());
@@ -84,10 +80,14 @@ void StackTraceProcess::Interpret(const QByteArray& bytes) {
         if (words.size() == 0)
             continue;
         auto type = words[0].toInt();
-        if (type == FREE_) {
+        if (type == static_cast<int>(loliFlags::FREE_)) {
             if (words.size() < 3)
                 continue;
             freeInfo_.push_back(qMakePair(words[1].toUInt(), words[2]));
+        } else if (type == static_cast<int>(loliFlags::COMMAND_)) {
+            if (words.size() > 1) {
+                CommandHandler(words[1].toInt());
+            }
         } else {
             words.removeAt(0);
             stackInfo_.push_back(words);
@@ -96,6 +96,12 @@ void StackTraceProcess::Interpret(const QByteArray& bytes) {
     }
 //    qDebug() << "OnDataArrived: " << bytes.size() << " bytes " << " lines: " << lineCount << " stacks: " << stackInfo_.size() << " frees: " << freeInfo_.size();
     emit DataReceived();
+}
+
+void StackTraceProcess::CommandHandler(int cmd) {
+    if (cmd == static_cast<int>(loliCommands::SMAPS_DUMP)) {
+        emit SMapsDumped();
+    }
 }
 
 void StackTraceProcess::OnDataReceived() {

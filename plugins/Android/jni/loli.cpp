@@ -67,6 +67,7 @@ enum loliFlags {
     CALLOC_ = 2, 
     MEMALIGN_ = 3, 
     REALLOC_ = 4, 
+    COMMAND_ = 255,
 };
 
 static thread_local bool ignore_current_ = false;

@@ -4,6 +4,19 @@
 #include <QObject>
 #include <QVector>
 
+enum class loliFlags : quint8 {
+    FREE_ = 0,
+    MALLOC_ = 1,
+    CALLOC_ = 2,
+    MEMALIGN_ = 3,
+    REALLOC_ = 4,
+    COMMAND_ = 255,
+};
+
+enum class loliCommands : quint8 {
+    SMAPS_DUMP = 0,
+};
+
 class QTcpSocket;
 class StackTraceProcess : public QObject {
     Q_OBJECT
@@ -15,6 +28,7 @@ public:
     void Disconnect();
     bool IsConnecting() const { return connectingServer_; }
     bool IsConnected() const { return serverConnected_; }
+    void Send(const char* data, int length);
 
     const QVector<QStringList>& GetStackInfo() const { return stackInfo_; }
     const QVector<QPair<quint32, QString>>& GetFreeInfo() const { return freeInfo_; }
@@ -25,9 +39,11 @@ public:
 signals:
     void DataReceived();
     void ConnectionLost();
+    void SMapsDumped();
 
 private:
     void Interpret(const QByteArray& bytes);
+    void CommandHandler(int cmd);
     void OnDataReceived();
     void OnConnected();
     void OnDisconnected();

@@ -25,6 +25,11 @@ extern "C" {
 
 #include "lz4/lz4.h"
 #include "spinlock.h"
+#include "loli_utils.h"
+
+enum class loliCommands : std::uint8_t {
+    SMAPS_DUMP = 0,
+};
 
 std::vector<std::string> cache_;
 loli::spinlock cacheLock_;
@@ -35,6 +40,43 @@ std::atomic<bool> serverRunning_ {true};
 std::atomic<bool> hasClient_ {false};
 std::thread socketThread_;
 bool started_ = false;
+
+void loli_dump_smaps() {
+    auto srcFile = fopen("/proc/self/smaps", "r");
+    if (srcFile == nullptr) {
+        LOLILOGE("Failed to fopen /proc/self/smaps");
+        return;
+    }
+    auto dstFile = fopen("/data/local/tmp/smaps.txt", "w");
+    if (dstFile == nullptr) {
+        fclose(srcFile);
+        LOLILOGE("Failed to fopen /data/local/tmp/smaps.txt");
+        return;
+    }
+    int chunk = 1024;
+    char *buf = (char*)malloc(chunk);
+    if (buf == nullptr) {
+        LOLILOGE("Failed to malloc(%i)", chunk);
+        return;
+    }
+    size_t nread;
+    while ((nread = fread(buf, 1, chunk, srcFile)) > 0) {
+        int fileError = ferror(srcFile);
+        if (fileError) {
+            LOLILOGE("Error fread: %i", fileError);
+            break;
+        }
+        fwrite(buf, 1, nread, dstFile);
+        fileError = ferror(dstFile);
+        if (fileError) {
+            LOLILOGE("Error fwrite: %i", fileError);
+            break;
+        }
+    }
+    fclose(srcFile);
+    fclose(dstFile);
+    free(buf);
+}
 
 bool loli_server_started() {
     return started_;
@@ -84,11 +126,21 @@ void loli_server_loop(int sock) {
             FD_ZERO(&fds);
             FD_SET(clientSock, &fds);
             if (select(clientSock + 1, &fds, NULL, NULL, &time) > 0 && FD_ISSET(clientSock, &fds)) {
-                int ecode = recv(clientSock, buffer_, BUFSIZ, 0);
-                if (ecode <= 0) {
+                int length = recv(clientSock, buffer_, BUFSIZ, 0);
+                if (length <= 0) {
                     hasClient_ = false;
-                    __android_log_print(ANDROID_LOG_INFO, "Loli", "Client disconnected, ecode: %i", ecode);
+                    __android_log_print(ANDROID_LOG_INFO, "Loli", "Client disconnected, ecode: %i", length);
                     continue;
+                } else {
+                    if (length > 0) {
+                        std::uint8_t type = *reinterpret_cast<std::uint8_t*>(buffer_);
+                        LOLILOGI("Server Recv: %i", (int)type);
+                        if (type == static_cast<std::uint8_t>(loliCommands::SMAPS_DUMP)) {
+                            LOLILOGI("Dumping smaps");
+                            loli_dump_smaps();
+                            loli_server_send("255\\0"); // loliFlags::COMMAND_ = 255, loliCommands::SMAPS_DUMP = 0
+                        }
+                    }
                 }
             }
             // send cached messages with limited banwidth

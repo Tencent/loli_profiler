@@ -144,7 +144,7 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, bool
             pid = tokens[1].toUInt();
         }
 //        pid = process.readAll().trimmed().toUInt();
-        qDebug() << pid;
+//        qDebug() << pid;
         dialog->setValue(dialog->value() + 1);
     }
     if (!interceptMode) { // adb jdwp

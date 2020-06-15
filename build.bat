@@ -2,9 +2,9 @@
 
 echo dir %cd%
 
-set QT5Path=D:/QT5/5.14.1/msvc2017_64
-set MSBUILD_EXE="%ProgramFiles(x86)%\Microsoft Visual Studio\2017\Professional\MSBuild\15.0\Bin\MSBuild.exe"
-set Ndk_R16_CMD="D:/Android/NDK/android-ndk-r16b/ndk-build.cmd"
+set QT5Path=D:/SDK/QT/5.14.1/msvc2017_64
+set MSBUILD_EXE="%ProgramFiles(x86)%\Microsoft Visual Studio\2017\Community\MSBuild\15.0\Bin\MSBuild.exe"
+set Ndk_R16_CMD="E:/SDK/AndroidNDKForUnity/android-ndk-r16b/ndk-build.cmd"
 
 if not exist %QT5Path% (
 	echo QT5Path not found ERROR: %QT5Path%
@@ -25,7 +25,7 @@ echo QT5Path path : %QT5Path%
 echo MSBUILD_EXE path : %MSBUILD_EXE%
 echo Ndk_R16_CMD path : %Ndk_R16_CMD%
 
-call ./WinBuild/EnterPoint.bat
+call ./scripts/EnterPoint.bat
 
 :Exit
 exit /B 1

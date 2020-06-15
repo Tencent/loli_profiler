@@ -83,6 +83,7 @@ MainWindow::MainWindow(QWidget *parent) :
     stacktraceProcess_ = new StackTraceProcess(this);
     connect(stacktraceProcess_, &StackTraceProcess::DataReceived, this, &MainWindow::StacktraceDataReceived);
     connect(stacktraceProcess_, &StackTraceProcess::ConnectionLost, this, &MainWindow::StacktraceConnectionLost);
+    connect(stacktraceProcess_, &StackTraceProcess::SMapsDumped, [this]() { StopCaptureProcess(); });
 
     // setup screenshot view
     ui->screenshotGraphicsView->setScene(new QGraphicsScene());
@@ -512,6 +513,7 @@ void MainWindow::ConnectionFailed() {
     stacktraceProcess_->Disconnect();
     ui->appNameLineEdit->setEnabled(true);
     ui->launchPushButton->setText("Launch");
+    ui->launchPushButton->setEnabled(true);
     ui->menuFile->setEnabled(true);
     ui->menuTools->setEnabled(true);
     ui->configPushButton->setEnabled(true);
@@ -824,10 +826,11 @@ void MainWindow::StopCaptureProcess() {
     progressDialog_->show();
     progressDialog_->setValue(1);
     progressDialog_->setLabelText("Requesting smaps info from device.");
-    QProcess process;
+    auto readSMaps = false;
+    auto smapsPath = QCoreApplication::applicationDirPath() + "/smaps.txt";
     QStringList arguments;
-    arguments << "shell" << "run-as" << ui->appNameLineEdit->text() <<
-                 "cat" << "/proc/" + memInfoProcess_->GetAppPid() + "/smaps" << ">" << "/data/local/tmp/smaps.txt";
+    arguments << "pull" << "/data/local/tmp/smaps.txt" << "\"" + smapsPath + "\"";
+    QProcess process;
     process.setProgram(PathUtils::GetADBExecutablePath());
 #ifdef Q_OS_WIN
     process.setNativeArguments(arguments.join(' '));
@@ -835,33 +838,16 @@ void MainWindow::StopCaptureProcess() {
     process.setArguments(arguments);
 #endif
     process.start();
-    auto readSMaps = false;
     process.waitForStarted();
     process.waitForFinished();
-    if (process.isReadable()) {
-        process.readAll();
-        process.close();
-        auto smapsPath = QCoreApplication::applicationDirPath() + "/smaps.txt";
-        arguments.clear();
-        arguments << "pull" << "/data/local/tmp/smaps.txt" << "\"" + smapsPath + "\"";
-        process.setProgram(PathUtils::GetADBExecutablePath());
-#ifdef Q_OS_WIN
-        process.setNativeArguments(arguments.join(' '));
-#else
-        process.setArguments(arguments);
-#endif
-        process.start();
-        process.waitForStarted();
-        process.waitForFinished();
-        process.close();
-        QFile file(smapsPath);
-        if (file.exists()) {
-            if (file.open(QFile::OpenModeFlag::ReadOnly)) {
-                ReadSMapsFile(&file);
-                readSMaps = true;
-            }
-            file.remove();
+    process.close();
+    QFile file(smapsPath);
+    if (file.exists()) {
+        if (file.open(QFile::OpenModeFlag::ReadOnly)) {
+            ReadSMapsFile(&file);
+            readSMaps = true;
         }
+        file.remove();
     }
     if (!readSMaps) {
         Print("Failed to cat proc/pid/smaps");
@@ -1366,7 +1352,10 @@ void MainWindow::on_actionAbout_triggered() {
 
 void MainWindow::on_launchPushButton_clicked() {
     if (isConnected_) {
-        StopCaptureProcess();
+        auto type = static_cast<quint8>(loliCommands::SMAPS_DUMP);
+        // this will trigger StopCaptureProcess()
+        stacktraceProcess_->Send(reinterpret_cast<const char*>(&type), 1);
+        ui->launchPushButton->setEnabled(false);
         return;
     }
 

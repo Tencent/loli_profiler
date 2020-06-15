@@ -1353,6 +1353,7 @@ void MainWindow::on_actionAbout_triggered() {
 void MainWindow::on_launchPushButton_clicked() {
     if (isConnected_) {
         auto type = static_cast<quint8>(loliCommands::SMAPS_DUMP);
+        // this will trigger StopCaptureProcess()
         stacktraceProcess_->Send(reinterpret_cast<const char*>(&type), 1);
         ui->launchPushButton->setEnabled(false);
         return;

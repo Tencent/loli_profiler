@@ -104,7 +104,7 @@ void loli_server_loop(int sock) {
             if (FD_ISSET(sock, &fds)) {
                 clientSock = accept(sock, NULL, NULL);
                 if (clientSock >= 0) {
-                    __android_log_print(ANDROID_LOG_INFO, "Loli", "Client connected");
+                    LOLILOGI("Client connected");
                     hasClient_ = true;
                 }
             }
@@ -129,7 +129,7 @@ void loli_server_loop(int sock) {
                 int length = recv(clientSock, buffer_, BUFSIZ, 0);
                 if (length <= 0) {
                     hasClient_ = false;
-                    __android_log_print(ANDROID_LOG_INFO, "Loli", "Client disconnected, ecode: %i", length);
+                    LOLILOGI("Client disconnected, ecode: %i", length);
                     continue;
                 } else {
                     if (length > 0) {
@@ -171,14 +171,14 @@ void loli_server_loop(int sock) {
                 }
                 uint32_t compressSize = LZ4_compress_default(str.c_str(), compressBuffer, srcSize, requiredSize);
                 if (compressSize == 0) {
-                    __android_log_print(ANDROID_LOG_INFO, "Loli", "LZ4 compression failed!");
+                    LOLILOGE("LZ4 compression failed!");
                 } else {
                     compressSize += 4;
                     // send messages
                     send(clientSock, &compressSize, 4, 0); // send net buffer size
                     send(clientSock, &srcSize, 4, 0); // send uncompressed buffer size (for decompression)
                     send(clientSock, compressBuffer, compressSize - 4, 0); // then send data
-                    // __android_log_print(ANDROID_LOG_INFO, "Loli", "send size %i, compressed size %i, lineCount: %i", srcSize, compressSize, static_cast<int>(cacheCopy.size()));
+                    // LOLILOGI("send size %i, compressed size %i, lineCount: %i", srcSize, compressSize, static_cast<int>(cacheCopy.size()));
                 }
                 cacheCopy.clear();
             }
@@ -205,26 +205,26 @@ int loli_server_start(int port) {
     // create socket
     int sock = socket(PF_INET, SOCK_STREAM, 0);
     if (sock < 0) {
-        __android_log_print(ANDROID_LOG_INFO, "Loli", "start.socket %i", sock);
+        LOLILOGI("start.socket %i", sock);
         return -1;
     }
     // bind address
     int ecode = bind(sock, (struct sockaddr*)&serverAddr, sizeof(struct sockaddr));
     if (ecode < 0) {
-        __android_log_print(ANDROID_LOG_INFO, "Loli", "start.bind %i", ecode);
+        LOLILOGI("start.bind %i", ecode);
         return -1;
     }
     // set max send buffer
     int sendbuff = 327675;
     ecode = setsockopt(sock, SOL_SOCKET, SO_SNDBUF, &sendbuff, sizeof(sendbuff));
     if (ecode < 0) {
-        __android_log_print(ANDROID_LOG_INFO, "Loli", "start.setsockopt %i", ecode);
+        LOLILOGI("start.setsockopt %i", ecode);
         return -1;
     }
     // listen for incomming connections
     ecode = listen(sock, 2);
     if (ecode < 0) {
-        __android_log_print(ANDROID_LOG_INFO, "Loli", "start.listen %i", ecode);
+        LOLILOGI("start.listen %i", ecode);
         return -1;
     }
     started_ = true;

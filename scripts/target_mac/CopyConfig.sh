@@ -16,3 +16,5 @@ do
 cp -r $AndroidLibsPath/$i $ReleaseRemotePath/$i
 done
 
+mkdir $ReleasePath/Contents/Resources/
+cp res/devices.icns $ReleasePath/Contents/Resources/

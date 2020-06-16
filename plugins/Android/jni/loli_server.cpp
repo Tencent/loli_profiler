@@ -22,6 +22,7 @@ extern "C" {
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <errno.h>
 
 #include "lz4/lz4.h"
 #include "spinlock.h"
@@ -44,13 +45,13 @@ bool started_ = false;
 void loli_dump_smaps() {
     auto srcFile = fopen("/proc/self/smaps", "r");
     if (srcFile == nullptr) {
-        LOLILOGE("Failed to fopen /proc/self/smaps");
+        LOLILOGE("Failed to fopen /proc/self/smaps error: %d", errno);
         return;
     }
     auto dstFile = fopen("/data/local/tmp/smaps.txt", "w");
     if (dstFile == nullptr) {
         fclose(srcFile);
-        LOLILOGE("Failed to fopen /data/local/tmp/smaps.txt");
+        LOLILOGE("Failed to fopen /data/local/tmp/smaps.txt error: %d", errno);
         return;
     }
     int chunk = 1024;

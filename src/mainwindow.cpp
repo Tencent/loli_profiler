@@ -828,6 +828,7 @@ void MainWindow::StopCaptureProcess() {
     progressDialog_->setLabelText("Requesting smaps info from device.");
     auto readSMaps = false;
     auto smapsPath = QCoreApplication::applicationDirPath() + "/smaps.txt";
+    qDebug() << smapsPath;
     QStringList arguments;
     arguments << "pull" << "/data/local/tmp/smaps.txt" << "\"" + smapsPath + "\"";
     QProcess process;
@@ -847,7 +848,7 @@ void MainWindow::StopCaptureProcess() {
             ReadSMapsFile(&file);
             readSMaps = true;
         }
-        file.remove();
+//        file.remove();
     }
     if (!readSMaps) {
         Print("Failed to cat proc/pid/smaps");

@@ -4,7 +4,7 @@ echo dir %cd%
 rem 1. copy loliprofiler/python to build/cmake/bin/release
 set PythonPath=%cd%\python
 
-XCOPY /s/y %PythonPath% %RelasePath%
+XCOPY /s/y %PythonPath% %RelasePath%\
 
 rem 2. copy loli_profiler\plugins\Android\libs  to build/cmake/bin/release/remote
 set AndroidLibsPath=%AndroidPluginPath%\libs

@@ -1,0 +1,6 @@
+set -xeuo pipefail
+echo Deployqt.....
+pwd
+$MacdeployqtPath $ReleasePath
+
+echo finish Deployqt.....

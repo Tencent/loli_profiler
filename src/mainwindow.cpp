@@ -828,15 +828,9 @@ void MainWindow::StopCaptureProcess() {
     progressDialog_->setLabelText("Requesting smaps info from device.");
     auto readSMaps = false;
     auto smapsPath = QCoreApplication::applicationDirPath() + "/smaps.txt";
-    QStringList arguments;
-    arguments << "pull" << "/data/local/tmp/smaps.txt" << smapsPath;
     QProcess process;
     process.setProgram(PathUtils::GetADBExecutablePath());
-#ifdef Q_OS_WIN
-    process.setNativeArguments(arguments.join(' '));
-#else
-    process.setArguments(arguments);
-#endif
+    AdbProcess::SetArguments(&process, QStringList() << "pull" << "/data/local/tmp/smaps.txt" << smapsPath);
     process.start();
     process.waitForStarted();
     process.waitForFinished();
@@ -1524,14 +1518,7 @@ void MainWindow::on_selectAppToolButton_clicked() {
 
     QProcess process;
     process.setProgram(adbPath);
-    QStringList arguments;
-    arguments << "shell" << "pm" << "list" << "packages";
-
-#ifdef Q_OS_WIN
-    process.setNativeArguments(arguments.join(' '));
-#else
-    process.setArguments(arguments);
-#endif
+    AdbProcess::SetArguments(&process, QStringList() << "shell" << "pm" << "list" << "packages");
     process.start();
     if (!process.waitForStarted()) {
         Print("error start adb shell pm list packages, make sure your device is connected!");

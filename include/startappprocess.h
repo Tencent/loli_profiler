@@ -23,6 +23,7 @@ public:
     void StartApp(const QString& appName, const QString& arch, bool interceptMode, QProgressDialog* dialog);
 
 protected:
+    bool StartProcess(QProcess* process, const QString& message);
     void OnProcessFinihed() override;
     void OnProcessErrorOccurred() override;
 

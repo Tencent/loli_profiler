@@ -28,19 +28,21 @@ public:
     void ExecuteAsync(const QString execPath, const QStringList& arguments) {
         running_ = true;
         process_->setProgram(execPath);
-#ifdef Q_OS_WIN
-        process_->setNativeArguments(arguments.join(' '));
-#else
-        process_->setArguments(arguments);
-#endif
+        SetArguments(process_, arguments);
         process_->start();
     }
 
-    void SetArguments(const QStringList& arguments) {
+    static void SetArguments(QProcess* process, const QStringList& arguments) {
 #ifdef Q_OS_WIN
-        process_->setNativeArguments(arguments.join(' '));
+        auto clone = arguments;
+        for (auto& argument : clone) {
+            if (argument.contains(' ')) {
+                argument = '\"' + argument + '\"';
+            }
+        }
+        process->setNativeArguments(clone.join(' '));
 #else
-        process_->setArguments(arguments);
+        process->setArguments(arguments);
 #endif
     }
 

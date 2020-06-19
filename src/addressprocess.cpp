@@ -11,12 +11,8 @@ void AddressProcess::DumpAsync(const QString& symbloFile, QStringList addrs, QHa
     convertedCount_ = 0;
     addrMap_ = addrMap;
     addrs_ = addrs;
-//    for (auto it = addrMap->begin(); it != addrMap->end(); ++it) {
-//        if (it.value().size() == 0)
-//            addrs_.push_back(it.key());
-//    }
     QStringList arguments;
-    arguments << "-f" << "-C" << "-e" << "\"" + symbloFile + "\"" << addrs_;
+    arguments << "-f" << "-C" << "-e" << symbloFile << addrs_;
     ExecuteAsync(arguments);
 }
 

@@ -24,20 +24,8 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, bool
         QProcess process;
         process.setWorkingDirectory(QCoreApplication::applicationDirPath());
         process.setProgram(execPath);
-#ifdef Q_OS_WIN
-        process.setNativeArguments(arguments.join(' '));
-#else
-        process.setArguments(arguments);
-#endif
-        process.start();
-        if (!process.waitForStarted()) {
-            errorStr_ = "erro starting: adb push remote/libloli.so /data/local/tmp";
-            emit ProcessErrorOccurred();
-            return;
-        }
-        if (!process.waitForFinished()) {
-            errorStr_ = "erro finishing: adb push remote/libloli.so /data/local/tmp";
-            emit ProcessErrorOccurred();
+        AdbProcess::SetArguments(&process, arguments);
+        if (!StartProcess(&process, "adb push remote/libloli.so /data/local/tmp")) {
             return;
         }
         dialog->setValue(dialog->value() + 1);
@@ -49,20 +37,8 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, bool
         QProcess process;
         process.setWorkingDirectory(QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).first());
         process.setProgram(execPath);
-#ifdef Q_OS_WIN
-        process.setNativeArguments(arguments.join(' '));
-#else
-        process.setArguments(arguments);
-#endif
-        process.start();
-        if (!process.waitForStarted()) {
-            errorStr_ = "erro starting: adb push loli2.conf /data/local/tmp";
-            emit ProcessErrorOccurred();
-            return;
-        }
-        if (!process.waitForFinished()) {
-            errorStr_ = "erro finishing: adb push loli2.conf /data/local/tmp";
-            emit ProcessErrorOccurred();
+        AdbProcess::SetArguments(&process, arguments);
+        if (!StartProcess(&process, "adb push loli2.conf /data/local/tmp")) {
             return;
         }
         dialog->setValue(dialog->value() + 1);
@@ -73,20 +49,8 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, bool
         arguments << "shell" << "am" << "set-debug-app" << "-w" << appName;
         QProcess process;
         process.setProgram(execPath);
-#ifdef Q_OS_WIN
-        process.setNativeArguments(arguments.join(' '));
-#else
-        process.setArguments(arguments);
-#endif
-        process.start();
-        if (!process.waitForStarted()) {
-            errorStr_ = "erro starting: adb shell am set-debug-app -w com.company.app";
-            emit ProcessErrorOccurred();
-            return;
-        }
-        if (!process.waitForFinished()) {
-            errorStr_ = "erro finishing: adb shell am set-debug-app -w com.company.app";
-            emit ProcessErrorOccurred();
+        AdbProcess::SetArguments(&process, arguments);
+        if (!StartProcess(&process, "adb shell am set-debug-app -w com.company.app")) {
             return;
         }
         dialog->setValue(dialog->value() + 1);
@@ -97,20 +61,8 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, bool
         arguments << "shell" << "monkey -p" << appName << "-c android.intent.category.LAUNCHER 1";
         QProcess process;
         process.setProgram(execPath);
-#ifdef Q_OS_WIN
-        process.setNativeArguments(arguments.join(' '));
-#else
-        process.setArguments(arguments);
-#endif
-        process.start();
-        if (!process.waitForStarted()) {
-            errorStr_ = "erro starting: adb shell monkey -p com.company.app -c android.intent.category.LAUNCHER 1";
-            emit ProcessErrorOccurred();
-            return;
-        }
-        if (!process.waitForFinished()) {
-            errorStr_ = "erro finishing: adb shell monkey -p com.company.app -c android.intent.category.LAUNCHER 1";
-            emit ProcessErrorOccurred();
+        AdbProcess::SetArguments(&process, arguments);
+        if (!StartProcess(&process, "adb shell monkey -p com.company.app -c android.intent.category.LAUNCHER 1")) {
             return;
         }
         dialog->setValue(dialog->value() + 1);
@@ -122,20 +74,8 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, bool
         arguments << "shell" << "ps" << "|" << "grep" << appName;
         QProcess process;
         process.setProgram(execPath);
-#ifdef Q_OS_WIN
-        process.setNativeArguments(arguments.join(' '));
-#else
-        process.setArguments(arguments);
-#endif
-        process.start();
-        if (!process.waitForStarted()) {
-            errorStr_ = "erro starting: adb shell pidof";
-            emit ProcessErrorOccurred();
-            return;
-        }
-        if (!process.waitForFinished()) {
-            errorStr_ = "erro interpreting: adb jdwp";
-            emit ProcessErrorOccurred();
+        AdbProcess::SetArguments(&process, arguments);
+        if (!StartProcess(&process, "adb shell ps | grep")) {
             return;
         }
         QString retStr = process.readAll();
@@ -154,11 +94,7 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, bool
         arguments << "jdwp";
         QProcess process;
         process.setProgram(execPath);
-#ifdef Q_OS_WIN
-        process.setNativeArguments(arguments.join(' '));
-#else
-        process.setArguments(arguments);
-#endif
+        AdbProcess::SetArguments(&process, arguments);
         process.start();
         if (!process.waitForStarted()) {
             errorStr_ = "erro starting: adb jdwp";
@@ -184,20 +120,8 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, bool
         arguments << "forward" << "tcp:8700" << ("jdwp:" + QString::number(pid));
         QProcess process;
         process.setProgram(execPath);
-#ifdef Q_OS_WIN
-        process.setNativeArguments(arguments.join(' '));
-#else
-        process.setArguments(arguments);
-#endif
-        process.start();
-        if (!process.waitForStarted()) {
-            errorStr_ = "erro starting: adb forward tcp:8700 jdwp:xxxx";
-            emit ProcessErrorOccurred();
-            return;
-        }
-        if (!process.waitForFinished()) {
-            errorStr_ = "erro finishing: adb forward tcp:8700 jdwp:xxxx";
-            emit ProcessErrorOccurred();
+        AdbProcess::SetArguments(&process, arguments);
+        if (!StartProcess(&process, "adb forward tcp:8700 jdwp:xxxx")) {
             return;
         }
         dialog->setValue(dialog->value() + 1);
@@ -209,12 +133,23 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, bool
     arguments << "jdwp-shellifier.py" << "--target" << "127.0.0.1" << "--port" << "8700" << "--break-on" << "android.app.Activity.onResume" << "--loadlib" << "libloli.so";
     process_->setWorkingDirectory(QCoreApplication::applicationDirPath());
     process_->setProgram(pythonPath_);
-#ifdef Q_OS_WIN
-    process_->setNativeArguments(arguments.join(' '));
-#else
-    process_->setArguments(arguments);
-#endif
+    AdbProcess::SetArguments(process_, arguments);
     ExecuteAsync();
+}
+
+bool StartAppProcess::StartProcess(QProcess* process, const QString& message) {
+    process->start();
+    if (!process->waitForStarted()) {
+        errorStr_ = "erro starting: " + message;
+        emit ProcessErrorOccurred();
+        return false;
+    }
+    if (!process->waitForFinished()) {
+        errorStr_ = "erro finishing: " + message;
+        emit ProcessErrorOccurred();
+        return false;
+    }
+    return true;
 }
 
 void StartAppProcess::OnProcessFinihed() {

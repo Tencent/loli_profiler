@@ -828,9 +828,8 @@ void MainWindow::StopCaptureProcess() {
     progressDialog_->setLabelText("Requesting smaps info from device.");
     auto readSMaps = false;
     auto smapsPath = QCoreApplication::applicationDirPath() + "/smaps.txt";
-    qDebug() << smapsPath;
     QStringList arguments;
-    arguments << "pull" << "/data/local/tmp/smaps.txt" << "\"" + smapsPath + "\"";
+    arguments << "pull" << "/data/local/tmp/smaps.txt" << smapsPath;
     QProcess process;
     process.setProgram(PathUtils::GetADBExecutablePath());
 #ifdef Q_OS_WIN
@@ -848,7 +847,7 @@ void MainWindow::StopCaptureProcess() {
             ReadSMapsFile(&file);
             readSMaps = true;
         }
-//        file.remove();
+        file.remove();
     }
     if (!readSMaps) {
         Print("Failed to cat proc/pid/smaps");
@@ -1436,7 +1435,7 @@ void MainWindow::on_symbloPushButton_clicked() {
     if (!QFile::exists(symbloPath))
         return;
     lastSymbolDir_ = QFileInfo(symbloPath).dir().absolutePath();
-    auto addr2linePath = PathUtils::GetAddr2lineExecutablePath(targetArch_ == "armeabi-v7a");
+    auto addr2linePath = PathUtils::GetAddr2lineExecutablePath(targetArch_ != "armeabi-v7a");
     if (addr2linePath.isEmpty() || !QFile::exists(addr2linePath)) {
         QMessageBox::warning(this, "Warning", ANDROID_NDK_NOTFOUND_MSG);
         return;

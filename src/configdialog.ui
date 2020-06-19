@@ -72,7 +72,7 @@
         <string/>
        </property>
        <property name="icon">
-        <iconset resource="res/icon.qrc">
+        <iconset resource="../res/icon.qrc">
          <normaloff>:/toolbutton/btn_open.png</normaloff>:/toolbutton/btn_open.png</iconset>
        </property>
        <property name="autoDefault">
@@ -191,6 +191,11 @@
      <item>
       <property name="text">
        <string>arm64-v8a</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>armeabi</string>
       </property>
      </item>
     </widget>
@@ -322,7 +327,7 @@
         <string/>
        </property>
        <property name="icon">
-        <iconset resource="res/icon.qrc">
+        <iconset resource="../res/icon.qrc">
          <normaloff>:/toolbutton/btn_open.png</normaloff>:/toolbutton/btn_open.png</iconset>
        </property>
        <property name="autoDefault">
@@ -383,7 +388,7 @@
   </customwidget>
  </customwidgets>
  <resources>
-  <include location="res/icon.qrc"/>
+  <include location="../res/icon.qrc"/>
  </resources>
  <connections/>
 </ui>

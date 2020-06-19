@@ -11,7 +11,7 @@ ReleaseRemotePath="$ReleasePath/Contents/MacOS/remote"
 #rm -rf $ReleaseRemotePath
 mkdir -p $ReleaseRemotePath
 
-for i in armeabi-v7a arm64-v8a
+for i in armeabi-v7a arm64-v8a armeabi
 do
 cp -r $AndroidLibsPath/$i $ReleaseRemotePath/$i
 done

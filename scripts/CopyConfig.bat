@@ -15,9 +15,11 @@ rmdir /s/q %RelaseRemotePath%
 md %RelaseRemotePath%
 md %RelaseRemotePath%\arm64-v8a
 md %RelaseRemotePath%\armeabi-v7a
+md %RelaseRemotePath%\armeabi
 
 XCOPY /s/q %AndroidLibsPath%\arm64-v8a %RelaseRemotePath%\arm64-v8a
 XCOPY /s/q %AndroidLibsPath%\armeabi-v7a %RelaseRemotePath%\armeabi-v7a
+XCOPY /s/q %AndroidLibsPath%\armeabi %RelaseRemotePath%\armeabi
 
 :Exit
 exit /B 1

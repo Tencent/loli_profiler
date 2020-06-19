@@ -1,6 +1,8 @@
 set -xeuo pipefail
 echo Deployqt.....
 pwd
-$MacdeployqtPath $ReleasePath
+cd $ReleasePath
+cd ../
+$MacdeployqtPath LoliProfiler.app -dmg -always-overwrite
 
 echo finish Deployqt.....

@@ -92,6 +92,26 @@ OTeam地址：https://techmap.oa.com/oteam/8618
 * QT Creater 4.8 或更高
 * C++11 编译器
 * Android NDK r16b 或更高（如需自行编译安卓插件）
+* CMake
+
+**一键构建**
+
+Mac：
+
+```bash
+export QT5Path=/Users/xinhou/Qt5.14.1
+export Ndk_R16_CMD=/android-ndk-r16b/ndk-build
+sh build.sh
+```
+
+Windows:
+
+```bash
+set QT5Path=D:/SDK/QT/5.14.1/msvc2017_64
+set MSBUILD_EXE="%ProgramFiles(x86)%\Microsoft Visual Studio\2017\Community\MSBuild\15.0\Bin\MSBuild.exe"
+set Ndk_R16_CMD="/android-ndk-r16b/ndk-build.cmd"
+build.bat
+```
 
 ## 链接
 

@@ -70,21 +70,16 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, bool
     unsigned int pid = 0;
     if (interceptMode) { // pid of
         arguments.clear();
-//        arguments << "shell" << "pidof" << appName;
-        arguments << "shell" << "ps" << "|" << "grep" << appName;
+        // https://stackoverflow.com/questions/15608876/find-out-the-running-process-id-by-package-name
+        arguments << "shell" << "for p in /proc/[0-9]*; do [[ $(<$p/cmdline) = " + appName + " ]] && echo ${p##*/}; done";
         QProcess process;
         process.setProgram(execPath);
         AdbProcess::SetArguments(&process, arguments);
-        if (!StartProcess(&process, "adb shell ps | grep")) {
+        if (!StartProcess(&process, "looking for pid")) {
             return;
         }
-        QString retStr = process.readAll();
-        auto tokens = retStr.split(' ', QString::SplitBehavior::SkipEmptyParts);
-        if (tokens.size() > 0) {
-            pid = tokens[1].toUInt();
-        }
-//        pid = process.readAll().trimmed().toUInt();
-//        qDebug() << pid;
+        pid = process.readAll().trimmed().toUInt();
+        qDebug() << pid;
         dialog->setValue(dialog->value() + 1);
     }
     if (!interceptMode) { // adb jdwp

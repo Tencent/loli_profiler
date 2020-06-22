@@ -816,6 +816,18 @@ void MainWindow::ResetFilters() {
    ui->libraryComboBox->setCurrentIndex(0);
 }
 
+void MainWindow::PushEmptySMapsFile() {
+    QTemporaryFile smapsFile("XXXXXX.txt");
+    smapsFile.open(); // this line creates the file
+    QProcess process;
+    process.setProgram(PathUtils::GetADBExecutablePath());
+    AdbProcess::SetArguments(&process, QStringList() << "push" << smapsFile.fileName() << "/data/local/tmp/smaps.txt");
+    process.start();
+    process.waitForStarted();
+    process.waitForFinished();
+    process.close();
+}
+
 void MainWindow::StopCaptureProcess() {
     ConnectionFailed();
     progressDialog_->setWindowTitle("Stop Capture Progress");
@@ -1346,6 +1358,8 @@ void MainWindow::on_actionAbout_triggered() {
 
 void MainWindow::on_launchPushButton_clicked() {
     if (isConnected_) {
+        // create a temporary smaps file for apk because apk doesn't have the permission to create new file
+        PushEmptySMapsFile();
         auto type = static_cast<quint8>(loliCommands::SMAPS_DUMP);
         // this will trigger StopCaptureProcess()
         stacktraceProcess_->Send(reinterpret_cast<const char*>(&type), 1);

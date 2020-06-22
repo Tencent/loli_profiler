@@ -62,6 +62,7 @@ private:
     void ReadSMapsFile(QFile* file);
     void GetMergedCallstacks(QList<QTreeWidgetItem*>& topLevelItems);
     void ResetFilters();
+    void PushEmptySMapsFile();
 
     void StopCaptureProcess();
     void InterpretRecordsLibrary(int start, int count);

@@ -817,8 +817,8 @@ void MainWindow::ResetFilters() {
 }
 
 void MainWindow::PushEmptySMapsFile() {
-    QTemporaryFile smapsFile("XXXXXX.txt");
-    smapsFile.open(); // this line creates the file
+    QTemporaryFile smapsFile;
+    smapsFile.open();
     QProcess process;
     process.setProgram(PathUtils::GetADBExecutablePath());
     AdbProcess::SetArguments(&process, QStringList() << "push" << smapsFile.fileName() << "/data/local/tmp/smaps.txt");

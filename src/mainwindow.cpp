@@ -1443,7 +1443,7 @@ void MainWindow::on_symbloPushButton_clicked() {
     if (!QFile::exists(symbloPath))
         return;
     lastSymbolDir_ = QFileInfo(symbloPath).dir().absolutePath();
-    auto addr2linePath = PathUtils::GetAddr2lineExecutablePath(targetArch_ != "armeabi-v7a");
+    auto addr2linePath = PathUtils::GetAddr2lineExecutablePath(targetArch_ != "arm64-v8a");
     if (addr2linePath.isEmpty() || !QFile::exists(addr2linePath)) {
         QMessageBox::warning(this, "Warning", ANDROID_NDK_NOTFOUND_MSG);
         return;

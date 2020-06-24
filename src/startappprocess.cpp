@@ -12,7 +12,7 @@ StartAppProcess::StartAppProcess(QObject* parent)
 
 }
 
-void StartAppProcess::StartApp(const QString& appName, const QString& arch, bool interceptMode, QProgressDialog* dialog) {
+void StartAppProcess::StartApp(const QString& appName, const QString& compiler, const QString& arch, bool interceptMode, QProgressDialog* dialog) {
     startResult_ = false;
     interceptMode_ = interceptMode;
     errorStr_ = QString();
@@ -20,7 +20,7 @@ void StartAppProcess::StartApp(const QString& appName, const QString& arch, bool
     QStringList arguments;
     { // push remote folder to /data/local/tmp
         dialog->setLabelText("Pushing libloli.so to device.");
-        arguments << "push" << "remote/" + arch + "/libloli.so" << "/data/local/tmp";
+        arguments << "push" << "remote/" + compiler + "/" + arch + "/libloli.so" << "/data/local/tmp";
         QProcess process;
         process.setWorkingDirectory(QCoreApplication::applicationDirPath());
         process.setProgram(execPath);

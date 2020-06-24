@@ -122,6 +122,7 @@ private:
     QString lastOpenDir_;
     QString lastSymbolDir_;
     QString targetArch_;
+    QString targetCompiler_;
     QTimer* mainTimer_;
     int time_ = 0;
     double minTime_ = 0;

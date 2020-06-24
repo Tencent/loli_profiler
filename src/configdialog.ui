@@ -35,7 +35,26 @@
    <property name="spacing">
     <number>6</number>
    </property>
-   <item row="2" column="0">
+   <item row="5" column="1">
+    <widget class="QComboBox" name="archComboBox">
+     <item>
+      <property name="text">
+       <string>armeabi-v7a</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>arm64-v8a</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>armeabi</string>
+      </property>
+     </item>
+    </widget>
+   </item>
+   <item row="3" column="0">
     <widget class="QLabel" name="label_6">
      <property name="text">
       <string>Mode</string>
@@ -43,6 +62,107 @@
      <property name="alignment">
       <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
      </property>
+    </widget>
+   </item>
+   <item row="6" column="1">
+    <widget class="QSpinBox" name="thresholdSpinBox">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="toolTip">
+      <string>Malloc stacktrace collect threshold.</string>
+     </property>
+     <property name="suffix">
+      <string> byte</string>
+     </property>
+     <property name="prefix">
+      <string/>
+     </property>
+     <property name="maximum">
+      <number>1048576</number>
+     </property>
+     <property name="value">
+      <number>1024</number>
+     </property>
+    </widget>
+   </item>
+   <item row="8" column="0">
+    <widget class="QLabel" name="label_4">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="text">
+      <string>Libraries</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
+     </property>
+    </widget>
+   </item>
+   <item row="4" column="1">
+    <widget class="QComboBox" name="buildComboBox">
+     <item>
+      <property name="text">
+       <string>default</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>instrumented</string>
+      </property>
+     </item>
+    </widget>
+   </item>
+   <item row="0" column="0">
+    <widget class="QLabel" name="label_3">
+     <property name="text">
+      <string>Android SDK</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
+     </property>
+    </widget>
+   </item>
+   <item row="7" column="1">
+    <widget class="QComboBox" name="typeComboBox">
+     <property name="toolTip">
+      <string/>
+     </property>
+     <item>
+      <property name="text">
+       <string>white list</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>black list</string>
+      </property>
+     </item>
+    </widget>
+   </item>
+   <item row="3" column="1">
+    <widget class="QComboBox" name="modeComboBox">
+     <item>
+      <property name="text">
+       <string>strict</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>loose</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>nostack</string>
+      </property>
+     </item>
     </widget>
    </item>
    <item row="1" column="1">
@@ -82,23 +202,7 @@
      </item>
     </layout>
    </item>
-   <item row="7" column="0">
-    <widget class="QLabel" name="label_4">
-     <property name="sizePolicy">
-      <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
-       <horstretch>0</horstretch>
-       <verstretch>0</verstretch>
-      </sizepolicy>
-     </property>
-     <property name="text">
-      <string>Libraries</string>
-     </property>
-     <property name="alignment">
-      <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
-     </property>
-    </widget>
-   </item>
-   <item row="7" column="1">
+   <item row="8" column="1">
     <widget class="QStackedWidget" name="libraryStackedWidget">
      <property name="currentIndex">
       <number>1</number>
@@ -181,74 +285,13 @@
      </widget>
     </widget>
    </item>
-   <item row="4" column="1">
-    <widget class="QComboBox" name="archComboBox">
-     <item>
-      <property name="text">
-       <string>armeabi-v7a</string>
-      </property>
-     </item>
-     <item>
-      <property name="text">
-       <string>arm64-v8a</string>
-      </property>
-     </item>
-     <item>
-      <property name="text">
-       <string>armeabi</string>
-      </property>
-     </item>
-    </widget>
-   </item>
-   <item row="6" column="0">
-    <widget class="QLabel" name="label_7">
-     <property name="text">
-      <string>Type</string>
-     </property>
-    </widget>
-   </item>
-   <item row="4" column="0">
+   <item row="5" column="0">
     <widget class="QLabel" name="label">
      <property name="text">
       <string>Architecture</string>
      </property>
      <property name="alignment">
       <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
-     </property>
-    </widget>
-   </item>
-   <item row="5" column="0">
-    <widget class="QLabel" name="label_2">
-     <property name="text">
-      <string>Threshold</string>
-     </property>
-     <property name="alignment">
-      <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
-     </property>
-    </widget>
-   </item>
-   <item row="5" column="1">
-    <widget class="QSpinBox" name="thresholdSpinBox">
-     <property name="sizePolicy">
-      <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-       <horstretch>0</horstretch>
-       <verstretch>0</verstretch>
-      </sizepolicy>
-     </property>
-     <property name="toolTip">
-      <string>Malloc stacktrace collect threshold.</string>
-     </property>
-     <property name="suffix">
-      <string> byte</string>
-     </property>
-     <property name="prefix">
-      <string/>
-     </property>
-     <property name="maximum">
-      <number>1048576</number>
-     </property>
-     <property name="value">
-      <number>1024</number>
      </property>
     </widget>
    </item>
@@ -262,33 +305,14 @@
      </property>
     </widget>
    </item>
-   <item row="0" column="0">
-    <widget class="QLabel" name="label_3">
+   <item row="6" column="0">
+    <widget class="QLabel" name="label_2">
      <property name="text">
-      <string>Android SDK</string>
+      <string>Threshold</string>
      </property>
      <property name="alignment">
       <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
      </property>
-    </widget>
-   </item>
-   <item row="2" column="1">
-    <widget class="QComboBox" name="modeComboBox">
-     <item>
-      <property name="text">
-       <string>strict</string>
-      </property>
-     </item>
-     <item>
-      <property name="text">
-       <string>loose</string>
-      </property>
-     </item>
-     <item>
-      <property name="text">
-       <string>nostack</string>
-      </property>
-     </item>
     </widget>
    </item>
    <item row="0" column="1">
@@ -337,24 +361,14 @@
      </item>
     </layout>
    </item>
-   <item row="6" column="1">
-    <widget class="QComboBox" name="typeComboBox">
-     <property name="toolTip">
-      <string/>
+   <item row="7" column="0">
+    <widget class="QLabel" name="label_7">
+     <property name="text">
+      <string>Type</string>
      </property>
-     <item>
-      <property name="text">
-       <string>white list</string>
-      </property>
-     </item>
-     <item>
-      <property name="text">
-       <string>black list</string>
-      </property>
-     </item>
     </widget>
    </item>
-   <item row="3" column="0">
+   <item row="4" column="0">
     <widget class="QLabel" name="label_8">
      <property name="contextMenuPolicy">
       <enum>Qt::NoContextMenu</enum>
@@ -364,16 +378,23 @@
      </property>
     </widget>
    </item>
-   <item row="3" column="1">
-    <widget class="QComboBox" name="buildComboBox">
+   <item row="2" column="0">
+    <widget class="QLabel" name="label_9">
+     <property name="text">
+      <string>Compiler</string>
+     </property>
+    </widget>
+   </item>
+   <item row="2" column="1">
+    <widget class="QComboBox" name="compilerComboBox">
      <item>
       <property name="text">
-       <string>default</string>
+       <string>gcc</string>
       </property>
      </item>
      <item>
       <property name="text">
-       <string>instrumented</string>
+       <string>llvm</string>
       </property>
      </item>
     </widget>

@@ -17,10 +17,6 @@
 #include <unordered_map>
 #include <cassert>
 
-#ifdef __cplusplus
-extern "C" {
-#endif // __cplusplus
-
 #include <android/log.h>
 #include <cxxabi.h>
 #include <dlfcn.h>
@@ -120,6 +116,10 @@ inline void loli_maybe_record_alloc(size_t size, void* addr, loliFlags flag, int
     loli_server_send(oss.str().c_str());
 }
 
+#ifdef __cplusplus
+extern "C" {
+#endif // __cplusplus
+
 void *loli_index_malloc(size_t size, int index) {
     void* addr = malloc(size);
     loli_maybe_record_alloc(size, addr, loliFlags::MALLOC_, index);
@@ -149,6 +149,10 @@ void *loli_index_realloc(void *ptr, size_t new_size, int index) {
     }
     return addr;
 }
+
+#ifdef __cplusplus
+}
+#endif // __cplusplus
 
 void loli_free(void* ptr) {
     if (ptr == nullptr) 
@@ -224,7 +228,7 @@ void loli_hook_whitelist(const std::unordered_set<std::string>& whitelist, so_in
 }
 
 void loli_hook(const std::unordered_set<std::string>& tokens, std::unordered_map<std::string, uintptr_t> infoMap) {
-    // xhook_enable_debug(1);
+    xhook_enable_debug(1);
     xhook_clear();
     // convert absolute path to relative ones, ie: system/lib/libc.so -> libc
     so_info_map demangledMap;
@@ -385,9 +389,5 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
     std::thread(loli_smaps_thread, tokens).detach();
     return JNI_VERSION_1_6;
 }
-
-#ifdef __cplusplus
-}
-#endif // __cplusplus
 
 #endif // LOLI_CPP

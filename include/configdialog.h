@@ -12,9 +12,10 @@ class ConfigDialog : public QDialog {
 public:
     explicit ConfigDialog(QWidget *parent = nullptr);
     ~ConfigDialog();
-    void LoadConfigFile(const QString& arch);
+    void LoadConfigFile(const QString& arch, const QString& compiler);
     void OnPasteClipboard();
     QString GetArchString() const;
+    QString GetCompilerString() const;
 
     struct Settings {
         int threshold_ = 128;

@@ -19,6 +19,10 @@ LOCAL_SRC_FILES  := loli.cpp \
                     xh_util.c \
                     xh_version.c\
                     wrapper/wrapper.cpp
+ifdef LLVM
+LOCAL_LDLIBS     := -llog
+else
 LOCAL_LDLIBS     := -llog -latomic
+endif
 
 include $(BUILD_SHARED_LIBRARY)

@@ -20,7 +20,7 @@ public:
         return errorStr_;
     }
 
-    void StartApp(const QString& appName, const QString& arch, bool interceptMode, QProgressDialog* dialog);
+    void StartApp(const QString& appName, const QString& compiler, const QString& arch, bool interceptMode, QProgressDialog* dialog);
 
 protected:
     bool StartProcess(QProcess* process, const QString& message);

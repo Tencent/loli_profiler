@@ -180,6 +180,7 @@ const QString SETTINGS_SCALEHSLIDER = "ChartScaleHSlider";
 const QString SETTINGS_LASTOPENDIR = "lastopen_dir";
 const QString SETTINGS_LASTSYMBOLDIR = "lastsymbol_dir";
 const QString SETTINGS_ARCH = "target_arch";
+const QString SETTINGS_COMPILER = "target_compiler";
 const QString SETTINGS_ANDROIDSDK = "AndroidSDK";
 const QString SETTINGS_ANDROIDNDK = "AndroidNDK";
 
@@ -202,7 +203,7 @@ void MainWindow::LoadSettings() {
     if (QDir(lastSymbolDir).exists())
         lastSymbolDir_ = lastSymbolDir;
     targetArch_ = settings.value(SETTINGS_ARCH, "armeabi-v7a").toString();
-
+    targetCompiler_ = settings.value(SETTINGS_COMPILER, "gcc").toString();
     PathUtils::SetSDKPath(settings.value(SETTINGS_ANDROIDSDK).toString());
     PathUtils::SetNDKPath(settings.value(SETTINGS_ANDROIDNDK).toString());
 }
@@ -1426,7 +1427,7 @@ void MainWindow::on_launchPushButton_clicked() {
 
     startAppProcess_->SetPythonPath(pythonPath);
     startAppProcess_->SetExecutablePath(adbPath);
-    startAppProcess_->StartApp(ui->appNameLineEdit->text(), targetArch_, mode == 1, progressDialog_);
+    startAppProcess_->StartApp(ui->appNameLineEdit->text(), targetCompiler_, targetArch_, mode == 1, progressDialog_);
 
     isCapturing_ = true;
     Print("Starting application ...");
@@ -1512,13 +1513,16 @@ void MainWindow::on_symbloPushButton_clicked() {
 void MainWindow::on_configPushButton_clicked() {
     QSettings settings("MoreFun", "LoliProfiler");
     targetArch_ = settings.value(SETTINGS_ARCH).toString();
+    targetCompiler_ = settings.value(SETTINGS_COMPILER).toString();
     ConfigDialog dialog(this);
     dialog.setWindowFlags(dialog.windowFlags() | Qt::WindowTitleHint | Qt::WindowCloseButtonHint);
     dialog.setWindowModality(Qt::WindowModal);
-    dialog.LoadConfigFile(targetArch_);
+    dialog.LoadConfigFile(targetArch_, targetCompiler_);
     connect(&dialog, &QDialog::finished, [this, &dialog, &settings](int) {
         targetArch_ = dialog.GetArchString();
+        targetCompiler_ = dialog.GetCompilerString();
         settings.setValue(SETTINGS_ARCH, targetArch_);
+        settings.setValue(SETTINGS_COMPILER, targetCompiler_);
     });
     dialog.exec();
 }

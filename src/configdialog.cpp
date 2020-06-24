@@ -26,10 +26,11 @@ ConfigDialog::~ConfigDialog() {
     delete ui;
 }
 
-void ConfigDialog::LoadConfigFile(const QString& arch) {
+void ConfigDialog::LoadConfigFile(const QString& arch, const QString& compiler) {
     ui->lineEditSDKFolder->setText(PathUtils::GetSDKPath());
     ui->lineEditNDKFolder->setText(PathUtils::GetNDKPath());
     ParseConfigFile();
+    ui->compilerComboBox->setCurrentText(compiler);
     ui->modeComboBox->setCurrentText(currentSettings_.mode_);
     ui->buildComboBox->setCurrentText(currentSettings_.build_);
     ui->archComboBox->setCurrentText(arch);
@@ -69,6 +70,10 @@ void ConfigDialog::OnPasteClipboard() {
 
 QString ConfigDialog::GetArchString() const {
     return ui->archComboBox->currentText();
+}
+
+QString ConfigDialog::GetCompilerString() const {
+    return ui->compilerComboBox->currentText();
 }
 
 ConfigDialog::Settings ConfigDialog::ParseConfigFile() {

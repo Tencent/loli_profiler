@@ -35,4 +35,4 @@ echo Ndk_R20_CMD path : %Ndk_R20_CMD%
 call ./scripts/EnterPoint.bat
 
 :Exit
-exit /B 1
+exit /b %errorlevel%

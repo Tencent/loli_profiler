@@ -17,4 +17,4 @@ call ./scripts/Deployqt.bat
 echo finsih scripts %RelasePath%\LoliProfiler.exe
 
 :Exit
-exit /B 1
+exit /b %errorlevel%

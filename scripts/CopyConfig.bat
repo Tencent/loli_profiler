@@ -29,4 +29,4 @@ XCOPY /s/q %AndroidLibsPath%\llvm\arm64-v8a %RelaseRemotePath%\llvm\arm64-v8a
 XCOPY /s/q %AndroidLibsPath%\llvm\armeabi-v7a %RelaseRemotePath%\llvm\armeabi-v7a
 
 :Exit
-exit /B 1
+exit /b %errorlevel%

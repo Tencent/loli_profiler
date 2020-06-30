@@ -7,4 +7,4 @@ call %WindeployqtPath% %RelasePath%\LoliProfiler.exe
 echo finish Deployqt.....
 
 :Exit
-exit /B 1
+exit /b %errorlevel%

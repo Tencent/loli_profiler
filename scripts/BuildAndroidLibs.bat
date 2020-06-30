@@ -12,4 +12,4 @@ call %Ndk_R20_CMD% NDK_PROJECT_PATH=%AndroidPluginPath% -B LLVM=1 NDK_LIBS_OUT=%
 echo finish build android library with llvm......
 
 :Exit
-exit /B 1
+exit /b %errorlevel%

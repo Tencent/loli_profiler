@@ -1,10 +1,10 @@
 set -xeuo pipefail
 
-export QT5Path=/Users/xinhou/Qt5.14.1
+# export QT5Path=/Users/xinhou/Qt5.14.1
 # for gcc
-export Ndk_R16_CMD=/Users/xinhou/Documents/sdk/android-ndk-r16b/ndk-build
+# export Ndk_R16_CMD=/Users/xinhou/Documents/sdk/android-ndk-r16b/ndk-build
 # for llvm
-export Ndk_R20_CMD=/Users/xinhou/Documents/sdk/android-ndk-r20b/ndk-build
+# export Ndk_R20_CMD=/Users/xinhou/Documents/sdk/android-ndk-r20b/ndk-build
 
 # if [ ! -f $QT5Path ];then
 #     echo QT5Path not found ERROR: $QT5Path

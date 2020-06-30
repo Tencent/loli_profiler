@@ -102,6 +102,7 @@ Mac：
 ```bash
 export QT5Path=/Users/xinhou/Qt5.14.1
 export Ndk_R16_CMD=/android-ndk-r16b/ndk-build
+export Ndk_R20_CMD=/android-ndk-r20b/ndk-build
 sh build.sh
 ```
 
@@ -111,6 +112,7 @@ Windows:
 set QT5Path=D:/SDK/QT/5.14.1/msvc2017_64
 set MSBUILD_EXE="%ProgramFiles(x86)%\Microsoft Visual Studio\2017\Community\MSBuild\15.0\Bin\MSBuild.exe"
 set Ndk_R16_CMD="/android-ndk-r16b/ndk-build.cmd"
+set Ndk_R20_CMD="/android-ndk-r20b/ndk-build.cmd"
 build.bat
 ```
 

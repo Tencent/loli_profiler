@@ -83,7 +83,10 @@ MainWindow::MainWindow(QWidget *parent) :
     stacktraceProcess_ = new StackTraceProcess(this);
     connect(stacktraceProcess_, &StackTraceProcess::DataReceived, this, &MainWindow::StacktraceDataReceived);
     connect(stacktraceProcess_, &StackTraceProcess::ConnectionLost, this, &MainWindow::StacktraceConnectionLost);
-    connect(stacktraceProcess_, &StackTraceProcess::SMapsDumped, [this]() { StopCaptureProcess(); });
+    connect(stacktraceProcess_, &StackTraceProcess::SMapsDumped, [this]() {
+        smapsTimer_->stop();
+        StopCaptureProcess();
+    });
 
     // setup screenshot view
     ui->screenshotGraphicsView->setScene(new QGraphicsScene());
@@ -164,6 +167,14 @@ MainWindow::MainWindow(QWidget *parent) :
     mainTimer_ = new QTimer(this);
     connect(mainTimer_, SIGNAL(timeout()), this, SLOT(FixedUpdate()));
     mainTimer_->start(1000);
+
+    smapsTimer_ = new QTimer(this);
+    smapsTimer_->setSingleShot(true);
+    smapsTimer_->setInterval(10000);
+    connect(smapsTimer_, &QTimer::timeout, [this]() {
+        Print("Failed to pull smaps data.");
+        StopCaptureProcess();
+    });
 }
 
 MainWindow::~MainWindow() {
@@ -1364,6 +1375,7 @@ void MainWindow::on_launchPushButton_clicked() {
         auto type = static_cast<quint8>(loliCommands::SMAPS_DUMP);
         // this will trigger StopCaptureProcess()
         stacktraceProcess_->Send(reinterpret_cast<const char*>(&type), 1);
+        smapsTimer_->start();
         ui->launchPushButton->setEnabled(false);
         return;
     }

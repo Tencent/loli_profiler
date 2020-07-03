@@ -124,6 +124,7 @@ private:
     QString targetArch_;
     QString targetCompiler_;
     QTimer* mainTimer_;
+    QTimer* smapsTimer_;
     int time_ = 0;
     double minTime_ = 0;
     double maxTime_ = 0;

@@ -4,7 +4,7 @@ echo dir %cd%
 
 set AndroidPluginPath="./plugins/Android"
 set RelasePath=".\build\cmake\bin\release"
-set WindeployqtPath=%QT5Path%/bin/windeployqt.exe
+set WindeployqtPath="%QT5Path%/bin/windeployqt.exe"
 
 rem delete dir
 rmdir /s/q .\build

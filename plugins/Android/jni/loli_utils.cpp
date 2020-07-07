@@ -9,6 +9,57 @@ extern "C" {
 #include <string.h>
 #include <unwind.h>
 
+// https://github.com/root-project/root/blob/master/LICENSE
+// https://github.com/root-project/root/blob/master/misc/memstat/src/TMemStatBacktrace.cxx#L52
+#define G__builtin_return_address(N) \
+    ((__builtin_frame_address(N) == NULL)  || \
+     (__builtin_frame_address(N) < __builtin_frame_address(0))) ? \
+    NULL : __builtin_return_address(N)
+#define _RET_ADDR(x)   case x: return G__builtin_return_address(x);
+
+static void *return_address(int _frame) {
+   switch(_frame) {
+         _RET_ADDR(0);
+         _RET_ADDR(1);
+         _RET_ADDR(2);
+         _RET_ADDR(3);
+         _RET_ADDR(4);
+         _RET_ADDR(5);
+         _RET_ADDR(6);
+         _RET_ADDR(7);
+         _RET_ADDR(8);
+         _RET_ADDR(9);
+         _RET_ADDR(10);
+         _RET_ADDR(11);
+         _RET_ADDR(12);
+         _RET_ADDR(13);
+         _RET_ADDR(14);
+         _RET_ADDR(15);
+         _RET_ADDR(16);
+         _RET_ADDR(17);
+         _RET_ADDR(18);
+         _RET_ADDR(19);
+         _RET_ADDR(20);
+         _RET_ADDR(21);
+         _RET_ADDR(22);
+         _RET_ADDR(23);
+         _RET_ADDR(24);
+         _RET_ADDR(25);
+         _RET_ADDR(26);
+         _RET_ADDR(27);
+         _RET_ADDR(28);
+         _RET_ADDR(29);
+         _RET_ADDR(30);
+         _RET_ADDR(31);
+         _RET_ADDR(32);
+         _RET_ADDR(33);
+         _RET_ADDR(34);
+         _RET_ADDR(35);
+      default:
+         return 0;
+   }
+}
+
 void loli_trim(std::string &str) {
     str.erase(std::remove_if(str.begin(), str.end(), [](int ch) {
         return std::isspace(ch);
@@ -63,6 +114,14 @@ static _Unwind_Reason_Code loli_unwind(struct _Unwind_Context* context, void* ar
         }
     }
     return _URC_NO_REASON;
+}
+
+size_t loli_fastcapture(void **buffer, size_t max) {
+   size_t i(0);
+   void *addr;
+   for(i = 0; (i < max) && (addr = return_address(i)); ++i)
+      buffer[i] = addr;
+   return i;
 }
 
 size_t loli_capture(void** buffer, size_t max) {

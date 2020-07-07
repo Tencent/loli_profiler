@@ -23,6 +23,7 @@ void loli_split(const std::string& str, std::vector<std::string>& tokens, const 
 
 void loli_demangle(const std::string& name, std::string& demangled);
 
+size_t loli_fastcapture(void** buffer, size_t max);
 size_t loli_capture(void** buffer, size_t max);
 void loli_dump(std::ostream& os, void** buffer, size_t count);
 

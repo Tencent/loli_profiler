@@ -51,11 +51,11 @@ std::atomic<std::uint32_t> callSeq_;
 
 loliDataMode mode_ = loliDataMode::STRICT;
 bool isBlacklist_ = false;
-bool isInstrumented_ = false;
+bool isFramePointer_ = false;
 loli::Sampler* sampler_ = nullptr;
 loli::spinlock samplerLock_;
 
-#define STACKBUFFERSIZE 128
+#define STACKBUFFERSIZE 32
 
 enum loliFlags {
     FREE_ = 0, 
@@ -66,16 +66,7 @@ enum loliFlags {
     COMMAND_ = 255,
 };
 
-static thread_local bool ignore_current_ = false;
-void toggle_ignore_current(bool value) {
-    ignore_current_ = value;
-}
-
 inline void loli_maybe_record_alloc(size_t size, void* addr, loliFlags flag, int index) {
-    if (ignore_current_) {
-        return;
-    }
-
     bool bRecordAllocation = false;
     size_t recordSize = size;
     if (mode_ == loliDataMode::STRICT) {
@@ -107,8 +98,8 @@ inline void loli_maybe_record_alloc(size_t size, void* addr, loliFlags flag, int
     } else {
         static thread_local void* buffer[STACKBUFFERSIZE];
         oss << flag << '\\' << ++callSeq_ << ',' << time << ',' << recordSize << ',' << addr << '\\';
-        if (hookInfo->backtrace != nullptr) {
-            loli_dump(oss, buffer, hookInfo->backtrace(buffer, STACKBUFFERSIZE));
+        if (isFramePointer_) {
+            loli_dump(oss, buffer, loli_fastcapture(buffer, STACKBUFFERSIZE));
         } else {
             loli_dump(oss, buffer, loli_capture(buffer, STACKBUFFERSIZE));
         }
@@ -163,27 +154,6 @@ void loli_free(void* ptr) {
     free(ptr);
 }
 
-BACKTRACE_FPTR loli_get_backtrace(const char* path) {
-    BACKTRACE_FPTR backtrace = nullptr;
-    void *handle = fake_dlopen(path, RTLD_LAZY);
-    if (handle) {
-        void (*set_loli_ignore_func)(void (*funcPtr)(bool)) = nullptr;
-        *(void **) (&set_loli_ignore_func) = fake_dlsym(handle, "set_loli_ignore_func");
-         if (set_loli_ignore_func == nullptr) {
-            LOLILOGI("Error dlsym set_loli_ignore_func: %s", path);
-            return backtrace;
-        }
-        (*set_loli_ignore_func)(toggle_ignore_current);
-        *(void **) (&backtrace) = fake_dlsym(handle, "get_stack_backtrace");
-        if (backtrace == nullptr) {
-            LOLILOGI("Error dlsym get_stack_backtrace: %s", path);
-        }
-    } else {
-        LOLILOGI("Error dlopen: %s", path);
-    }
-    return backtrace;
-}
-
 // demangled name, <full name, base address>
 using so_info_map = std::unordered_map<std::string, std::pair<std::string, uintptr_t>>;
 
@@ -191,9 +161,6 @@ bool loli_hook_library(const char* library, so_info_map& infoMap) {
     if (auto info = wrapper_by_name(library)) {
         auto brief = infoMap[std::string(info->so_name)];
         info->so_baseaddr = brief.second;
-        if (mode_ != loliDataMode::NOSTACK && isInstrumented_) {
-            info->backtrace = loli_get_backtrace(brief.first.c_str());
-        }
         auto regex = std::string(".*/") + library + "\\.so$";
         xhook_register(regex.c_str(), "malloc", (void*)info->malloc, nullptr);
         xhook_register(regex.c_str(), "free", (void*)loli_free, nullptr);
@@ -363,7 +330,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
         } else if (words[0] == "type") {
             isBlacklist_ = words[1] == "blacklist";
         } else if (words[0] == "build") {
-            isInstrumented_ = words[1] != "default";
+            isFramePointer_ = words[1] != "default";
         }
     }
     hookLibraries = isBlacklist_ ? blacklist : whitelist;

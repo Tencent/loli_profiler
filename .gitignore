@@ -46,3 +46,5 @@ CMakeFiles/
 .vscode/
 .DS_Store
 CMakeCache.txt
+
+dist/

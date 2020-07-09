@@ -33,6 +33,7 @@
 #include <QStandardPaths>
 #include <QtConcurrent>
 #include <QMutexLocker>
+#include <QElapsedTimer>
 
 #include <algorithm>
 #include <cmath>
@@ -44,6 +45,25 @@
 
 #define ANDROID_SDK_NOTFOUND_MSG "Android SDK not found. Please select Android SDK's location in configuration panel."
 #define ANDROID_NDK_NOTFOUND_MSG "Android NDK not found. Please select Android NDK's location in configuration panel."
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+
+unsigned long long getTotalSystemMemory() {
+    MEMORYSTATUSEX status;
+    status.dwLength = sizeof(status);
+    GlobalMemoryStatusEx(&status);
+    return status.ullTotalPhys;
+}
+#else
+#include <unistd.h>
+
+unsigned long long getTotalSystemMemory() {
+    long pages = sysconf(_SC_PHYS_PAGES);
+    long page_size = sysconf(_SC_PAGE_SIZE);
+    return pages * page_size;
+}
+#endif
 
 enum class IOErrorCode : qint32 {
     NONE = 0,
@@ -1466,60 +1486,84 @@ void MainWindow::on_symbloPushButton_clicked() {
     auto it = symbloMap_.find(soName);
     if (it == symbloMap_.end())
         return;
+    QElapsedTimer timer;
+    timer.start();
     auto& addrMap = it.value();
-    int requiredProcessCount = static_cast<int>(std::ceil(static_cast<float>(addrMap.size()) / 2000));
-    QVector<AddressProcess*> avaliableProcesses;
-    for (auto& process : addrProcesses_) {
-        if (requiredProcessCount <= 0)
-            break;
-        if (!process->IsRunning()) {
-            requiredProcessCount--;
-            avaliableProcesses.push_back(process);
-        }
-    }
-    for (int i = 0; i < requiredProcessCount; i++) {
-        auto process = new AddressProcess(this);
-        connect(process, &AddressProcess::ProcessFinished, this, &MainWindow::AddressProcessFinished);
-        connect(process, &AddressProcess::ProcessErrorOccurred, this, &MainWindow::AddressProcessErrorOccurred);
-        addrProcesses_.push_back(process);
-        avaliableProcesses.push_back(process);
-    }
+    // determin max running process count for memory reason
+    auto systemMemory = static_cast<unsigned int>(getTotalSystemMemory() / 1024 / 1024); // MiB
+    auto symbolFileSize = static_cast<unsigned int>(info.size() / 1024 / 1024); // MiB
+    auto maxProcessCount =  std::min(4, static_cast<int>(std::ceil((systemMemory * 1.0f) / (symbolFileSize * 4))));
+    qDebug() << "SystemMemory: " << systemMemory << " SymbolSize: " << symbolFileSize << " ProcessCount: " << maxProcessCount;
+    // setup progress dialog
+    const int splitThreshold = 5000;
+    int requiredRunCount = static_cast<int>(std::ceil(static_cast<float>(addrMap.size()) / splitThreshold));
     progressDialog_->setWindowTitle("Symbol Load Progress");
-    progressDialog_->setLabelText(QString("Loading symbols for %1 addresses by %2 process").arg(addrMap.size()).arg(avaliableProcesses.size()));
+    progressDialog_->setLabelText(QString("Loading symbols for %1 addrs by %2 jobs").arg(addrMap.size()).arg(requiredRunCount));
     progressDialog_->setMinimum(0);
-    progressDialog_->setMaximum(avaliableProcesses.size());
+    progressDialog_->setMaximum(requiredRunCount);
     progressDialog_->setValue(0);
     progressDialog_->show();
-    auto addrMapIt = addrMap.begin();
-    int processCount = 0;
-    int maxProcessCount = 4;
-    auto symbolFileSize = info.size() / 1024 / 1024; // MiB
-    if (symbolFileSize <= 512) {
-        maxProcessCount = 4;
-    } else if (symbolFileSize <= 1024) {
-        maxProcessCount = 2;
-    } else {
-        maxProcessCount = 1;
+    QCoreApplication::instance()->sendPostedEvents();
+    // setup process pool
+    QVector<AddressProcess*> processPool;
+    QVector<AddressProcess*> runningProcess;
+    for (int i = 0; i < maxProcessCount; i++) {
+        auto process = new AddressProcess(this);
+        process->SetExecutablePath(addr2linePath);
+        connect(process, &AddressProcess::ProcessFinished, [&, this, process](AdbProcess*) {
+            AddressProcessFinished(process);
+            processPool.push_back(process);
+            runningProcess.removeOne(process);
+        });
+        connect(process, &AddressProcess::ProcessErrorOccurred, [&, this, process]() {
+            AddressProcessErrorOccurred();
+            processPool.push_back(process);
+            runningProcess.removeOne(process);
+        });
+        processPool.push_back(process);
     }
-    for (auto& process : avaliableProcesses) {
-        QStringList addrs;
+    // schedule jobs
+    {
         int count = 0;
+        auto scheduleJob = [&](QStringList& addrs) {
+            while (runningProcess.size() >= maxProcessCount) {
+                runningProcess.last()->WaitForFinished(10000);
+                QCoreApplication::instance()->sendPostedEvents();
+            }
+            progressDialog_->repaint();
+            auto process = processPool.back();
+            processPool.pop_back();
+            runningProcess.push_back(process);
+            process->DumpAsync(symbloPath, addrs, &addrMap);
+            addrs.clear();
+            count = 0;
+        };
+        auto addrMapIt = addrMap.begin();
+        QStringList addrs;
         for (; addrMapIt != addrMap.end(); ++addrMapIt) {
             if (addrMapIt.value().size() == 0) {
                 addrs.push_back(addrMapIt.key());
                 count++;
             }
-            if (count >= 2000)
-                break;
+            if (count >= splitThreshold) {
+                scheduleJob(addrs);
+            }
         }
-        process->SetExecutablePath(addr2linePath);
-        process->DumpAsync(symbloPath, addrs, &addrMap);
-        processCount++;
-        if (processCount >= maxProcessCount) { // run max maxProcessCount processes at the sametime
-            processCount = 0;
-            process->WaitForFinished();
+        if (addrs.size() > 0) {
+            scheduleJob(addrs);
         }
     }
+    // wait and recycle memory
+    while (runningProcess.size() > 0) {
+        runningProcess.last()->WaitForFinished(10000);
+        QCoreApplication::instance()->sendPostedEvents();
+    }
+    for (auto& process : processPool) {
+        delete process;
+    }
+    progressDialog_->hide();
+    auto elapsedSec = timer.elapsed() / 1000;
+    Print(QString("Symbols loaded in %1 seconds.").arg(elapsedSec));
 }
 
 void MainWindow::on_configPushButton_clicked() {

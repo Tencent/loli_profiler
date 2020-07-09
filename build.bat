@@ -2,7 +2,7 @@
 
 echo dir %cd%
 
-rem set QT5Path=D:/SDK/QT/5.14.1/msvc2017_64
+rem set QT5Path="D:/SDK/QT/5.14.1/msvc2017_64"
 rem set MSBUILD_EXE="%ProgramFiles(x86)%\Microsoft Visual Studio\2017\Community\MSBuild\15.0\Bin\MSBuild.exe"
 rem set Ndk_R16_CMD="E:/SDK/AndroidNDKForUnity/android-ndk-r16b/ndk-build.cmd"
 rem set Ndk_R20_CMD="E:/SDK/AndroidNDKForUnity/android-ndk-r20/ndk-build.cmd"

@@ -34,6 +34,7 @@
 #include <QtConcurrent>
 #include <QMutexLocker>
 #include <QElapsedTimer>
+#include <QRegExp>
 
 #include <algorithm>
 #include <cmath>
@@ -45,25 +46,6 @@
 
 #define ANDROID_SDK_NOTFOUND_MSG "Android SDK not found. Please select Android SDK's location in configuration panel."
 #define ANDROID_NDK_NOTFOUND_MSG "Android NDK not found. Please select Android NDK's location in configuration panel."
-
-#ifdef Q_OS_WIN
-#include <windows.h>
-
-unsigned long long getTotalSystemMemory() {
-    MEMORYSTATUSEX status;
-    status.dwLength = sizeof(status);
-    GlobalMemoryStatusEx(&status);
-    return status.ullTotalPhys;
-}
-#else
-#include <unistd.h>
-
-unsigned long long getTotalSystemMemory() {
-    long pages = sysconf(_SC_PHYS_PAGES);
-    long page_size = sysconf(_SC_PAGE_SIZE);
-    return pages * page_size;
-}
-#endif
 
 enum class IOErrorCode : qint32 {
     NONE = 0,
@@ -1476,8 +1458,8 @@ void MainWindow::on_symbloPushButton_clicked() {
     if (!QFile::exists(symbloPath))
         return;
     lastSymbolDir_ = QFileInfo(symbloPath).dir().absolutePath();
-    auto addr2linePath = PathUtils::GetAddr2lineExecutablePath(targetArch_ != "arm64-v8a");
-    if (addr2linePath.isEmpty() || !QFile::exists(addr2linePath)) {
+    auto nmPath = PathUtils::GetNDKToolPath("nm", targetArch_ != "arm64-v8a");
+    if (nmPath.isEmpty() || !QFile::exists(nmPath)) {
         QMessageBox::warning(this, "Warning", ANDROID_NDK_NOTFOUND_MSG);
         return;
     }
@@ -1488,82 +1470,104 @@ void MainWindow::on_symbloPushButton_clicked() {
         return;
     QElapsedTimer timer;
     timer.start();
-    auto& addrMap = it.value();
-    // determin max running process count for memory reason
-    auto systemMemory = static_cast<unsigned int>(getTotalSystemMemory() / 1024 / 1024); // MiB
-    auto symbolFileSize = static_cast<unsigned int>(info.size() / 1024 / 1024); // MiB
-    auto maxProcessCount =  std::min(4, static_cast<int>(std::ceil((systemMemory * 1.0f) / (symbolFileSize * 4))));
-    qDebug() << "SystemMemory: " << systemMemory << " SymbolSize: " << symbolFileSize << " ProcessCount: " << maxProcessCount;
-    // setup progress dialog
-    const int splitThreshold = 5000;
-    int requiredRunCount = static_cast<int>(std::ceil(static_cast<float>(addrMap.size()) / splitThreshold));
+
     progressDialog_->setWindowTitle("Symbol Load Progress");
-    progressDialog_->setLabelText(QString("Loading symbols for %1 addrs by %2 jobs").arg(addrMap.size()).arg(requiredRunCount));
+    progressDialog_->setLabelText("Dumping symbol map from so library.");
     progressDialog_->setMinimum(0);
-    progressDialog_->setMaximum(requiredRunCount);
+    progressDialog_->setMaximum(3);
     progressDialog_->setValue(0);
     progressDialog_->show();
-    QCoreApplication::instance()->sendPostedEvents();
-    // setup process pool
-    QVector<AddressProcess*> processPool;
-    QVector<AddressProcess*> runningProcess;
-    for (int i = 0; i < maxProcessCount; i++) {
-        auto process = new AddressProcess(this);
-        process->SetExecutablePath(addr2linePath);
-        connect(process, &AddressProcess::ProcessFinished, [&, this, process](AdbProcess*) {
-            AddressProcessFinished(process);
-            processPool.push_back(process);
-            runningProcess.removeOne(process);
-        });
-        connect(process, &AddressProcess::ProcessErrorOccurred, [&, this, process]() {
-            AddressProcessErrorOccurred();
-            processPool.push_back(process);
-            runningProcess.removeOne(process);
-        });
-        processPool.push_back(process);
-    }
-    // schedule jobs
+
+    QString symbolMapFilePath = symbloPath + ".txt";
     {
-        int count = 0;
-        auto scheduleJob = [&](QStringList& addrs) {
-            while (runningProcess.size() >= maxProcessCount) {
-                runningProcess.last()->WaitForFinished(10000);
-                QCoreApplication::instance()->sendPostedEvents();
-            }
-            progressDialog_->repaint();
-            auto process = processPool.back();
-            processPool.pop_back();
-            runningProcess.push_back(process);
-            process->DumpAsync(symbloPath, addrs, &addrMap);
-            addrs.clear();
-            count = 0;
-        };
+        TimerProfiler profile("NM");
+        QProcess nmProcess;
+        // -n, --numeric-sort     Sort symbols numerically by address
+        // -C, --demangle
+        // -S, --print-size       Print size of defined symbols
+        AdbProcess::SetArguments(&nmProcess, QStringList() << "-nCS" << symbloPath);
+        nmProcess.setStandardOutputFile(symbolMapFilePath);
+        nmProcess.setProgram(nmPath);
+        nmProcess.start();
+        if (!nmProcess.waitForStarted()) {
+            progressDialog_->hide();
+            QMessageBox::warning(this, "Warning", "ERROR starting nm process!");
+            return;
+        }
+        while (!nmProcess.waitForFinished(3000)) {
+            QCoreApplication::instance()->sendPostedEvents();
+        }
+    }
+
+    progressDialog_->setValue(1);
+    progressDialog_->setLabelText("Reading & Parsing symbol map.");
+    QCoreApplication::instance()->sendPostedEvents();
+
+    struct SymbolRecord {
+        QString name;
+        quint64 addr;
+        quint32 size;
+    };
+    QVector<SymbolRecord> sortedRecords;
+
+    {
+        TimerProfiler profile("Load Symbol");
+        QFile symbolMapFile(symbolMapFilePath);
+        if (!symbolMapFile.open(QFile::OpenModeFlag::ReadOnly)) {
+            progressDialog_->hide();
+            QMessageBox::warning(this, "Warning", QString("ERROR reading file: %1").arg(symbolMapFilePath));
+            return;
+        }
+        QRegExp recordRx("([0-9a-z]+)\\s([0-9a-z]+)\\s(\\w)\\s(.+)");
+        QTextStream in(&symbolMapFile);
+        while (!in.atEnd()) {
+           QString line = in.readLine();
+           if (recordRx.indexIn(line) < 0)
+               continue;
+           SymbolRecord record;
+           record.name = recordRx.cap(4);
+           record.size = recordRx.cap(2).toUInt(nullptr, 16);
+           record.addr = recordRx.cap(1).toULong(nullptr, 16);
+           sortedRecords.push_back(record);
+        }
+        symbolMapFile.close();
+    }
+
+    progressDialog_->setValue(2);
+    progressDialog_->setLabelText(QString("Loaded %1 symbols, translating ....").arg(sortedRecords.size()));
+    QCoreApplication::instance()->sendPostedEvents();
+
+    {
+        TimerProfiler profile("Translate Symbol");
+        auto& addrMap = it.value();
         auto addrMapIt = addrMap.begin();
-        QStringList addrs;
         for (; addrMapIt != addrMap.end(); ++addrMapIt) {
-            if (addrMapIt.value().size() == 0) {
-                addrs.push_back(addrMapIt.key());
-                count++;
-            }
-            if (count >= splitThreshold) {
-                scheduleJob(addrs);
+            if (addrMapIt.value().size() != 0)
+                continue;
+            auto addr = addrMapIt.key().toULong(nullptr, 16);
+            int left = 0;
+            int right = sortedRecords.size() - 1;
+            while (left != right) {
+                auto mid = static_cast<int>(std::ceil(static_cast<float>(left + right) / 2));
+                auto midRecord = sortedRecords[mid];
+                if (addr >= midRecord.addr && addr <= midRecord.addr + midRecord.size) {
+                    addrMap[addrMapIt.key()] = midRecord.name;
+                    break;
+                } else if (midRecord.addr + midRecord.size > addr) {
+                    right = mid - 1;
+                } else {
+                    left = mid;
+                }
             }
         }
-        if (addrs.size() > 0) {
-            scheduleJob(addrs);
-        }
+        auto selectedIndexes = ui->stackTableView->selectionModel()->selection().indexes();
+        if (selectedIndexes.size() > 0)
+            ShowCallStack(selectedIndexes.front());
     }
-    // wait and recycle memory
-    while (runningProcess.size() > 0) {
-        runningProcess.last()->WaitForFinished(10000);
-        QCoreApplication::instance()->sendPostedEvents();
-    }
-    for (auto& process : processPool) {
-        delete process;
-    }
+
+    progressDialog_->setValue(3);
     progressDialog_->hide();
-    auto elapsedSec = timer.elapsed() / 1000;
-    Print(QString("Symbols loaded in %1 seconds.").arg(elapsedSec));
+    Print(QString("Symbols loaded in %1 seconds.").arg(timer.elapsed() / 1000));
 }
 
 void MainWindow::on_configPushButton_clicked() {

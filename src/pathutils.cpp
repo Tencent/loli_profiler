@@ -32,31 +32,31 @@ QString PathUtils::GetPythonExecutablePath() {
     return QString();
 }
 
-QString PathUtils::GetAddr2lineExecutablePath(bool armv7) {
+QString PathUtils::GetNDKToolPath(const QString& name, bool armv7) {
     if (ndkPath_.isEmpty() || !QFile::exists(ndkPath_)) {
         return QString();
     }
-    QString addr2linePath;
+    QString toolPath;
     if (armv7) {
 #ifdef Q_OS_WIN
-        addr2linePath = ndkPath_ + "/toolchains/arm-linux-androideabi-4.9"
-                                   "/prebuilt/windows-x86_64/bin/arm-linux-androideabi-addr2line.exe";
+        toolPath = ndkPath_ + "/toolchains/arm-linux-androideabi-4.9" +
+                                   QString("/prebuilt/windows-x86_64/bin/arm-linux-androideabi-%1.exe").arg(name);
 #else
-        addr2linePath = ndkPath_ + "/toolchains/arm-linux-androideabi-4.9"
-                                   "/prebuilt/darwin-x86_64/bin/arm-linux-androideabi-addr2line";
+        toolPath = ndkPath_ + "/toolchains/arm-linux-androideabi-4.9" +
+                                   QString("/prebuilt/darwin-x86_64/bin/arm-linux-androideabi-%1").arg(name);
 #endif
-        if (QFile::exists(addr2linePath))
-            return addr2linePath;
+        if (QFile::exists(toolPath))
+            return toolPath;
     } else {
 #ifdef Q_OS_WIN
-        addr2linePath = ndkPath_ + "/toolchains/aarch64-linux-android-4.9"
-                                   "/prebuilt/windows-x86_64/bin/aarch64-linux-android-addr2line.exe";
+        toolPath = ndkPath_ + "/toolchains/aarch64-linux-android-4.9" +
+                                   QString("/prebuilt/windows-x86_64/bin/aarch64-linux-android-%1.exe").arg(name);
 #else
-        addr2linePath = ndkPath_ + "/toolchains/aarch64-linux-android-4.9"
-                                   "/prebuilt/darwin-x86_64/bin/aarch64-linux-android-addr2line";
+        toolPath = ndkPath_ + "/toolchains/aarch64-linux-android-4.9"
+                                   QString("/prebuilt/darwin-x86_64/bin/aarch64-linux-android-%1").arg(name);
 #endif
-        if (QFile::exists(addr2linePath))
-            return addr2linePath;
+        if (QFile::exists(toolPath))
+            return toolPath;
     }
     return QString();
 }

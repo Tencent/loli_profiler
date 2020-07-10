@@ -4,7 +4,8 @@ echo dir %cd%
 
 set AndroidPluginPath="./plugins/Android"
 set RelasePath=".\build\cmake\bin\release"
-set WindeployqtPath="%QT5Path%/bin/windeployqt.exe"
+set WindeployqtPath="%QT5Path:"=%\bin\windeployqt.exe"
+set DeployPath=".\dist"
 
 rem delete dir
 rmdir /s/q .\build
@@ -14,7 +15,7 @@ call ./scripts/BuildAndroidLibs.bat
 call ./scripts/CopyConfig.bat
 call ./scripts/Deployqt.bat
 
-echo finsih scripts %RelasePath%\LoliProfiler.exe
+echo finish scripts %RelasePath:"=%\LoliProfiler.exe
 
 :Exit
 exit /b %errorlevel%

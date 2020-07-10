@@ -33,6 +33,8 @@
 #include <QStandardPaths>
 #include <QtConcurrent>
 #include <QMutexLocker>
+#include <QElapsedTimer>
+#include <QRegExp>
 
 #include <algorithm>
 #include <cmath>
@@ -1456,8 +1458,8 @@ void MainWindow::on_symbloPushButton_clicked() {
     if (!QFile::exists(symbloPath))
         return;
     lastSymbolDir_ = QFileInfo(symbloPath).dir().absolutePath();
-    auto addr2linePath = PathUtils::GetAddr2lineExecutablePath(targetArch_ != "arm64-v8a");
-    if (addr2linePath.isEmpty() || !QFile::exists(addr2linePath)) {
+    auto nmPath = PathUtils::GetNDKToolPath("nm", targetArch_ != "arm64-v8a");
+    if (nmPath.isEmpty() || !QFile::exists(nmPath)) {
         QMessageBox::warning(this, "Warning", ANDROID_NDK_NOTFOUND_MSG);
         return;
     }
@@ -1466,60 +1468,106 @@ void MainWindow::on_symbloPushButton_clicked() {
     auto it = symbloMap_.find(soName);
     if (it == symbloMap_.end())
         return;
-    auto& addrMap = it.value();
-    int requiredProcessCount = static_cast<int>(std::ceil(static_cast<float>(addrMap.size()) / 2000));
-    QVector<AddressProcess*> avaliableProcesses;
-    for (auto& process : addrProcesses_) {
-        if (requiredProcessCount <= 0)
-            break;
-        if (!process->IsRunning()) {
-            requiredProcessCount--;
-            avaliableProcesses.push_back(process);
-        }
-    }
-    for (int i = 0; i < requiredProcessCount; i++) {
-        auto process = new AddressProcess(this);
-        connect(process, &AddressProcess::ProcessFinished, this, &MainWindow::AddressProcessFinished);
-        connect(process, &AddressProcess::ProcessErrorOccurred, this, &MainWindow::AddressProcessErrorOccurred);
-        addrProcesses_.push_back(process);
-        avaliableProcesses.push_back(process);
-    }
+    QElapsedTimer timer;
+    timer.start();
+
     progressDialog_->setWindowTitle("Symbol Load Progress");
-    progressDialog_->setLabelText(QString("Loading symbols for %1 addresses by %2 process").arg(addrMap.size()).arg(avaliableProcesses.size()));
+    progressDialog_->setLabelText("Dumping symbol map from so library.");
     progressDialog_->setMinimum(0);
-    progressDialog_->setMaximum(avaliableProcesses.size());
+    progressDialog_->setMaximum(3);
     progressDialog_->setValue(0);
     progressDialog_->show();
-    auto addrMapIt = addrMap.begin();
-    int processCount = 0;
-    int maxProcessCount = 4;
-    auto symbolFileSize = info.size() / 1024 / 1024; // MiB
-    if (symbolFileSize <= 512) {
-        maxProcessCount = 4;
-    } else if (symbolFileSize <= 1024) {
-        maxProcessCount = 2;
-    } else {
-        maxProcessCount = 1;
+
+    QString symbolMapFilePath = symbloPath + ".txt";
+    {
+        TimerProfiler profile("NM");
+        QProcess nmProcess;
+        // -n, --numeric-sort     Sort symbols numerically by address
+        // -C, --demangle
+        // -S, --print-size       Print size of defined symbols
+        AdbProcess::SetArguments(&nmProcess, QStringList() << "-nCS" << symbloPath);
+        nmProcess.setStandardOutputFile(symbolMapFilePath);
+        nmProcess.setProgram(nmPath);
+        nmProcess.start();
+        if (!nmProcess.waitForStarted()) {
+            progressDialog_->hide();
+            QMessageBox::warning(this, "Warning", "ERROR starting nm process!");
+            return;
+        }
+        while (!nmProcess.waitForFinished(3000)) {
+            QCoreApplication::instance()->sendPostedEvents();
+        }
     }
-    for (auto& process : avaliableProcesses) {
-        QStringList addrs;
-        int count = 0;
+
+    progressDialog_->setValue(1);
+    progressDialog_->setLabelText("Reading & Parsing symbol map.");
+    QCoreApplication::instance()->sendPostedEvents();
+
+    struct SymbolRecord {
+        QString name;
+        quint64 addr;
+        quint32 size;
+    };
+    QVector<SymbolRecord> sortedRecords;
+
+    {
+        TimerProfiler profile("Load Symbol");
+        QFile symbolMapFile(symbolMapFilePath);
+        if (!symbolMapFile.open(QFile::OpenModeFlag::ReadOnly)) {
+            progressDialog_->hide();
+            QMessageBox::warning(this, "Warning", QString("ERROR reading file: %1").arg(symbolMapFilePath));
+            return;
+        }
+        QRegExp recordRx("([0-9a-z]+)\\s([0-9a-z]+)\\s(\\w)\\s(.+)");
+        QTextStream in(&symbolMapFile);
+        while (!in.atEnd()) {
+           QString line = in.readLine();
+           if (recordRx.indexIn(line) < 0)
+               continue;
+           SymbolRecord record;
+           record.name = recordRx.cap(4);
+           record.size = recordRx.cap(2).toUInt(nullptr, 16);
+           record.addr = recordRx.cap(1).toULong(nullptr, 16);
+           sortedRecords.push_back(record);
+        }
+        symbolMapFile.close();
+    }
+
+    progressDialog_->setValue(2);
+    progressDialog_->setLabelText(QString("Loaded %1 symbols, translating ....").arg(sortedRecords.size()));
+    QCoreApplication::instance()->sendPostedEvents();
+
+    {
+        TimerProfiler profile("Translate Symbol");
+        auto& addrMap = it.value();
+        auto addrMapIt = addrMap.begin();
         for (; addrMapIt != addrMap.end(); ++addrMapIt) {
-            if (addrMapIt.value().size() == 0) {
-                addrs.push_back(addrMapIt.key());
-                count++;
+            if (addrMapIt.value().size() != 0)
+                continue;
+            auto addr = addrMapIt.key().toULong(nullptr, 16);
+            int left = 0;
+            int right = sortedRecords.size() - 1;
+            while (left != right) {
+                auto mid = static_cast<int>(std::ceil(static_cast<float>(left + right) / 2));
+                auto midRecord = sortedRecords[mid];
+                if (addr >= midRecord.addr && addr <= midRecord.addr + midRecord.size) {
+                    addrMap[addrMapIt.key()] = midRecord.name;
+                    break;
+                } else if (midRecord.addr + midRecord.size > addr) {
+                    right = mid - 1;
+                } else {
+                    left = mid;
+                }
             }
-            if (count >= 2000)
-                break;
         }
-        process->SetExecutablePath(addr2linePath);
-        process->DumpAsync(symbloPath, addrs, &addrMap);
-        processCount++;
-        if (processCount >= maxProcessCount) { // run max maxProcessCount processes at the sametime
-            processCount = 0;
-            process->WaitForFinished();
-        }
+        auto selectedIndexes = ui->stackTableView->selectionModel()->selection().indexes();
+        if (selectedIndexes.size() > 0)
+            ShowCallStack(selectedIndexes.front());
     }
+
+    progressDialog_->setValue(3);
+    progressDialog_->hide();
+    Print(QString("Symbols loaded in %1 seconds.").arg(timer.elapsed() / 1000));
 }
 
 void MainWindow::on_configPushButton_clicked() {

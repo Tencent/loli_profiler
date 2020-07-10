@@ -882,10 +882,9 @@ void MainWindow::StopCaptureProcess() {
     progressDialog_->setValue(2);
 }
 
-static QMutex addrMutex_, libMutex_;
 static QVector<QPair<QString, SMapsSection*>> sMapsCache_;
 
-void MainWindow::InterpretRecordLibrary(StackRecord& record) {
+void MainWindow::InterpretRecordLibrary(StackRecord& record, StacktraceData& data) {
     auto it = callStackMap_.find(record.uuid_);
     if (it == callStackMap_.end())
         return;
@@ -901,8 +900,7 @@ void MainWindow::InterpretRecordLibrary(StackRecord& record) {
             if (cache.second->Contains(addr, record.size_, baseAddr)) {
                 funcAddr = "0x" + QString().setNum(addr - baseAddr, 16);
                 libName = cache.first;
-                QMutexLocker locker(&addrMutex_);
-                TryAddNewAddress(libName, funcAddr);
+                data.records_.push_back(qMakePair(libName, funcAddr));
                 found = true;
                 break;
             }
@@ -916,14 +914,15 @@ void MainWindow::InterpretRecordLibrary(StackRecord& record) {
     record.funcAddr_ = callStack[1];
     if (record.library_.isEmpty())
         record.library_ = callStack[0] = "unknown";
-    QMutexLocker locker(&libMutex_);
-    if (!libraries_.contains(record.library_))
-        libraries_.insert(record.library_);
+    if (!data.libraries_.contains(record.library_))
+        data.libraries_.push_back(record.library_);
 }
 
-void MainWindow::InterpretRecordsLibrary(int start, int count) {
+MainWindow::StacktraceData MainWindow::InterpretRecordsLibrary(int start, int count) {
+    StacktraceData data;
     for (int i = 0; i < count; i++)
-        InterpretRecordLibrary(recordsCache_[start + i]);
+        InterpretRecordLibrary(recordsCache_[start + i], data);
+    return data;
 }
 
 void MainWindow::InterpretStacktraceData() {
@@ -935,6 +934,7 @@ void MainWindow::InterpretStacktraceData() {
             }
         }
     } else {
+//        TimerProfiler profiler("Interpret Recs");
         for (auto it = sMapsSections_.begin(); it != sMapsSections_.end(); ++it) {
             auto& library = it.key();
             auto& sections = it.value();
@@ -943,7 +943,7 @@ void MainWindow::InterpretStacktraceData() {
         }
         auto threadCount = QThread::idealThreadCount();
         auto payload = recordsCache_.size() / threadCount;
-        QVector<QFuture<void>> futures;
+        QVector<QFuture<StacktraceData>> futures;
         int currentIndex = 0;
         for (int i = 0; i < threadCount - 1; i++) {
             futures.push_back(QtConcurrent::run(this, &MainWindow::InterpretRecordsLibrary, currentIndex, payload));
@@ -956,10 +956,19 @@ void MainWindow::InterpretStacktraceData() {
         progressDialog_->setMaximum(threadCount);
         progressDialog_->setValue(0);
         progressDialog_->show();
-        qApp->processEvents();
+        QCoreApplication::instance()->sendPostedEvents();
         for (int i = 0; i < futures.size(); i++) {
             progressDialog_->setValue(i);
             futures[i].waitForFinished();
+            const auto& trace = futures[i].result();
+            for (const auto& record : trace.records_) {
+                TryAddNewAddress(record.first, record.second);
+            }
+            for (const auto& library : trace.libraries_) {
+                if (!libraries_.contains(library)) {
+                    libraries_.insert(library);
+                }
+            }
         }
         progressDialog_->hide();
     }
@@ -1480,7 +1489,7 @@ void MainWindow::on_symbloPushButton_clicked() {
 
     QString symbolMapFilePath = symbloPath + ".txt";
     {
-        TimerProfiler profile("NM");
+//        TimerProfiler profile("NM");
         QProcess nmProcess;
         // -n, --numeric-sort     Sort symbols numerically by address
         // -C, --demangle
@@ -1511,7 +1520,7 @@ void MainWindow::on_symbloPushButton_clicked() {
     QVector<SymbolRecord> sortedRecords;
 
     {
-        TimerProfiler profile("Load Symbol");
+//        TimerProfiler profile("Load Symbol");
         QFile symbolMapFile(symbolMapFilePath);
         if (!symbolMapFile.open(QFile::OpenModeFlag::ReadOnly)) {
             progressDialog_->hide();
@@ -1538,7 +1547,7 @@ void MainWindow::on_symbloPushButton_clicked() {
     QCoreApplication::instance()->sendPostedEvents();
 
     {
-        TimerProfiler profile("Translate Symbol");
+//        TimerProfiler profile("Translate Symbol");
         auto& addrMap = it.value();
         auto addrMapIt = addrMap.begin();
         for (; addrMapIt != addrMap.end(); ++addrMapIt) {

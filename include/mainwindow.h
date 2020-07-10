@@ -65,8 +65,14 @@ private:
     void PushEmptySMapsFile();
 
     void StopCaptureProcess();
-    void InterpretRecordsLibrary(int start, int count);
-    void InterpretRecordLibrary(StackRecord& record);
+
+    struct StacktraceData {
+        QVector<QPair<QString, QString>> records_;
+        QVector<QString> libraries_;
+    };
+
+    StacktraceData InterpretRecordsLibrary(int start, int count);
+    void InterpretRecordLibrary(StackRecord& record, StacktraceData& data);
     void InterpretStacktraceData();
 
 private slots:

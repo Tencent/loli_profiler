@@ -52,6 +52,7 @@ std::atomic<std::uint32_t> callSeq_;
 loliDataMode mode_ = loliDataMode::STRICT;
 bool isBlacklist_ = false;
 bool isFramePointer_ = false;
+bool isInstrumented_ = false;
 loli::Sampler* sampler_ = nullptr;
 loli::spinlock samplerLock_;
 
@@ -65,6 +66,11 @@ enum loliFlags {
     REALLOC_ = 4, 
     COMMAND_ = 255,
 };
+
+static thread_local bool ignore_current_ = false;
+void toggle_ignore_current(bool value) {
+    ignore_current_ = value;
+}
 
 inline void loli_maybe_record_alloc(size_t size, void* addr, loliFlags flag, int index) {
     bool bRecordAllocation = false;
@@ -98,7 +104,9 @@ inline void loli_maybe_record_alloc(size_t size, void* addr, loliFlags flag, int
     } else {
         static thread_local void* buffer[STACKBUFFERSIZE];
         oss << flag << '\\' << ++callSeq_ << ',' << time << ',' << recordSize << ',' << addr << '\\';
-        if (isFramePointer_) {
+        if (isInstrumented_ && hookInfo->backtrace != nullptr) {
+            loli_dump(oss, buffer, hookInfo->backtrace(buffer, STACKBUFFERSIZE));
+        } else if (isFramePointer_) {
             loli_dump(oss, buffer, loli_fastcapture(buffer, STACKBUFFERSIZE));
         } else {
             loli_dump(oss, buffer, loli_capture(buffer, STACKBUFFERSIZE));
@@ -154,6 +162,27 @@ void loli_free(void* ptr) {
     free(ptr);
 }
 
+BACKTRACE_FPTR loli_get_backtrace(const char* path) {
+    BACKTRACE_FPTR backtrace = nullptr;
+    void *handle = fake_dlopen(path, RTLD_LAZY);
+    if (handle) {
+        void (*set_loli_ignore_func)(void (*funcPtr)(bool)) = nullptr;
+        *(void **) (&set_loli_ignore_func) = fake_dlsym(handle, "set_loli_ignore_func");
+         if (set_loli_ignore_func == nullptr) {
+            LOLILOGI("Error dlsym set_loli_ignore_func: %s", path);
+            return backtrace;
+        }
+        (*set_loli_ignore_func)(toggle_ignore_current);
+        *(void **) (&backtrace) = fake_dlsym(handle, "get_stack_backtrace");
+        if (backtrace == nullptr) {
+            LOLILOGI("Error dlsym get_stack_backtrace: %s", path);
+        }
+    } else {
+        LOLILOGI("Error dlopen: %s", path);
+    }
+    return backtrace;
+}
+
 // demangled name, <full name, base address>
 using so_info_map = std::unordered_map<std::string, std::pair<std::string, uintptr_t>>;
 
@@ -161,6 +190,9 @@ bool loli_hook_library(const char* library, so_info_map& infoMap) {
     if (auto info = wrapper_by_name(library)) {
         auto brief = infoMap[std::string(info->so_name)];
         info->so_baseaddr = brief.second;
+        if (mode_ != loliDataMode::NOSTACK && isInstrumented_) {
+            info->backtrace = loli_get_backtrace(brief.first.c_str());
+        }
         auto regex = std::string(".*/") + library + "\\.so$";
         xhook_register(regex.c_str(), "malloc", (void*)info->malloc, nullptr);
         xhook_register(regex.c_str(), "free", (void*)loli_free, nullptr);
@@ -299,7 +331,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
 
     int minRecSize = 512;
     std::string hookLibraries = "libil2cpp,libunity";
-    std::string whitelist, blacklist;
+    std::string whitelist, blacklist, buildtype;
     mode_ = loliDataMode::STRICT;
 
     std::ifstream infile("/data/local/tmp/loli2.conf");
@@ -330,12 +362,14 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
         } else if (words[0] == "type") {
             isBlacklist_ = words[1] == "blacklist";
         } else if (words[0] == "build") {
-            isFramePointer_ = words[1] != "default";
+            buildtype = words[1];
+            isFramePointer_ = words[1] == "framepointer";
+            isInstrumented_ = words[1] == "instrumented";
         }
     }
     hookLibraries = isBlacklist_ ? blacklist : whitelist;
-    LOLILOGI("mode: %i, minRecSize: %i, blacklist: %i, hookLibs: %s",
-        static_cast<int>(mode_), minRecSize, isBlacklist_ ? 1 : 0, hookLibraries.c_str());
+    LOLILOGI("mode: %i, build: %s, minRecSize: %i, blacklist: %i, hookLibs: %s",
+        static_cast<int>(mode_), buildtype.c_str(), minRecSize, isBlacklist_ ? 1 : 0, hookLibraries.c_str());
     // parse library tokens
     std::unordered_set<std::string> tokens;
     std::istringstream namess(hookLibraries);

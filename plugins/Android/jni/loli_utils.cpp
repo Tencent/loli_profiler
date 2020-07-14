@@ -19,42 +19,7 @@ extern "C" {
 
 static void *return_address(int _frame) {
    switch(_frame) {
-         _RET_ADDR(0);
-         _RET_ADDR(1);
-         _RET_ADDR(2);
-         _RET_ADDR(3);
-         _RET_ADDR(4);
-         _RET_ADDR(5);
-         _RET_ADDR(6);
-         _RET_ADDR(7);
-         _RET_ADDR(8);
-         _RET_ADDR(9);
-         _RET_ADDR(10);
-         _RET_ADDR(11);
-         _RET_ADDR(12);
-         _RET_ADDR(13);
-         _RET_ADDR(14);
-         _RET_ADDR(15);
-         _RET_ADDR(16);
-         _RET_ADDR(17);
-         _RET_ADDR(18);
-         _RET_ADDR(19);
-         _RET_ADDR(20);
-         _RET_ADDR(21);
-         _RET_ADDR(22);
-         _RET_ADDR(23);
-         _RET_ADDR(24);
-         _RET_ADDR(25);
-         _RET_ADDR(26);
-         _RET_ADDR(27);
-         _RET_ADDR(28);
-         _RET_ADDR(29);
-         _RET_ADDR(30);
-         _RET_ADDR(31);
-         _RET_ADDR(32);
-         _RET_ADDR(33);
-         _RET_ADDR(34);
-         _RET_ADDR(35);
+      _128_MACRO(_RET_ADDR, 0)
       default:
          return 0;
    }

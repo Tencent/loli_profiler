@@ -4,11 +4,19 @@ echo dir %cd%
 
 call %WindeployqtPath% %RelasePath%\LoliProfiler.exe
 
-if not exist %DeployPath% (
-    mkdir %DeployPath%
+if exist %DeployPath% (
+    rmdir /s/q %DeployPath%
 )
 
-powershell Compress-Archive -Path %RelasePath% -DestinationPath %DeployPath%\LoliProfiler.zip -Update
+mkdir %DeployPath%
+
+mkdir %DeployPath%\LoliProfiler\
+
+echo %DeployPath%
+
+xcopy /S /Q %RelasePath%\* %DeployPath%\LoliProfiler\*
+
+powershell Compress-Archive -Path %DeployPath%\LoliProfiler -DestinationPath %DeployPath%\LoliProfiler.zip -Update
 
 echo finish Deployqt.....
 

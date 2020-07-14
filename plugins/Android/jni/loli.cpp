@@ -56,7 +56,7 @@ bool isInstrumented_ = false;
 loli::Sampler* sampler_ = nullptr;
 loli::spinlock samplerLock_;
 
-#define STACKBUFFERSIZE 32
+#define STACKBUFFERSIZE 128
 
 enum loliFlags {
     FREE_ = 0, 

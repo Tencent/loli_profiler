@@ -8,7 +8,7 @@ XCOPY /s/y %PythonPath% %RelasePath%\
 
 rem 2. copy loli_profiler\plugins\Android  to build/cmake/bin/release/remote
 set AndroidLibsPath=%AndroidPluginPath%
-set RelaseRemotePath="%RelasePath%\remote"
+set RelaseRemotePath="%RelasePath:"=%\remote"
 
 echo %RelaseRemotePath%
 rmdir /s/q %RelaseRemotePath%

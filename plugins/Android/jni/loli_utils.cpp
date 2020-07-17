@@ -9,6 +9,22 @@ extern "C" {
 #include <string.h>
 #include <unwind.h>
 
+// https://github.com/root-project/root/blob/master/LICENSE
+// https://github.com/root-project/root/blob/master/misc/memstat/src/TMemStatBacktrace.cxx#L52
+#define G__builtin_return_address(N) \
+    ((__builtin_frame_address(N) == NULL)  || \
+     (__builtin_frame_address(N) < __builtin_frame_address(0))) ? \
+    NULL : __builtin_return_address(N)
+#define _RET_ADDR(x)   case x: return G__builtin_return_address(x);
+
+static void *return_address(int _frame) {
+   switch(_frame) {
+      _128_MACRO(_RET_ADDR, 0)
+      default:
+         return 0;
+   }
+}
+
 void loli_trim(std::string &str) {
     str.erase(std::remove_if(str.begin(), str.end(), [](int ch) {
         return std::isspace(ch);
@@ -63,6 +79,14 @@ static _Unwind_Reason_Code loli_unwind(struct _Unwind_Context* context, void* ar
         }
     }
     return _URC_NO_REASON;
+}
+
+size_t loli_fastcapture(void **buffer, size_t max) {
+   size_t i(0);
+   void *addr;
+   for(i = 0; (i < max) && (addr = return_address(i)); ++i)
+      buffer[i] = addr;
+   return i;
 }
 
 size_t loli_capture(void** buffer, size_t max) {

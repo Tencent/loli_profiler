@@ -51,6 +51,7 @@ std::atomic<std::uint32_t> callSeq_;
 
 loliDataMode mode_ = loliDataMode::STRICT;
 bool isBlacklist_ = false;
+bool isFramePointer_ = false;
 bool isInstrumented_ = false;
 loli::Sampler* sampler_ = nullptr;
 loli::spinlock samplerLock_;
@@ -72,10 +73,6 @@ void toggle_ignore_current(bool value) {
 }
 
 inline void loli_maybe_record_alloc(size_t size, void* addr, loliFlags flag, int index) {
-    if (ignore_current_) {
-        return;
-    }
-
     bool bRecordAllocation = false;
     size_t recordSize = size;
     if (mode_ == loliDataMode::STRICT) {
@@ -107,8 +104,10 @@ inline void loli_maybe_record_alloc(size_t size, void* addr, loliFlags flag, int
     } else {
         static thread_local void* buffer[STACKBUFFERSIZE];
         oss << flag << '\\' << ++callSeq_ << ',' << time << ',' << recordSize << ',' << addr << '\\';
-        if (hookInfo->backtrace != nullptr) {
+        if (isInstrumented_ && hookInfo->backtrace != nullptr) {
             loli_dump(oss, buffer, hookInfo->backtrace(buffer, STACKBUFFERSIZE));
+        } else if (isFramePointer_) {
+            loli_dump(oss, buffer, loli_fastcapture(buffer, STACKBUFFERSIZE));
         } else {
             loli_dump(oss, buffer, loli_capture(buffer, STACKBUFFERSIZE));
         }
@@ -332,7 +331,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
 
     int minRecSize = 512;
     std::string hookLibraries = "libil2cpp,libunity";
-    std::string whitelist, blacklist;
+    std::string whitelist, blacklist, buildtype;
     mode_ = loliDataMode::STRICT;
 
     std::ifstream infile("/data/local/tmp/loli2.conf");
@@ -363,12 +362,14 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
         } else if (words[0] == "type") {
             isBlacklist_ = words[1] == "blacklist";
         } else if (words[0] == "build") {
-            isInstrumented_ = words[1] != "default";
+            buildtype = words[1];
+            isFramePointer_ = words[1] == "framepointer";
+            isInstrumented_ = words[1] == "instrumented";
         }
     }
     hookLibraries = isBlacklist_ ? blacklist : whitelist;
-    LOLILOGI("mode: %i, minRecSize: %i, blacklist: %i, hookLibs: %s",
-        static_cast<int>(mode_), minRecSize, isBlacklist_ ? 1 : 0, hookLibraries.c_str());
+    LOLILOGI("mode: %i, build: %s, minRecSize: %i, blacklist: %i, hookLibs: %s",
+        static_cast<int>(mode_), buildtype.c_str(), minRecSize, isBlacklist_ ? 1 : 0, hookLibraries.c_str());
     // parse library tokens
     std::unordered_set<std::string> tokens;
     std::istringstream namess(hookLibraries);

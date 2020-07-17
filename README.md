@@ -4,15 +4,25 @@
 
 **当然如果仅仅是使用了LoliProfiler并觉得希望继续使用，并支持我们的开发，也可以很简单的以点Star+Watch来表示你的支持（我们也非常需要Star与Watch的支持）** :smile: 
 
-第一个[milestone](https://git.code.oa.com/xinhou/loli_profiler/-/milestones/1)已完成开发，Preview版本可在[WeTest商店](https://wetest.oa.com/store/loli-profiler)下载体验
+已完成3个Milestone的开发，Preview版本可在[WeTest商店](https://wetest.oa.com/store/loli-profiler)下载体验
 
 OTeam地址：https://techmap.oa.com/oteam/8618
 
-### New Feature
+### ChangeList
 
-2020/06/08
+#### v0.9.9
 
-最新的体验版本支持调试经过编译器插桩优化的UE4的APK，可将多线程情况下的堆栈获取速度提升10倍
+支持基于Framepointer的堆栈回溯优化，已在UE4.24、4.25上测试有效
+
+性能优于插桩优化，可参考[此教程](https://git.code.oa.com/xinhou/loli_profiler/wikis/tutorial/ue4-integration#%E5%BC%95%E6%93%8E%E4%BF%AE%E6%94%B9%E6%96%B9%E6%A1%88%E4%B8%80)对您的UE4项目进行打包
+
+优化了结束采集后的内存地址分类步骤，速度提升10x
+
+优化了离线函数地址翻译步骤（感谢lusliu提供的思路），速度提升20x
+
+#### v0.9.8
+
+支持调试经过编译器插桩优化的UE4的APK，可将多线程情况下的堆栈获取速度提升10倍
 
 可参考[此教程](https://git.code.oa.com/xinhou/loli_profiler/wikis/tutorial/ue4-integration)对您的UE4项目进行打包，即可对APK进行更高效的调试
 

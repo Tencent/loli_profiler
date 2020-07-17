@@ -52,7 +52,7 @@ QString PathUtils::GetNDKToolPath(const QString& name, bool armv7) {
         toolPath = ndkPath_ + "/toolchains/aarch64-linux-android-4.9" +
                                    QString("/prebuilt/windows-x86_64/bin/aarch64-linux-android-%1.exe").arg(name);
 #else
-        toolPath = ndkPath_ + "/toolchains/aarch64-linux-android-4.9"
+        toolPath = ndkPath_ + "/toolchains/aarch64-linux-android-4.9" +
                                    QString("/prebuilt/darwin-x86_64/bin/aarch64-linux-android-%1").arg(name);
 #endif
         if (QFile::exists(toolPath))

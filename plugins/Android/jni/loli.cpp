@@ -9,7 +9,7 @@
 #include <iostream>
 #include <iterator>
 #include <mutex>
-#include <sstream>
+// #include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
@@ -32,6 +32,7 @@
 
 #include "lz4/lz4.h"
 #include "wrapper/wrapper.h"
+#include "buffer.h"
 #include "loli_server.h"
 #include "loli_utils.h"
 #include "loli_dlfcn.h"
@@ -73,6 +74,10 @@ void toggle_ignore_current(bool value) {
 }
 
 inline void loli_maybe_record_alloc(size_t size, void* addr, loliFlags flag, int index) {
+    if (ignore_current_) {
+        return;
+    }
+
     bool bRecordAllocation = false;
     size_t recordSize = size;
     if (mode_ == loliDataMode::STRICT) {
@@ -96,23 +101,30 @@ inline void loli_maybe_record_alloc(size_t size, void* addr, loliFlags flag, int
         return;
     }
 
-    std::ostringstream oss;
+    static thread_local io::buffer obuffer(2048);
+    obuffer.clear();
+    // std::ostringstream oss;
     auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime_).count();
     if (mode_ == loliDataMode::NOSTACK) {
-        oss << flag << '\\' << ++callSeq_ << ',' << time << ',' << size << ',' << addr << '\\' 
-            << hookInfo->so_name << ".so";
+        std::string soname = std::string(hookInfo->so_name) + ".so";
+        obuffer << static_cast<uint8_t>(flag) << static_cast<uint32_t>(++callSeq_) << static_cast<int64_t>(time) 
+                << static_cast<uint32_t>(size) << reinterpret_cast<uint64_t>(addr) << static_cast<uint8_t>(0) << soname.c_str();
+        // oss << flag << '\\' << ++callSeq_ << ',' << time << ',' << size << ',' << addr << '\\' 
+        //     << hookInfo->so_name << ".so";
     } else {
         static thread_local void* buffer[STACKBUFFERSIZE];
-        oss << flag << '\\' << ++callSeq_ << ',' << time << ',' << recordSize << ',' << addr << '\\';
+        obuffer << static_cast<uint8_t>(flag) << static_cast<uint32_t>(++callSeq_) << static_cast<int64_t>(time) 
+                << static_cast<uint32_t>(recordSize) << reinterpret_cast<uint64_t>(addr) << static_cast<uint8_t>(1);
+        // oss << flag << '\\' << ++callSeq_ << ',' << time << ',' << recordSize << ',' << addr << '\\';
         if (isInstrumented_ && hookInfo->backtrace != nullptr) {
-            loli_dump(oss, buffer, hookInfo->backtrace(buffer, STACKBUFFERSIZE));
+            loli_dump(obuffer, buffer, hookInfo->backtrace(buffer, STACKBUFFERSIZE));
         } else if (isFramePointer_) {
-            loli_dump(oss, buffer, loli_fastcapture(buffer, STACKBUFFERSIZE));
+            loli_dump(obuffer, buffer, loli_fastcapture(buffer, STACKBUFFERSIZE));
         } else {
-            loli_dump(oss, buffer, loli_capture(buffer, STACKBUFFERSIZE));
+            loli_dump(obuffer, buffer, loli_capture(buffer, STACKBUFFERSIZE));
         }
     }
-    loli_server_send(oss.str().c_str());
+    loli_server_send(obuffer.data(), obuffer.size());
 }
 
 #ifdef __cplusplus
@@ -139,11 +151,13 @@ void *loli_index_memalign(size_t alignment, size_t size, int index) {
 
 void *loli_index_realloc(void *ptr, size_t new_size, int index) {
     void* addr = realloc(ptr, new_size);
-    if (addr != 0)
-    {
-        std::ostringstream oss;
-        oss << FREE_ << '\\' << ++callSeq_ << '\\' << ptr;
-        loli_server_send(oss.str().c_str());
+    if (addr != 0) {
+        static thread_local io::buffer obuffer(128);
+        // std::ostringstream oss;
+        obuffer.clear();
+        obuffer << static_cast<uint8_t>(FREE_) << static_cast<uint32_t>(++callSeq_) << reinterpret_cast<uint64_t>(addr);
+        // oss << FREE_ << '\\' << ++callSeq_ << '\\' << ptr;
+        loli_server_send(obuffer.data(), obuffer.size());
         loli_maybe_record_alloc(new_size, addr, loliFlags::MALLOC_, index);
     }
     return addr;
@@ -156,9 +170,12 @@ void *loli_index_realloc(void *ptr, size_t new_size, int index) {
 void loli_free(void* ptr) {
     if (ptr == nullptr) 
         return;
-    std::ostringstream oss;
-    oss << FREE_ << '\\' << ++callSeq_ << '\\' << ptr;
-    loli_server_send(oss.str().c_str());
+    // std::ostringstream oss;
+    static thread_local io::buffer obuffer(128);
+    obuffer.clear();
+    obuffer << static_cast<uint8_t>(FREE_) << static_cast<uint32_t>(++callSeq_) << reinterpret_cast<uint64_t>(ptr);
+    // oss << FREE_ << '\\' << ++callSeq_ << '\\' << ptr;
+    loli_server_send(obuffer.data(), obuffer.size());
     free(ptr);
 }
 

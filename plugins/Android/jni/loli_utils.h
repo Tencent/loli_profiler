@@ -9,6 +9,7 @@ extern "C" {
 #endif // __cplusplus
 
 #include <android/log.h>
+#include <buffer.h>
 
 #define LOLILOGI(...) __android_log_print(ANDROID_LOG_INFO, "Loli", __VA_ARGS__)
 #define LOLILOGW(...) __android_log_print(ANDROID_LOG_WARN, "Loli", __VA_ARGS__)
@@ -65,7 +66,7 @@ void loli_demangle(const std::string& name, std::string& demangled);
 
 size_t loli_fastcapture(void** buffer, size_t max);
 size_t loli_capture(void** buffer, size_t max);
-void loli_dump(std::ostream& os, void** buffer, size_t count);
+void loli_dump(io::buffer& obuffer, void** buffer, size_t count);
 
 #ifdef __cplusplus
 }

@@ -50,11 +50,11 @@ QVariant StackTraceModel::data(const QModelIndex &index, int role) const {
                 case 1:
                     return sizeToString(static_cast<quint64>(record.size_));
                 case 2:
-                    return record.addr_;
+                    return QString("0x%1").arg(record.addr_, 0, 16);
                 case 3:
                     return record.library_;
                 case 4:
-                    return record.funcAddr_;
+                    return QString("0x%1").arg(record.funcAddr_, 0, 16);
             }
         } else if (role == Qt::UserRole) {
             auto record = records_[row];
@@ -96,15 +96,9 @@ QVariant StackTraceModel::headerData(int section, Qt::Orientation orientation, i
 }
 
 void StackTraceModel::clear() {
-//    auto size = records_.size();
-//    if (size == 0)
-//        return;
     beginResetModel();
     records_.clear();
     endResetModel();
-//    beginRemoveRows({}, 0, size);
-//    records_.clear();
-//    endRemoveRows();
 }
 
 void StackTraceModel::append(const QVector<StackRecord>& records) {

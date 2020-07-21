@@ -64,6 +64,7 @@ private:
     void ResetFilters();
     void PushEmptySMapsFile();
 
+    void FilterPersistentRecords();
     void StopCaptureProcess();
 
     struct StacktraceData {

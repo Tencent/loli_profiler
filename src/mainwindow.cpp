@@ -46,6 +46,7 @@
 
 #define ANDROID_SDK_NOTFOUND_MSG "Android SDK not found. Please select Android SDK's location in configuration panel."
 #define ANDROID_NDK_NOTFOUND_MSG "Android NDK not found. Please select Android NDK's location in configuration panel."
+#define STRIP_NON_PERSISTENT_MSG "Strip Non-persistent records to save memory (recommend for large projects)?"
 
 enum class IOErrorCode : qint32 {
     NONE = 0,
@@ -844,6 +845,17 @@ void MainWindow::PushEmptySMapsFile() {
     process.close();
 }
 
+void MainWindow::FilterPersistentRecords() {
+    recordsCache_.erase(std::remove_if(recordsCache_.begin(), recordsCache_.end(), [this](const StackRecord& record) {
+        auto it = freeAddrMap_.find(record.addr_);
+        if (it != freeAddrMap_.end()) {
+            if (record.seq_ < it.value())
+                return true;
+        }
+        return false;
+    }), recordsCache_.end());
+}
+
 void MainWindow::StopCaptureProcess() {
     ConnectionFailed();
     progressDialog_->setWindowTitle("Stop Capture Progress");
@@ -874,6 +886,11 @@ void MainWindow::StopCaptureProcess() {
     if (!readSMaps) {
         Print("Failed to cat proc/pid/smaps");
     } else {
+        auto filter = QMessageBox::information(
+                    this, "Strip Non-persistent Records?", STRIP_NON_PERSISTENT_MSG, QMessageBox::Yes | QMessageBox::No);
+        if (filter == QMessageBox::Yes) {
+            FilterPersistentRecords();
+        }
         InterpretStacktraceData();
     }
     Print(QString("Captured %1 records.").arg(stacktraceModel_->rowCount()));

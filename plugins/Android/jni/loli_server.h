@@ -8,7 +8,7 @@ extern "C" {
 
 bool loli_server_started();
 int loli_server_start(int port);
-void loli_server_send(const char* data);
+void loli_server_send(const char* data, unsigned int size);
 void loli_server_shutdown();
 
 #ifdef __cplusplus

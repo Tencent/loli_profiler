@@ -25,6 +25,7 @@ extern "C" {
 #include <errno.h>
 
 #include "lz4/lz4.h"
+#include "buffer.h"
 #include "spinlock.h"
 #include "loli_utils.h"
 
@@ -32,7 +33,7 @@ enum class loliCommands : std::uint8_t {
     SMAPS_DUMP = 0,
 };
 
-std::vector<std::string> cache_;
+std::vector<io::buffer> cache_;
 loli::spinlock cacheLock_;
 
 char* buffer_ = NULL;
@@ -84,8 +85,9 @@ bool loli_server_started() {
 }
 
 void loli_server_loop(int sock) {
-    std::vector<std::string> cacheCopy;
-    std::vector<std::string> sendCache;
+    std::vector<io::buffer> cacheCopy;
+    std::vector<io::buffer> sendCache;
+    io::buffer sendBuffer(10240);
     uint32_t compressBufferSize = 1024;
     char* compressBuffer = new char[compressBufferSize];
     struct timeval time;
@@ -139,7 +141,11 @@ void loli_server_loop(int sock) {
                         if (type == static_cast<std::uint8_t>(loliCommands::SMAPS_DUMP)) {
                             LOLILOGI("Dumping smaps");
                             loli_dump_smaps();
-                            loli_server_send("255\\0"); // loliFlags::COMMAND_ = 255, loliCommands::SMAPS_DUMP = 0
+                            io::buffer obuffer(8);
+                            obuffer.clear();
+                            obuffer << static_cast<uint8_t>(255) << static_cast<int32_t>(0);
+                            loli_server_send(obuffer.data(), obuffer.size());
+                            // loli_server_send("255\\0"); // loliFlags::COMMAND_ = 255, loliCommands::SMAPS_DUMP = 0
                         }
                     }
                 }
@@ -157,11 +163,17 @@ void loli_server_loop(int sock) {
                 }
             }
             if (cacheCopy.size() > 0) {
-                std::ostringstream stream;
-                for (auto& str : cacheCopy) 
-                    stream << str << std::endl;
-                const auto& str = stream.str();
-                std::uint32_t srcSize = static_cast<std::uint32_t>(str.size());
+                sendBuffer.clear();
+                for (auto& buffer : cacheCopy) {
+                    sendBuffer << static_cast<uint16_t>(buffer.size());
+                    sendBuffer.append(buffer);
+                }
+                // std::ostringstream stream;
+                // for (auto& str : cacheCopy) 
+                    // stream << str << std::endl;
+                // const auto& str = stream.str();
+                // TODO: add option to turn off compression for performance reason
+                std::uint32_t srcSize = static_cast<std::uint32_t>(sendBuffer.size());
                 // lz4 compression
                 uint32_t requiredSize = LZ4_compressBound(srcSize);
                 if (requiredSize > compressBufferSize) { // enlarge compress buffer if necessary
@@ -170,7 +182,7 @@ void loli_server_loop(int sock) {
                     compressBuffer = new char[compressBufferSize];
                     // __android_log_print(ANDROID_LOG_INFO, "Loli", "Buffer exapnding: %i", static_cast<uint32_t>(compressBufferSize));
                 }
-                uint32_t compressSize = LZ4_compress_default(str.c_str(), compressBuffer, srcSize, requiredSize);
+                uint32_t compressSize = LZ4_compress_default(sendBuffer.data(), compressBuffer, srcSize, requiredSize);
                 if (compressSize == 0) {
                     LOLILOGE("LZ4 compression failed!");
                 } else {
@@ -235,9 +247,9 @@ int loli_server_start(int port) {
     return 0;
 }
 
-void loli_server_send(const char* data) {
+void loli_server_send(const char* data, unsigned int size) {
     std::lock_guard<loli::spinlock> lock(cacheLock_);
-    cache_.emplace_back(data);
+    cache_.emplace_back(io::buffer(data, size));
 }
 
 void loli_server_shutdown() {

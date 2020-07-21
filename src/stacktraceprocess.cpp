@@ -72,29 +72,55 @@ void StackTraceProcess::Interpret(const QByteArray& bytes) {
     freeInfo_.clear();
     stackInfo_.clear();
     QByteArray uncompressedBytes = QByteArray::fromRawData(compressBuffer_, decompressSize);
-    QTextStream stream(uncompressedBytes);
-    QString line;
-    int lineCount = 0;
-    while (stream.readLineInto(&line)) {
-        auto words = line.split('\\', QString::SplitBehavior::SkipEmptyParts);
-        if (words.size() == 0)
-            continue;
-        auto type = words[0].toInt();
-        if (type == static_cast<int>(loliFlags::FREE_)) {
-            if (words.size() < 3)
-                continue;
-            freeInfo_.push_back(qMakePair(words[1].toUInt(), words[2]));
-        } else if (type == static_cast<int>(loliFlags::COMMAND_)) {
-            if (words.size() > 1) {
-                CommandHandler(words[1].toInt());
-            }
-        } else {
-            words.removeAt(0);
-            stackInfo_.push_back(words);
+    QDataStream stream(uncompressedBytes);
+    stream.setByteOrder(QDataStream::ByteOrder::LittleEndian);
+    QByteArray line;
+    while (!stream.atEnd()) {
+        quint16 lineSize = 0;
+        stream >> lineSize;
+        line.resize(lineSize);
+        if (stream.readRawData(line.data(), lineSize) == -1) {
+            qDebug() << "Intepreting data failed!";
+            return;
         }
-        lineCount++;
+        QDataStream lineStream(line);
+        lineStream.setByteOrder(QDataStream::ByteOrder::LittleEndian);
+        quint8 type;
+        lineStream >> type;
+        if (type == static_cast<quint8>(loliFlags::FREE_)) {
+            quint32 seq;
+            quint64 addr;
+            lineStream >> seq >> addr;
+            freeInfo_.push_back(qMakePair(seq, addr));
+        } else if (type == static_cast<quint8>(loliFlags::COMMAND_)) {
+            qint32 cmd;
+            lineStream >> cmd;
+            CommandHandler(cmd);
+        } else {
+            RawStackInfo info;
+            lineStream >> info.seq_ >> info.time_ >> info.size_ >> info.addr_ >> info.recType_;
+            if (info.recType_ == 0) { // nostack mode
+                quint16 strlen = 0;
+                lineStream >> strlen;
+                QByteArray strBa(strlen, 0);
+                if (lineStream.readRawData(strBa.data(), static_cast<qint32>(strlen)) == -1) {
+                    qDebug() << "Error reading library name string!";
+                    return;
+                }
+                info.library_ = QString(strBa);
+            } else if (info.recType_ == 1) { // stacktrace mode
+                quint64 addr;
+                while (!lineStream.atEnd()) {
+                    lineStream >> addr;
+                    info.stacktraces_.push_back(addr);
+                }
+            } else {
+                qDebug() << "Unknown recType!";
+                return;
+            }
+            stackInfo_.push_back(info);
+        }
     }
-//    qDebug() << "OnDataArrived: " << bytes.size() << " bytes " << " lines: " << lineCount << " stacks: " << stackInfo_.size() << " frees: " << freeInfo_.size();
     emit DataReceived();
 }
 

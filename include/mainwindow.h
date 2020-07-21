@@ -54,7 +54,7 @@ private:
     void ShowScreenshotAt(int index);
     void HideToolTips();
     void UpdateMemInfoRange();
-    QString TryAddNewAddress(const QString& lib, const QString& addr);
+    QString TryAddNewAddress(const QString& lib, quint64 addr);
     void ShowCallStack(const QModelIndex& index);
     void ShowSummary();
     void FilterStackTraceModel();
@@ -67,7 +67,7 @@ private:
     void StopCaptureProcess();
 
     struct StacktraceData {
-        QVector<QPair<QString, QString>> records_;
+        QVector<QPair<QString, quint64>> records_;
         QVector<QString> libraries_;
     };
 
@@ -122,7 +122,7 @@ private:
     StackTraceModel *filteredStacktraceModel_;
     StackTraceProxyModel *stacktraceProxyModel_;
     StackTraceProxyModel *filteredStacktraceProxyModel_;
-    QHash<QUuid, QVector<QString>> callStackMap_;
+    QHash<QUuid, QVector<QPair<QString, quint64>>> callStackMap_;
     QSet<QString> libraries_;
     QString appPid_;
     QString lastOpenDir_;
@@ -152,9 +152,9 @@ private:
     // address process
     QVector<AddressProcess*> addrProcesses_;
     // <dllname, <func address, func name>>
-    QHash<QString, QHash<QString, QString>> symbloMap_;
+    QHash<QString, QHash<quint64, QString>> symbloMap_;
     // <mem address, time>
-    QHash<QString, quint32> freeAddrMap_;
+    QHash<quint64, quint32> freeAddrMap_;
 
     // meminfo process
     MemInfoProcess* memInfoProcess_;

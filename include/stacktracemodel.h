@@ -9,9 +9,9 @@ struct StackRecord {
     quint32 seq_;
     qint32 time_;
     qint32 size_;
-    QString addr_;
+    quint64 addr_;
+    quint64 funcAddr_;
     QString library_;
-    QString funcAddr_;
 };
 
 QString sizeToString(quint64 size);

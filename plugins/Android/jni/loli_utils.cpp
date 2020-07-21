@@ -95,10 +95,10 @@ size_t loli_capture(void** buffer, size_t max) {
     return state.current - buffer;
 }
 
-void loli_dump(std::ostream& os, void** buffer, size_t count) {
-    for (size_t idx = 1; idx < count; ++idx) { // idx = 1 to ignore loli's hook function
+void loli_dump(io::buffer& obuffer, void** buffer, size_t count) {
+    for (size_t idx = 2; idx < count; ++idx) { // idx = 1 to ignore loli's hook function
         const void* addr = buffer[idx];
-        os << addr << '\\';
+        obuffer << reinterpret_cast<uint64_t>(addr);
     }
 }
 

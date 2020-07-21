@@ -263,11 +263,11 @@ void MainWindow::ExportToText(QFile* file, bool optimal) {
         auto it = callStackMap_.find(record.uuid_);
         if (it != callStackMap_.end()) {
             auto stackCount = it.value().size();
-            for (int i = 0; i < stackCount; i += 2) {
-                const auto& libName = it.value()[i];
-                const auto& funcAddr = it.value()[i + 1];
+            for (int i = 0; i < stackCount; i++) {
+                const auto& libName = it.value()[i].first;
+                const auto& funcAddr = it.value()[i].second;
                 if (optimal) {
-                    stream << libName << ',' << funcAddr << ',';
+                    stream << libName << ',' << QString("0x%1").arg(funcAddr, 0, 16) << ',';
                 } else {
                     const auto& funcName = TryAddNewAddress(libName, funcAddr);
                     stream << libName << ',' << funcName << ',';
@@ -285,7 +285,7 @@ void MainWindow::ExportToText(QFile* file, bool optimal) {
             stream << libIt.key() << ":" << endl;
             auto& addrs = libIt.value();
             for (auto addrIt = addrs.begin(); addrIt != addrs.end(); ++addrIt) {
-                stream << addrIt.key() << ", " << addrIt.value() << endl;
+                stream << QString("0x%1").arg(addrIt.key(), 0, 16) << ", " << addrIt.value() << endl;
             }
         }
         stream << endl;
@@ -318,14 +318,18 @@ void MainWindow::SaveToFile(QFile *file) {
         stream << record.time_;
         stream << record.size_;
         stream << record.addr_;
-        stream << record.library_;
         stream << record.funcAddr_;
+        stream << record.library_;
     }
     // callstack map
     stream << static_cast<qint32>(callStackMap_.size());
     for (auto it = callStackMap_.begin(); it != callStackMap_.end(); ++it) {
         stream << it.key().toString();
-        stream << it.value();
+        auto& callstacks = it.value();
+        stream << static_cast<qint32>(callstacks.size());
+        for (auto stack : callstacks) {
+            stream << stack.first << stack.second;
+        }
     }
     // symbol map
     stream << static_cast<qint32>(symbloMap_.size());
@@ -415,14 +419,11 @@ int MainWindow::LoadFromFile(QFile *file) {
         stream >> record.seq_;
         stream >> record.time_;
         stream >> record.size_;
-        stream >> str;
-        record.addr_ = str;
-        stream >> str;
-        record.library_ = str;
-        if (!libraries.contains(str))
-            libraries.insert(str);
-        stream >> str;
-        record.funcAddr_ = str;
+        stream >> record.addr_;
+        stream >> record.funcAddr_;
+        stream >> record.library_;
+        if (!libraries.contains(record.library_))
+            libraries.insert(record.library_);
         records.push_back(record);
     }
     ui->recordCountLineEdit->setText("");
@@ -434,13 +435,18 @@ int MainWindow::LoadFromFile(QFile *file) {
     // callstack map
     callStackMap_.clear();
     stream >> value;
-    QVector<QString> strs;
+    QVector<QPair<QString, quint64>> callstack;
     for (int i = 0; i < value; i++) {
-        QString str;
-        strs.clear();
-        stream >> str;
-        stream >> strs;
-        callStackMap_.insert(QUuid::fromString(str), strs);
+        QString uuid;
+        qint32 len;
+        stream >> uuid >> len;
+        callstack.clear();
+        for (int j = 0; j < len; j++) {
+            QPair<QString, quint64> pair;
+            stream >> pair.first >> pair.second;
+            callstack.push_back(pair);
+        }
+        callStackMap_.insert(QUuid::fromString(uuid), callstack);
     }
     // symbol map
     symbloMap_.clear();
@@ -451,7 +457,8 @@ int MainWindow::LoadFromFile(QFile *file) {
         qint32 size;
         stream >> size;
         auto& map = symbloMap_[str];
-        QString key, value;
+        quint64 key;
+        QString value;
         for (int j = 0; j < size; j++) {
             stream >> key;
             stream >> value;
@@ -462,11 +469,10 @@ int MainWindow::LoadFromFile(QFile *file) {
     freeAddrMap_.clear();
     stream >> value;
     for (int i = 0; i < value; i++) {
-        QString str;
-        stream >> str;
+        quint64 addr;
         quint32 seq;
-        stream >> seq;
-        freeAddrMap_.insert(str, seq);
+        stream >> addr >> seq;
+        freeAddrMap_.insert(addr, seq);
     }
     stacktraceModel_->append(records);
     // screen shots
@@ -578,9 +584,7 @@ void MainWindow::UpdateMemInfoRange() {
     memInfoAxisY_->setRange(0, maxMemInfoValue_);
 }
 
-QString MainWindow::TryAddNewAddress(const QString& lib, const QString& addr) {
-    if (!addr.startsWith("0x"))
-        return addr;
+QString MainWindow::TryAddNewAddress(const QString& lib, quint64 addr) {
     if (!symbloMap_.contains(lib))
         symbloMap_.insert(lib, {});
     auto& symblos = symbloMap_[lib];
@@ -591,7 +595,7 @@ QString MainWindow::TryAddNewAddress(const QString& lib, const QString& addr) {
         if (realName.size() > 0)
             return realName;
     }
-    return addr;
+    return QString("0x%1").arg(addr, 0, 16);
 }
 
 void MainWindow::ShowCallStack(const QModelIndex& index) {
@@ -600,13 +604,13 @@ void MainWindow::ShowCallStack(const QModelIndex& index) {
     auto proxyModel = static_cast<StackTraceProxyModel*>(ui->stackTableView->model());
     auto srcModel = static_cast<StackTraceModel*>(proxyModel->sourceModel());
     auto& selectedRecord = srcModel->recordAt(proxyModel->mapToSource(index).row());
-    auto& callStack = callStackMap_[selectedRecord.uuid_];
-    for (int i = 0, row = 0; i < callStack.size(); i += 2, row++) {
-        const auto& libName = callStack[i];
-        const auto& funcAddr = callStack[i + 1];
+    auto& callstack = callStackMap_[selectedRecord.uuid_];
+    for (int i = 0; i < callstack.size(); i++) {
+        const auto& libName = callstack[i].first;
+        const auto& funcAddr = callstack[i].second;
         const auto& funcName = TryAddNewAddress(libName, funcAddr);
-        callStackModel_->setItem(row, 0, new QStandardItem(libName));
-        callStackModel_->setItem(row, 1, new QStandardItem(funcName));
+        callStackModel_->setItem(i, 0, new QStandardItem(libName));
+        callStackModel_->setItem(i, 1, new QStandardItem(funcName));
     }
 }
 
@@ -655,11 +659,9 @@ void MainWindow::FilterStackTraceModel() {
                 continue;
         }
         if (persistentFilter) {
-            auto addr = record.addr_;
-            auto seq = record.seq_;
-            auto it = freeAddrMap_.find(addr);
+            auto it = freeAddrMap_.find(record.addr_);
             if (it != freeAddrMap_.end()) {
-                if (seq < it.value()) {
+                if (record.seq_ < it.value()) {
                     continue;
                 }
             }
@@ -789,9 +791,9 @@ void MainWindow::GetMergedCallstacks(QList<QTreeWidgetItem*>& topLevelItems) {
         const auto& callstacks = callStackMap_[record.uuid_];
         CustomTreeWidgetItem* child = nullptr;
         QStringList callstackNames;
-        for (int j = 0; j < callstacks.size(); j += 2) {
-            const auto& libName = callstacks[j];
-            const auto& funcAddr = callstacks[j + 1];
+        for (int j = 0; j < callstacks.size(); j ++) {
+            const auto& libName = callstacks[j].first;
+            const auto& funcAddr = callstacks[j].second;
             const auto& funcName = TryAddNewAddress(libName, funcAddr);
             callstackNames << funcName;
         }
@@ -889,16 +891,15 @@ void MainWindow::InterpretRecordLibrary(StackRecord& record, StacktraceData& dat
     if (it == callStackMap_.end())
         return;
     auto& callStack = it.value();
-    for (int i = 0; i + 1 < callStack.size(); i += 2) {
-        auto& libName = callStack[i];
-        auto& funcAddr = callStack[i + 1];
-        quint64 addr = funcAddr.toULongLong(nullptr, 16);
+    for (int i = 0; i < callStack.size(); i++) {
+        auto& libName = callStack[i].first;
+        auto& funcAddr = callStack[i].second;
         bool found = false;
         for (int i = 0; i < sMapsCache_.size(); i++) {
             const auto& cache = sMapsCache_[i];
             quint64 baseAddr;
-            if (cache.second->Contains(addr, record.size_, baseAddr)) {
-                funcAddr = "0x" + QString().setNum(addr - baseAddr, 16);
+            if (cache.second->Contains(funcAddr, record.size_, baseAddr)) {
+                funcAddr = funcAddr - baseAddr;
                 libName = cache.first;
                 data.records_.push_back(qMakePair(libName, funcAddr));
                 found = true;
@@ -910,10 +911,10 @@ void MainWindow::InterpretRecordLibrary(StackRecord& record, StacktraceData& dat
     }
     if (callStack.size() == 0)
         return;
-    record.library_ = callStack[0];
-    record.funcAddr_ = callStack[1];
+    record.library_ = callStack[0].first;
+    record.funcAddr_ = callStack[0].second;
     if (record.library_.isEmpty())
-        record.library_ = callStack[0] = "unknown";
+        record.library_ = callStack[0].first = "unknown";
     if (!data.libraries_.contains(record.library_))
         data.libraries_.push_back(record.library_);
 }
@@ -1040,9 +1041,9 @@ void MainWindow::OnStackTableViewContextMenu(const QPoint & pos) {
         auto srcModel = static_cast<StackTraceModel*>(proxyModel->sourceModel());
         auto& selectedRecord = srcModel->recordAt(proxyModel->mapToSource(selectedIndex).row());
         auto& callStack = callStackMap_[selectedRecord.uuid_];
-        for (int i = 0, row = 0; i < callStack.size(); i += 2, row++) {
-            const auto& libName = callStack[i];
-            const auto& funcAddr = callStack[i + 1];
+        for (int i = 0; i < callStack.size(); i++) {
+            const auto& libName = callStack[i].first;
+            const auto& funcAddr = callStack[i].second;
             const auto& funcName = TryAddNewAddress(libName, funcAddr);
             stream << libName << ", " << funcName << endl;
         }
@@ -1142,31 +1143,20 @@ void MainWindow::StacktraceDataReceived() {
     stacktraceRetryCount_ = 5;
     const auto& stacks = stacktraceProcess_->GetStackInfo();
     auto isNoStack = ConfigDialog::IsNoStackMode();
-    auto minStackNum = isNoStack ? 2 : 3;
     if (stacks.size() > 0) {
         for (const auto& stack : stacks) {
-            if (stack.size() < minStackNum)
-                continue;
-            auto root = stack[0].split(',');
-            if (root.size() < 4)
-                continue;
-            const auto& rootSeq = root[0];
-            const auto& rootTime = root[1];
-            const auto& rootSize = root[2];
-            const auto& rootMemAddr = root[3];
             StackRecord record;
             record.uuid_ = QUuid::createUuid();
-            record.seq_ = rootSeq.toUInt();
-            record.time_ = rootTime.toInt();
-            record.size_ = rootSize.toInt();
-            record.addr_ = rootMemAddr;
+            record.seq_ = stack.seq_;
+            record.time_ = stack.time_;
+            record.size_ = stack.size_;
+            record.addr_ = stack.addr_;
             if (isNoStack) {
-                record.library_ = stack[1];
+                record.library_ = stack.library_;
             } else {
-                auto& callStack = callStackMap_[record.uuid_];
-                for (int i = 3; i < stack.size(); i++) {
-                    callStack.append(QString());
-                    callStack.append(stack[i]);
+                auto& callstack = callStackMap_[record.uuid_];
+                for (int i = 0; i < stack.stacktraces_.size(); i++) {
+                    callstack.append(qMakePair(QString(), stack.stacktraces_[i]));
                 }
             }
             recordsCache_.push_back(record);
@@ -1553,12 +1543,12 @@ void MainWindow::on_symbloPushButton_clicked() {
         for (; addrMapIt != addrMap.end(); ++addrMapIt) {
             if (addrMapIt.value().size() != 0)
                 continue;
-            auto addr = addrMapIt.key().toULong(nullptr, 16);
+            auto addr = addrMapIt.key();
             int left = 0;
             int right = sortedRecords.size() - 1;
             while (left != right) {
                 auto mid = static_cast<int>(std::ceil(static_cast<float>(left + right) / 2));
-                auto midRecord = sortedRecords[mid];
+                auto& midRecord = sortedRecords[mid];
                 if (addr >= midRecord.addr && addr <= midRecord.addr + midRecord.size) {
                     addrMap[addrMapIt.key()] = midRecord.name;
                     break;

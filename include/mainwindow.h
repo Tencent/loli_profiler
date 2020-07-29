@@ -64,6 +64,8 @@ private:
     void ResetFilters();
     void PushEmptySMapsFile();
 
+    void ReadStacktraceData(const QVector<RawStackInfo>& stacks);
+    void ReadStacktraceDataCache();
     void FilterPersistentRecords();
     void StopCaptureProcess();
 
@@ -170,6 +172,9 @@ private:
     FixedScrollArea* scrollArea_;
 
     QHash<QString, SMapsSection> sMapsSections_;
+
+    // cache
+    bool useCache_ = true;
 
     bool isCapturing_ = false;
     bool isConnected_ = false;

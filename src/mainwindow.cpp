@@ -46,7 +46,8 @@
 
 #define ANDROID_SDK_NOTFOUND_MSG "Android SDK not found. Please select Android SDK's location in configuration panel."
 #define ANDROID_NDK_NOTFOUND_MSG "Android NDK not found. Please select Android NDK's location in configuration panel."
-#define STRIP_NON_PERSISTENT_MSG "Strip Non-persistent records to save memory (recommend for large projects)?"
+#define STRIP_NON_PERSISTENT_MSG "Enable memory optimization? Turn this on for large projects that produces massive amount of data. "\
+                                    "This will optimize loli-profiler's memory usage by data streaming."
 
 enum class IOErrorCode : qint32 {
     NONE = 0,
@@ -845,6 +846,61 @@ void MainWindow::PushEmptySMapsFile() {
     process.close();
 }
 
+void MainWindow::ReadStacktraceData(const QVector<RawStackInfo>& stacks) {
+    auto isNoStack = ConfigDialog::IsNoStackMode();
+    if (stacks.size() > 0) {
+        for (const auto& stack : stacks) {
+            StackRecord record;
+            record.uuid_ = QUuid::createUuid();
+            record.seq_ = stack.seq_;
+            record.time_ = stack.time_;
+            record.size_ = stack.size_;
+            record.addr_ = stack.addr_;
+            if (isNoStack) {
+                record.library_ = stack.library_;
+            } else {
+                auto& callstack = callStackMap_[record.uuid_];
+                for (int i = 0; i < stack.stacktraces_.size(); i++) {
+                    callstack.append(qMakePair(QString(), stack.stacktraces_[i]));
+                }
+            }
+            recordsCache_.push_back(record);
+        }
+    }
+}
+
+void MainWindow::ReadStacktraceDataCache() {
+    auto cachePath = QApplication::applicationDirPath() + "/cache";
+    QDir cacheDir(cachePath);
+    auto files = cacheDir.entryList(QDir::Filter::Files, QDir::SortFlag::Time);
+    QVector<RawStackInfo> stacks;
+    for (auto filePath : files) {
+        QFile file(cachePath + "/" + filePath);
+        stacks.clear();
+        if (file.open(QFile::OpenModeFlag::ReadOnly)) {
+            QDataStream stream(&file);
+            while (!stream.atEnd()) {
+                qint32 size;
+                stream >> size;
+                for (int i = 0; i < size; i++) {
+                    RawStackInfo stack;
+                    stream >> stack.seq_ >> stack.addr_ >> stack.size_ >> stack.time_
+                           >> stack.library_ >> stack.recType_ >> stack.stacktraces_;
+                    // ignore freed records
+                    auto it = freeAddrMap_.find(stack.addr_);
+                    if (it != freeAddrMap_.end()) {
+                        if (stack.seq_ < it.value())
+                            continue;
+                    }
+                    stacks.push_back(stack);
+                }
+            }
+            ReadStacktraceData(stacks);
+            file.remove();
+        }
+    }
+}
+
 void MainWindow::FilterPersistentRecords() {
     recordsCache_.erase(std::remove_if(recordsCache_.begin(), recordsCache_.end(), [this](const StackRecord& record) {
         auto it = freeAddrMap_.find(record.addr_);
@@ -886,10 +942,9 @@ void MainWindow::StopCaptureProcess() {
     if (!readSMaps) {
         Print("Failed to cat proc/pid/smaps");
     } else {
-        auto filter = QMessageBox::information(
-                    this, "Strip Non-persistent Records?", STRIP_NON_PERSISTENT_MSG, QMessageBox::Yes | QMessageBox::No);
-        if (filter == QMessageBox::Yes) {
-            FilterPersistentRecords();
+        if (useCache_) {
+            progressDialog_->setLabelText("Reading cached record files ...");
+            ReadStacktraceDataCache();
         }
         InterpretStacktraceData();
     }
@@ -1159,28 +1214,34 @@ void MainWindow::StacktraceDataReceived() {
         return;
     stacktraceRetryCount_ = 5;
     const auto& stacks = stacktraceProcess_->GetStackInfo();
-    auto isNoStack = ConfigDialog::IsNoStackMode();
-    if (stacks.size() > 0) {
-        for (const auto& stack : stacks) {
-            StackRecord record;
-            record.uuid_ = QUuid::createUuid();
-            record.seq_ = stack.seq_;
-            record.time_ = stack.time_;
-            record.size_ = stack.size_;
-            record.addr_ = stack.addr_;
-            if (isNoStack) {
-                record.library_ = stack.library_;
-            } else {
-                auto& callstack = callStackMap_[record.uuid_];
-                for (int i = 0; i < stack.stacktraces_.size(); i++) {
-                    callstack.append(qMakePair(QString(), stack.stacktraces_[i]));
-                }
-            }
-            recordsCache_.push_back(record);
+    const auto& frees = stacktraceProcess_->GetFreeInfo();
+    if (useCache_) {
+        static quint32 cacheIndex = 0;
+        auto cacheDirPath = QApplication::applicationDirPath() + "/cache";
+        if (!QDir(cacheDirPath).exists()) {
+            QDir().mkdir(cacheDirPath);
         }
+        auto cachePath = QString("%1/cache_%2.bin").arg(cacheDirPath).arg(cacheIndex);
+        QFile cacheFile(cachePath);
+        if (!cacheFile.open(QFile::OpenModeFlag::WriteOnly | QFile::OpenModeFlag::Append)) {
+            Print("Failed to open cache file: " + cachePath);
+            return;
+        }
+        QDataStream stream(&cacheFile);
+        stream << static_cast<qint32>(stacks.size());
+        for (auto& stack : stacks) {
+            stream << stack.seq_ << stack.addr_ << stack.size_ << stack.time_
+                   << stack.library_ << stack.recType_ << stack.stacktraces_;
+        }
+        cacheFile.flush();
+        if (cacheFile.size() > 1024 * 1024 * 512) {
+            cacheIndex++;
+        }
+        cacheFile.close();
+    } else {
+        ReadStacktraceData(stacks);
     }
     // read free call infos
-    const auto& frees = stacktraceProcess_->GetFreeInfo();
     if (frees.size() > 0) {
         for (const auto& free : frees) {
             const auto address = free.second;
@@ -1454,6 +1515,21 @@ void MainWindow::on_launchPushButton_clicked() {
 
     auto mode = QMessageBox::information(this, "Launch Mode",
                                          "Launch or intercept running app?", "Launch", "Intercept");
+
+    useCache_ = QMessageBox::information(
+                    this, "Enable Data Optimization?", STRIP_NON_PERSISTENT_MSG, QMessageBox::Yes | QMessageBox::No
+                ) == QMessageBox::Yes;
+
+    if (useCache_) { // clear cache folder
+        auto cachePath = QApplication::applicationDirPath() + "/cache";
+        auto cacheDir = QDir(cachePath);
+        if (cacheDir.exists()) {
+            auto files = cacheDir.entryList(QDir::Filter::Files);
+            for (auto fileName : files) {
+                cacheDir.remove(fileName);
+            }
+        }
+    }
 
     startAppProcess_->SetPythonPath(pythonPath);
     startAppProcess_->SetExecutablePath(adbPath);

@@ -1629,7 +1629,7 @@ void MainWindow::on_symbloPushButton_clicked() {
     progressDialog_->setLabelText(QString("Loaded %1 symbols, translating ....").arg(sortedRecords.size()));
     QCoreApplication::instance()->sendPostedEvents();
 
-    {
+    if (sortedRecords.size() > 0) {
 //        TimerProfiler profile("Translate Symbol");
         auto& addrMap = it.value();
         auto addrMapIt = addrMap.begin();
@@ -1655,6 +1655,8 @@ void MainWindow::on_symbloPushButton_clicked() {
         auto selectedIndexes = ui->stackTableView->selectionModel()->selection().indexes();
         if (selectedIndexes.size() > 0)
             ShowCallStack(selectedIndexes.front());
+    } else {
+        Print("Symbols not found, make sure this so has symbols!");
     }
 
     progressDialog_->setValue(3);

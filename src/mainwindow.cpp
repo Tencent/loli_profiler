@@ -1470,6 +1470,20 @@ void MainWindow::on_launchPushButton_clicked() {
         return;
     }
 
+    auto launchModeInfo = QMessageBox::information(this, "Launch Mode",
+                                         "Launch new instance or inject running app?", "Launch", "Inject", "Cancel", 0, 2);
+    bool enableInject = launchModeInfo == 1;
+    if (launchModeInfo == 2) {
+        return;
+    }
+
+    auto enableCacheInfo = QMessageBox::information(
+                this, "Enable Data Optimization?", STRIP_NON_PERSISTENT_MSG, "Yes", "No", "Cancel", 0, 2);
+    useCache_ = enableCacheInfo == 0;
+    if (enableCacheInfo == 2) {
+        return;
+    }
+
     // make sure config file exists
     ConfigDialog::ParseConfigFile();
 
@@ -1513,13 +1527,6 @@ void MainWindow::on_launchPushButton_clicked() {
     maxMemInfoValue_ = 128;
     UpdateMemInfoRange();
 
-    auto mode = QMessageBox::information(this, "Launch Mode",
-                                         "Launch or intercept running app?", "Launch", "Intercept");
-
-    useCache_ = QMessageBox::information(
-                    this, "Enable Data Optimization?", STRIP_NON_PERSISTENT_MSG, QMessageBox::Yes | QMessageBox::No
-                ) == QMessageBox::Yes;
-
     if (useCache_) { // clear cache folder
         auto cachePath = QApplication::applicationDirPath() + "/cache";
         auto cacheDir = QDir(cachePath);
@@ -1533,7 +1540,7 @@ void MainWindow::on_launchPushButton_clicked() {
 
     startAppProcess_->SetPythonPath(pythonPath);
     startAppProcess_->SetExecutablePath(adbPath);
-    startAppProcess_->StartApp(ui->appNameLineEdit->text(), targetCompiler_, targetArch_, mode == 1, progressDialog_);
+    startAppProcess_->StartApp(ui->appNameLineEdit->text(), targetCompiler_, targetArch_, enableInject, progressDialog_);
 
     isCapturing_ = true;
     Print("Starting application ...");

@@ -49,7 +49,8 @@ SOURCES += \
         src/stacktraceprocess.cpp \
         src/stacktraceproxymodel.cpp \
         src/startappprocess.cpp \
-        src/treemapgraphicsview.cpp
+        src/treemapgraphicsview.cpp \
+        src/hashstring.cpp
 
 HEADERS += \
         include/adbprocess.h \
@@ -75,7 +76,8 @@ HEADERS += \
         include/stacktraceproxymodel.h \
         include/startappprocess.h \
         include/timeprofiler.h \
-        include/treemapgraphicsview.h
+        include/treemapgraphicsview.h \
+        include/hashstring.h
 
 FORMS += \
         src/configdialog.ui \

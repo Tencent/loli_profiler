@@ -52,7 +52,7 @@ QVariant StackTraceModel::data(const QModelIndex &index, int role) const {
                 case 2:
                     return QString("0x%1").arg(record.addr_, 0, 16);
                 case 3:
-                    return record.library_;
+                    return record.library_.Get();
                 case 4:
                     return QString("0x%1").arg(record.funcAddr_, 0, 16);
             }
@@ -66,7 +66,7 @@ QVariant StackTraceModel::data(const QModelIndex &index, int role) const {
                 case 2:
                     return record.addr_;
                 case 3:
-                    return record.library_;
+                    return record.library_.Get();
                 case 4:
                     return record.funcAddr_;
             }

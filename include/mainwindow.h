@@ -70,7 +70,7 @@ private:
     void StopCaptureProcess();
 
     struct StacktraceData {
-        QVector<QPair<QString, quint64>> records_;
+        QVector<QPair<HashString, quint64>> records_;
         QVector<QString> libraries_;
     };
 
@@ -125,7 +125,7 @@ private:
     StackTraceModel *filteredStacktraceModel_;
     StackTraceProxyModel *stacktraceProxyModel_;
     StackTraceProxyModel *filteredStacktraceProxyModel_;
-    QHash<QUuid, QVector<QPair<QString, quint64>>> callStackMap_;
+    QHash<QUuid, QVector<QPair<HashString, quint64>>> callStackMap_;
     QSet<QString> libraries_;
     QString appPid_;
     QString lastOpenDir_;

@@ -4,6 +4,8 @@
 #include <QAbstractTableModel>
 #include <QUuid>
 
+#include "hashstring.h"
+
 struct StackRecord {
     QUuid uuid_;
     quint32 seq_;
@@ -11,7 +13,7 @@ struct StackRecord {
     qint32 size_;
     quint64 addr_;
     quint64 funcAddr_;
-    QString library_;
+    HashString library_;
 };
 
 QString sizeToString(quint64 size);

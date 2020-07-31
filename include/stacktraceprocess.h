@@ -4,6 +4,8 @@
 #include <QObject>
 #include <QVector>
 
+#include "hashstring.h"
+
 enum class loliFlags : quint8 {
     FREE_ = 0,
     MALLOC_ = 1,
@@ -23,7 +25,7 @@ struct RawStackInfo {
     quint32 size_;
     quint64 addr_;
     quint8 recType_;
-    QString library_;
+    HashString library_;
     QVector<quint64> stacktraces_;
 };
 

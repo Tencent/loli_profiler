@@ -43,7 +43,7 @@
 #include <limits>
 
 #define APP_MAGIC 0xA4B3C2D1
-#define APP_VERSION 105
+#define APP_VERSION 106
 
 #define ANDROID_SDK_NOTFOUND_MSG "Android SDK not found. Please select Android SDK's location in configuration panel."
 #define ANDROID_NDK_NOTFOUND_MSG "Android NDK not found. Please select Android NDK's location in configuration panel."
@@ -311,13 +311,9 @@ void MainWindow::SaveToFile(QFile *file) {
             stream << point;
         }
     }
-    // callstack tree view
+    // string hashes
     stream << HashString::hashmap_;
-//    qint32 count = HashString::hashmap_.size();
-//    stream << count;
-//    for (auto it = HashString::hashmap_.begin(); it != HashString::hashmap_.end(); ++it) {
-//        stream << it.key() << it.value();
-//    }
+    // callstack tree view
     qint32 count = stacktraceModel_->rowCount();
     stream << count;
     for (int i = 0; i < count; i++) {
@@ -412,14 +408,15 @@ int MainWindow::LoadFromFile(QFile *file) {
             memInfoSeries_[i]->append(point);
         }
     }
+    // string hashes
+    HashString::hashmap_.clear();
+    stream >> HashString::hashmap_;
     // callstack tree view
     QSet<QString> libraries;
     filteredStacktraceModel_->clear();
     stacktraceModel_->clear();
     ResetFilters();
     SwitchStackTraceModel(stacktraceProxyModel_);
-    HashString::hashmap_.clear();
-    stream >> HashString::hashmap_;
     stream >> value;
     QVector<StackRecord> records;
     for (int i = 0; i < value; i++) {
@@ -1541,6 +1538,7 @@ void MainWindow::on_launchPushButton_clicked() {
     freeAddrMap_.clear();
     callStackMap_.clear();
     callStackModel_->clear();
+    HashString::hashmap_.clear();
 
     maxMemInfoValue_ = 128;
     UpdateMemInfoRange();

@@ -1,3 +1,3 @@
 #include "hashstring.h"
 
-QHash<quint64, QString> HashString::hashmap_;
+QHash<quint32, QString> HashString::hashmap_;

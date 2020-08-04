@@ -9,6 +9,7 @@
 #include "smaps/statsmapsdialog.h"
 #include "smaps/visualizesmapsdialog.h"
 #include "pathutils.h"
+#include "hashstring.h"
 
 #include <QClipboard>
 #include <QDataStream>
@@ -42,7 +43,7 @@
 #include <limits>
 
 #define APP_MAGIC 0xA4B3C2D1
-#define APP_VERSION 105
+#define APP_VERSION 106
 
 #define ANDROID_SDK_NOTFOUND_MSG "Android SDK not found. Please select Android SDK's location in configuration panel."
 #define ANDROID_NDK_NOTFOUND_MSG "Android NDK not found. Please select Android NDK's location in configuration panel."
@@ -261,12 +262,12 @@ void MainWindow::ExportToText(QFile* file, bool optimal) {
     for (int i = 0; i < count; i++) {
         auto& record = stacktraceModel_->recordAt(i);
         stream << record.seq_ << ',' << record.time_ << ',' << record.size_ << ','
-               << record.addr_ << ',' << record.library_ << ',' << record.funcAddr_ << endl;
+               << record.addr_ << ',' << record.library_.Get() << ',' << record.funcAddr_ << endl;
         auto it = callStackMap_.find(record.uuid_);
         if (it != callStackMap_.end()) {
             auto stackCount = it.value().size();
             for (int i = 0; i < stackCount; i++) {
-                const auto& libName = it.value()[i].first;
+                const auto& libName = it.value()[i].first.Get();
                 const auto& funcAddr = it.value()[i].second;
                 if (optimal) {
                     stream << libName << ',' << QString("0x%1").arg(funcAddr, 0, 16) << ',';
@@ -310,6 +311,8 @@ void MainWindow::SaveToFile(QFile *file) {
             stream << point;
         }
     }
+    // string hashes
+    stream << HashString::hashmap_;
     // callstack tree view
     qint32 count = stacktraceModel_->rowCount();
     stream << count;
@@ -321,7 +324,7 @@ void MainWindow::SaveToFile(QFile *file) {
         stream << record.size_;
         stream << record.addr_;
         stream << record.funcAddr_;
-        stream << record.library_;
+        stream << record.library_.hashcode_;
     }
     // callstack map
     stream << static_cast<qint32>(callStackMap_.size());
@@ -330,7 +333,7 @@ void MainWindow::SaveToFile(QFile *file) {
         auto& callstacks = it.value();
         stream << static_cast<qint32>(callstacks.size());
         for (auto stack : callstacks) {
-            stream << stack.first << stack.second;
+            stream << stack.first.hashcode_ << stack.second;
         }
     }
     // symbol map
@@ -405,6 +408,9 @@ int MainWindow::LoadFromFile(QFile *file) {
             memInfoSeries_[i]->append(point);
         }
     }
+    // string hashes
+    HashString::hashmap_.clear();
+    stream >> HashString::hashmap_;
     // callstack tree view
     QSet<QString> libraries;
     filteredStacktraceModel_->clear();
@@ -423,9 +429,9 @@ int MainWindow::LoadFromFile(QFile *file) {
         stream >> record.size_;
         stream >> record.addr_;
         stream >> record.funcAddr_;
-        stream >> record.library_;
-        if (!libraries.contains(record.library_))
-            libraries.insert(record.library_);
+        stream >> record.library_.hashcode_;
+        if (!libraries.contains(record.library_.Get()))
+            libraries.insert(record.library_.Get());
         records.push_back(record);
     }
     ui->recordCountLineEdit->setText("");
@@ -437,15 +443,15 @@ int MainWindow::LoadFromFile(QFile *file) {
     // callstack map
     callStackMap_.clear();
     stream >> value;
-    QVector<QPair<QString, quint64>> callstack;
+    QVector<QPair<HashString, quint64>> callstack;
     for (int i = 0; i < value; i++) {
         QString uuid;
         qint32 len;
         stream >> uuid >> len;
         callstack.clear();
         for (int j = 0; j < len; j++) {
-            QPair<QString, quint64> pair;
-            stream >> pair.first >> pair.second;
+            QPair<HashString, quint64> pair;
+            stream >> pair.first.hashcode_ >> pair.second;
             callstack.push_back(pair);
         }
         callStackMap_.insert(QUuid::fromString(uuid), callstack);
@@ -608,7 +614,7 @@ void MainWindow::ShowCallStack(const QModelIndex& index) {
     auto& selectedRecord = srcModel->recordAt(proxyModel->mapToSource(index).row());
     auto& callstack = callStackMap_[selectedRecord.uuid_];
     for (int i = 0; i < callstack.size(); i++) {
-        const auto& libName = callstack[i].first;
+        const auto& libName = callstack[i].first.Get();
         const auto& funcAddr = callstack[i].second;
         const auto& funcName = TryAddNewAddress(libName, funcAddr);
         callStackModel_->setItem(i, 0, new QStandardItem(libName));
@@ -657,7 +663,7 @@ void MainWindow::FilterStackTraceModel() {
             }
         }
         if (libraryFilter.size() > 0) {
-            if (record.library_ != libraryFilter)
+            if (record.library_.Get() != libraryFilter)
                 continue;
         }
         if (persistentFilter) {
@@ -794,7 +800,7 @@ void MainWindow::GetMergedCallstacks(QList<QTreeWidgetItem*>& topLevelItems) {
         CustomTreeWidgetItem* child = nullptr;
         QStringList callstackNames;
         for (int j = 0; j < callstacks.size(); j ++) {
-            const auto& libName = callstacks[j].first;
+            const auto& libName = callstacks[j].first.Get();
             const auto& funcAddr = callstacks[j].second;
             const auto& funcName = TryAddNewAddress(libName, funcAddr);
             callstackNames << funcName;
@@ -857,7 +863,7 @@ void MainWindow::ReadStacktraceData(const QVector<RawStackInfo>& stacks) {
             record.size_ = stack.size_;
             record.addr_ = stack.addr_;
             if (isNoStack) {
-                record.library_ = stack.library_;
+                record.library_ = HashString(stack.library_);
             } else {
                 auto& callstack = callStackMap_[record.uuid_];
                 for (int i = 0; i < stack.stacktraces_.size(); i++) {
@@ -885,7 +891,7 @@ void MainWindow::ReadStacktraceDataCache() {
                 for (int i = 0; i < size; i++) {
                     RawStackInfo stack;
                     stream >> stack.seq_ >> stack.addr_ >> stack.size_ >> stack.time_
-                           >> stack.library_ >> stack.recType_ >> stack.stacktraces_;
+                           >> stack.library_.hashcode_ >> stack.recType_ >> stack.stacktraces_;
                     // ignore freed records
                     auto it = freeAddrMap_.find(stack.addr_);
                     if (it != freeAddrMap_.end()) {
@@ -956,7 +962,7 @@ void MainWindow::StopCaptureProcess() {
     progressDialog_->setValue(2);
 }
 
-static QVector<QPair<QString, SMapsSection*>> sMapsCache_;
+static QVector<QPair<HashString, SMapsSection*>> sMapsCache_;
 
 void MainWindow::InterpretRecordLibrary(StackRecord& record, StacktraceData& data) {
     auto it = callStackMap_.find(record.uuid_);
@@ -979,16 +985,23 @@ void MainWindow::InterpretRecordLibrary(StackRecord& record, StacktraceData& dat
             }
         }
         if (!found)
-            libName = "unknown";
+            libName = HashString(qHash("unknown"));
     }
     if (callStack.size() == 0)
         return;
     record.library_ = callStack[0].first;
     record.funcAddr_ = callStack[0].second;
-    if (record.library_.isEmpty())
-        record.library_ = callStack[0].first = "unknown";
-    if (!data.libraries_.contains(record.library_))
-        data.libraries_.push_back(record.library_);
+    int level = 1;
+    while (record.library_.Get() == "libloli.so" && level < callStack.size()) {
+        record.library_ = callStack[level].first;
+        record.funcAddr_ = callStack[level].second;
+        level++;
+    }
+    if (record.library_.hashcode_ == 0) {
+        record.library_ = callStack[0].first = HashString(qHash("unknown"));
+    }
+    if (!data.libraries_.contains(record.library_.Get()))
+        data.libraries_.push_back(record.library_.Get());
 }
 
 MainWindow::StacktraceData MainWindow::InterpretRecordsLibrary(int start, int count) {
@@ -1002,19 +1015,21 @@ void MainWindow::InterpretStacktraceData() {
     if (ConfigDialog::IsNoStackMode()) {
         for (int i = 0; i < recordsCache_.size(); i++) {
             auto& record = recordsCache_[i];
-            if (!libraries_.contains(record.library_)) {
-                libraries_.insert(record.library_);
+            if (!libraries_.contains(record.library_.Get())) {
+                libraries_.insert(record.library_.Get());
             }
         }
     } else {
 //        TimerProfiler profiler("Interpret Recs");
+        HashString::hashmap_.insert(qHash("unknown"), "unknown");
         for (auto it = sMapsSections_.begin(); it != sMapsSections_.end(); ++it) {
             auto& library = it.key();
             auto& sections = it.value();
-            if (library.endsWith(".so"))
-                sMapsCache_.push_back(qMakePair(library, &sections));
+            if (library.endsWith(".so")) {
+                sMapsCache_.push_back(qMakePair(HashString(library), &sections));
+            }
         }
-        auto threadCount = QThread::idealThreadCount();
+        auto threadCount = std::max(2, QThread::idealThreadCount());
         auto payload = recordsCache_.size() / threadCount;
         QVector<QFuture<StacktraceData>> futures;
         int currentIndex = 0;
@@ -1035,7 +1050,7 @@ void MainWindow::InterpretStacktraceData() {
             futures[i].waitForFinished();
             const auto& trace = futures[i].result();
             for (const auto& record : trace.records_) {
-                TryAddNewAddress(record.first, record.second);
+                TryAddNewAddress(record.first.Get(), record.second);
             }
             for (const auto& library : trace.libraries_) {
                 if (!libraries_.contains(library)) {
@@ -1114,7 +1129,7 @@ void MainWindow::OnStackTableViewContextMenu(const QPoint & pos) {
         auto& selectedRecord = srcModel->recordAt(proxyModel->mapToSource(selectedIndex).row());
         auto& callStack = callStackMap_[selectedRecord.uuid_];
         for (int i = 0; i < callStack.size(); i++) {
-            const auto& libName = callStack[i].first;
+            const auto& libName = callStack[i].first.Get();
             const auto& funcAddr = callStack[i].second;
             const auto& funcName = TryAddNewAddress(libName, funcAddr);
             stream << libName << ", " << funcName << endl;
@@ -1231,7 +1246,7 @@ void MainWindow::StacktraceDataReceived() {
         stream << static_cast<qint32>(stacks.size());
         for (auto& stack : stacks) {
             stream << stack.seq_ << stack.addr_ << stack.size_ << stack.time_
-                   << stack.library_ << stack.recType_ << stack.stacktraces_;
+                   << stack.library_.hashcode_ << stack.recType_ << stack.stacktraces_;
         }
         cacheFile.flush();
         if (cacheFile.size() > 1024 * 1024 * 512) {
@@ -1523,6 +1538,7 @@ void MainWindow::on_launchPushButton_clicked() {
     freeAddrMap_.clear();
     callStackMap_.clear();
     callStackModel_->clear();
+    HashString::hashmap_.clear();
 
     maxMemInfoValue_ = 128;
     UpdateMemInfoRange();

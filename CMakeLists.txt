@@ -56,6 +56,7 @@ set(LOLIPROFILER_INCS
     include/startappprocess.h
     include/timeprofiler.h
     include/treemapgraphicsview.h
+    include/hashstring.h
 )
 
 set(LOLIPROFILER_SRCS 
@@ -82,6 +83,7 @@ set(LOLIPROFILER_SRCS
     src/stacktraceproxymodel.cpp
     src/startappprocess.cpp
     src/treemapgraphicsview.cpp
+    src/hashstring.cpp
 )
 
 set(LOLIPROFILER_UIS

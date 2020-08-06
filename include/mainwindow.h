@@ -149,7 +149,6 @@ private:
 
     // stacktrace process
     StackTraceProcess *stacktraceProcess_;
-    int stacktraceRetryCount_ = 0;
     QVector<StackRecord> recordsCache_;
 
     // address process

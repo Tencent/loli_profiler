@@ -1170,7 +1170,6 @@ void MainWindow::StartAppProcessFinished(AdbProcess* process) {
     memInfoProcess_->SetExecutablePath(PathUtils::GetADBExecutablePath());
     lastScreenshotTime_ = time_ = 0;
     Print("Application Started!");
-    stacktraceRetryCount_ = 30;
     memInfoProcess_->DumpMemInfoAsync(ui->appNameLineEdit->text());
 }
 
@@ -1234,7 +1233,6 @@ void MainWindow::ScreenshotProcessErrorOccurred() {
 void MainWindow::StacktraceDataReceived() {
     if (!isConnected_ || !isCapturing_)
         return;
-    stacktraceRetryCount_ = 5;
     const auto& stacks = stacktraceProcess_->GetStackInfo();
     const auto& frees = stacktraceProcess_->GetFreeInfo();
     if (useCache_) {
@@ -1278,25 +1276,7 @@ void MainWindow::StacktraceDataReceived() {
 void MainWindow::StacktraceConnectionLost() {
     if (!isCapturing_)
         return;
-    if (stacktraceRetryCount_ > 0) {
-        static int maxRetryCount = 0;
-        if (!progressDialog_->isVisible()) {
-            maxRetryCount = stacktraceRetryCount_;
-            progressDialog_->setWindowTitle("Connection Lost");
-            progressDialog_->setLabelText("Retrying ...");
-            progressDialog_->setMinimum(0);
-            progressDialog_->setMaximum(maxRetryCount);
-            progressDialog_->setValue(0);
-            progressDialog_->show();
-        }
-        progressDialog_->setValue(maxRetryCount - stacktraceRetryCount_);
-    }
-//    Print(QString("Connection failed, retrying %1").arg(stacktraceRetryCount_));
-    stacktraceRetryCount_--;
-    if (stacktraceRetryCount_ <= 0) {
-        ConnectionFailed();
-        progressDialog_->close();
-    }
+    ConnectionFailed();
 }
 
 void MainWindow::AddressProcessFinished(AdbProcess* process) {

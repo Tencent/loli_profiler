@@ -72,6 +72,14 @@ MainWindow::MainWindow(QWidget *parent) :
     progressDialog_->setCancelButton(nullptr);
     progressDialog_->setSizeGripEnabled(false);
     progressDialog_->close();
+    connect(progressDialog_, &QProgressDialog::canceled, [this]() {
+        if (startAppProcess_->IsRunning()) {
+            showJDWPErrorLog_ = false;
+            startAppProcess_->Process()->kill();
+            startAppProcess_->Process()->readAll();
+            Print("User canceled.");
+        }
+    });
 
     // setup adb process
     startAppProcess_ = new StartAppProcess(this);
@@ -929,6 +937,7 @@ void MainWindow::StopCaptureProcess() {
     progressDialog_->setMinimum(0);
     progressDialog_->setMaximum(2);
     progressDialog_->setValue(0);
+    progressDialog_->setCancelButtonText(QString());
     progressDialog_->show();
     progressDialog_->setValue(1);
     progressDialog_->setLabelText("Requesting smaps info from device.");
@@ -1047,6 +1056,7 @@ void MainWindow::InterpretStacktraceData() {
         progressDialog_->setMinimum(0);
         progressDialog_->setMaximum(threadCount);
         progressDialog_->setValue(0);
+        progressDialog_->setCancelButtonText(QString());
         progressDialog_->show();
         QCoreApplication::instance()->sendPostedEvents();
         for (int i = 0; i < futures.size(); i++) {
@@ -1177,6 +1187,9 @@ void MainWindow::StartAppProcessErrorOccurred() {
     ConnectionFailed();
     progressDialog_->setValue(progressDialog_->maximum());
     progressDialog_->close();
+    if (!showJDWPErrorLog_) {
+        return;
+    }
     Print("Error starting app: " + startAppProcess_->ErrorStr());
     Print("View logs under executable's folder for more details.");
     QFile file(QCoreApplication::applicationDirPath() + "/profiler.log");
@@ -1556,6 +1569,7 @@ void MainWindow::on_launchPushButton_clicked() {
         }
     }
 
+    showJDWPErrorLog_ = true;
     startAppProcess_->SetPythonPath(pythonPath);
     startAppProcess_->SetExecutablePath(adbPath);
     startAppProcess_->StartApp(ui->appNameLineEdit->text(), targetCompiler_, targetArch_, enableInject, progressDialog_);
@@ -1593,6 +1607,7 @@ void MainWindow::on_symbloPushButton_clicked() {
     progressDialog_->setMinimum(0);
     progressDialog_->setMaximum(3);
     progressDialog_->setValue(0);
+    progressDialog_->setCancelButtonText(QString());
     progressDialog_->show();
 
     QString symbolMapFilePath = symbloPath + ".txt";

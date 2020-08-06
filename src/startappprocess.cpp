@@ -79,7 +79,7 @@ void StartAppProcess::StartApp(const QString& appName, const QString& compiler, 
             return;
         }
         pid = process.readAll().trimmed().toUInt();
-        qDebug() << pid;
+//        qDebug() << pid;
         dialog->setValue(dialog->value() + 1);
     }
     if (!interceptMode) { // adb jdwp
@@ -124,6 +124,7 @@ void StartAppProcess::StartApp(const QString& appName, const QString& compiler, 
     // python jdwp-shellifier.py
     errorStr_ = "python jdwp-shellifier.py";
     dialog->setLabelText("Injecting libloli.so to target application.");
+    dialog->setCancelButtonText("Cancel");
     arguments.clear();
     arguments << "jdwp-shellifier.py" << "--target" << "127.0.0.1" << "--port" << "8700" << "--break-on" << "android.app.Activity.onResume" << "--loadlib" << "libloli.so";
     process_->setWorkingDirectory(QCoreApplication::applicationDirPath());

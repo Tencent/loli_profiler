@@ -174,6 +174,7 @@ private:
 
     // cache
     bool useCache_ = true;
+    bool showJDWPErrorLog_ = true;
 
     bool isCapturing_ = false;
     bool isConnected_ = false;

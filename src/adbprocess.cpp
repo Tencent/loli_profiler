@@ -32,9 +32,7 @@ void AdbProcess::Disconnect() {
 
 void AdbProcess::AdbProcessFinished(int exitCode, QProcess::ExitStatus exitStatus) {
     if (exitCode != 0 || exitStatus == QProcess::ExitStatus::CrashExit) {
-        emit ProcessErrorOccurred();
-        running_ = false;
-        hasErrors_ = true;
+        // handled by AdbProcessErrorOccurred
         return;
     }
     hasErrors_ = false;

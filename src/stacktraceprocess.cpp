@@ -28,7 +28,7 @@ StackTraceProcess::~StackTraceProcess(){
     delete[] compressBuffer_;
 }
 
-void StackTraceProcess::ConnectToServer(int port) {
+void StackTraceProcess::ForwardPort(int port) {
     QProcess process;
     QStringList arguments;
     arguments << "forward" << "tcp:" + QString::number(port) << "tcp:7100";
@@ -43,6 +43,9 @@ void StackTraceProcess::ConnectToServer(int port) {
         emit ConnectionLost();
         return;
     }
+}
+
+void StackTraceProcess::ConnectToServer(int port) {
     connectingServer_ = true;
     socket_->connectToHost("127.0.0.1", static_cast<quint16>(port));
 }

@@ -36,6 +36,7 @@ public:
     StackTraceProcess(QObject* parent = nullptr);
     ~StackTraceProcess() override;
 
+    void ForwardPort(int port);
     void ConnectToServer(int port);
     void Disconnect();
     bool IsConnecting() const { return connectingServer_; }

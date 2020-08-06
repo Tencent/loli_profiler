@@ -70,6 +70,7 @@ MainWindow::MainWindow(QWidget *parent) :
     progressDialog_->setWindowModality(Qt::WindowModal);
     progressDialog_->setAutoClose(true);
     progressDialog_->setCancelButton(nullptr);
+    progressDialog_->setSizeGripEnabled(false);
     progressDialog_->close();
 
     // setup adb process
@@ -879,6 +880,7 @@ void MainWindow::ReadStacktraceDataCache() {
     auto cachePath = QApplication::applicationDirPath() + "/cache";
     QDir cacheDir(cachePath);
     auto files = cacheDir.entryList(QDir::Filter::Files, QDir::SortFlag::Time);
+    quint32 recordCount = 0;
     QVector<RawStackInfo> stacks;
     for (auto filePath : files) {
         QFile file(cachePath + "/" + filePath);
@@ -888,6 +890,7 @@ void MainWindow::ReadStacktraceDataCache() {
             while (!stream.atEnd()) {
                 qint32 size;
                 stream >> size;
+                recordCount += size;
                 for (int i = 0; i < size; i++) {
                     RawStackInfo stack;
                     stream >> stack.seq_ >> stack.addr_ >> stack.size_ >> stack.time_
@@ -905,6 +908,7 @@ void MainWindow::ReadStacktraceDataCache() {
             file.remove();
         }
     }
+    Print(QString("Cached %1 records.").arg(recordCount));
 }
 
 void MainWindow::FilterPersistentRecords() {
@@ -1080,8 +1084,7 @@ void MainWindow::FixedUpdate() {
         memInfoProcess_->DumpMemInfoAsync(ui->appNameLineEdit->text());
     }
     if (!stacktraceProcess_->IsConnecting() && !stacktraceProcess_->IsConnected()) {
-        static int port = 8000;
-        stacktraceProcess_->ConnectToServer(port++);
+        stacktraceProcess_->ConnectToServer(port_);
         Print("Connecting to application server ... ");
     }
     time_++;
@@ -1160,8 +1163,10 @@ void MainWindow::StartAppProcessFinished(AdbProcess* process) {
         return;
     }
     isConnected_ = true;
+    port_++;
     screenshotProcess_->SetExecutablePath(PathUtils::GetADBExecutablePath());
     stacktraceProcess_->SetExecutablePath(PathUtils::GetADBExecutablePath());
+    stacktraceProcess_->ForwardPort(port_);
     memInfoProcess_->SetExecutablePath(PathUtils::GetADBExecutablePath());
     lastScreenshotTime_ = time_ = 0;
     Print("Application Started!");
@@ -1273,10 +1278,25 @@ void MainWindow::StacktraceDataReceived() {
 void MainWindow::StacktraceConnectionLost() {
     if (!isCapturing_)
         return;
-    Print(QString("Connection failed, retrying %1").arg(stacktraceRetryCount_));
+    if (stacktraceRetryCount_ > 0) {
+        static int maxRetryCount = 0;
+        if (!progressDialog_->isVisible()) {
+            maxRetryCount = stacktraceRetryCount_;
+            progressDialog_->setWindowTitle("Connection Lost");
+            progressDialog_->setLabelText("Retrying ...");
+            progressDialog_->setMinimum(0);
+            progressDialog_->setMaximum(maxRetryCount);
+            progressDialog_->setValue(0);
+            progressDialog_->show();
+        }
+        progressDialog_->setValue(maxRetryCount - stacktraceRetryCount_);
+    }
+//    Print(QString("Connection failed, retrying %1").arg(stacktraceRetryCount_));
     stacktraceRetryCount_--;
-    if (stacktraceRetryCount_ <= 0)
+    if (stacktraceRetryCount_ <= 0) {
         ConnectionFailed();
+        progressDialog_->close();
+    }
 }
 
 void MainWindow::AddressProcessFinished(AdbProcess* process) {

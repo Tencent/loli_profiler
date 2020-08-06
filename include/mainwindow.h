@@ -178,6 +178,7 @@ private:
 
     bool isCapturing_ = false;
     bool isConnected_ = false;
+    int port_ = 8000;
 };
 
 #endif // MAINWINDOW_H

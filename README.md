@@ -26,7 +26,7 @@ OTeam地址：https://techmap.oa.com/oteam/8618
 
 可前往LoliProfiler的[Wetest商店页面](https://wetest.oa.com/store/loli-profiler)下载最新版程序
 
-> [使用手册](https://git.code.oa.com/xinhou/loli_profiler/wikis/tutorial)、[常见问题](https://git.code.oa.com/xinhou/loli_profiler/wikis/faq)、[程序下载](https://git.code.oa.com/xinhou/loli_profiler/wikis/home)、[WeTest商店](https://wetest.oa.com/store/loli-profiler)
+> [使用手册](https://git.code.oa.com/xinhou/loli_profiler/wikis/tutorial)、[白皮书](https://git.code.oa.com/xinhou/loli_profiler/wikis/home)、[常见问题](https://git.code.oa.com/xinhou/loli_profiler/wikis/faq)、[程序下载](https://git.code.oa.com/xinhou/loli_profiler/wikis/home)、[WeTest商店](https://wetest.oa.com/store/loli-profiler)
 
 ![](res/images/treemap.gif)
 

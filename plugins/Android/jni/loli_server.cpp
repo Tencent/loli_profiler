@@ -42,6 +42,7 @@ std::atomic<bool> serverRunning_ {true};
 std::atomic<bool> hasClient_ {false};
 std::thread socketThread_;
 bool started_ = false;
+bool ignoreCache_ = false;
 
 void loli_dump_smaps() {
     auto srcFile = fopen("/proc/self/smaps", "r");
@@ -146,6 +147,7 @@ void loli_server_loop(int sock) {
                             obuffer << static_cast<uint8_t>(255) << static_cast<int32_t>(0);
                             loli_server_send(obuffer.data(), obuffer.size());
                             // loli_server_send("255\\0"); // loliFlags::COMMAND_ = 255, loliCommands::SMAPS_DUMP = 0
+                            ignoreCache_ = true;
                         }
                     }
                 }
@@ -168,10 +170,6 @@ void loli_server_loop(int sock) {
                     sendBuffer << static_cast<uint16_t>(buffer.size());
                     sendBuffer.append(buffer);
                 }
-                // std::ostringstream stream;
-                // for (auto& str : cacheCopy) 
-                    // stream << str << std::endl;
-                // const auto& str = stream.str();
                 // TODO: add option to turn off compression for performance reason
                 std::uint32_t srcSize = static_cast<std::uint32_t>(sendBuffer.size());
                 // lz4 compression
@@ -248,6 +246,8 @@ int loli_server_start(int port) {
 }
 
 void loli_server_send(const char* data, unsigned int size) {
+    if (ignoreCache_)
+        return;
     std::lock_guard<loli::spinlock> lock(cacheLock_);
     cache_.emplace_back(io::buffer(data, size));
 }

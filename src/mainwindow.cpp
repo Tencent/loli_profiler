@@ -431,6 +431,7 @@ int MainWindow::LoadFromFile(QFile *file) {
     SwitchStackTraceModel(stacktraceProxyModel_);
     stream >> value;
     QVector<StackRecord> records;
+    records.reserve(value);
     for (int i = 0; i < value; i++) {
         StackRecord record;
         QString str;

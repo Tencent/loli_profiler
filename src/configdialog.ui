@@ -13,6 +13,9 @@
     <height>400</height>
    </rect>
   </property>
+  <property name="contextMenuPolicy">
+   <enum>Qt::ActionsContextMenu</enum>
+  </property>
   <property name="windowTitle">
    <string>Edit Configuration</string>
   </property>
@@ -35,26 +38,17 @@
    <property name="spacing">
     <number>6</number>
    </property>
-   <item row="5" column="1">
-    <widget class="QComboBox" name="archComboBox">
-     <item>
-      <property name="text">
-       <string>armeabi-v7a</string>
-      </property>
-     </item>
-     <item>
-      <property name="text">
-       <string>arm64-v8a</string>
-      </property>
-     </item>
-     <item>
-      <property name="text">
-       <string>armeabi</string>
-      </property>
-     </item>
+   <item row="2" column="0">
+    <widget class="QLabel" name="label_5">
+     <property name="text">
+      <string>Android NDK</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
+     </property>
     </widget>
    </item>
-   <item row="3" column="0">
+   <item row="4" column="0">
     <widget class="QLabel" name="label_6">
      <property name="text">
       <string>Mode</string>
@@ -64,94 +58,7 @@
      </property>
     </widget>
    </item>
-   <item row="6" column="1">
-    <widget class="QSpinBox" name="thresholdSpinBox">
-     <property name="sizePolicy">
-      <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-       <horstretch>0</horstretch>
-       <verstretch>0</verstretch>
-      </sizepolicy>
-     </property>
-     <property name="toolTip">
-      <string>Malloc stacktrace collect threshold.</string>
-     </property>
-     <property name="suffix">
-      <string> byte</string>
-     </property>
-     <property name="prefix">
-      <string/>
-     </property>
-     <property name="maximum">
-      <number>1048576</number>
-     </property>
-     <property name="value">
-      <number>1024</number>
-     </property>
-    </widget>
-   </item>
-   <item row="8" column="0">
-    <widget class="QLabel" name="label_4">
-     <property name="sizePolicy">
-      <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
-       <horstretch>0</horstretch>
-       <verstretch>0</verstretch>
-      </sizepolicy>
-     </property>
-     <property name="text">
-      <string>Libraries</string>
-     </property>
-     <property name="alignment">
-      <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
-     </property>
-    </widget>
-   </item>
    <item row="4" column="1">
-    <widget class="QComboBox" name="buildComboBox">
-     <item>
-      <property name="text">
-       <string>default</string>
-      </property>
-     </item>
-     <item>
-      <property name="text">
-       <string>instrumented</string>
-      </property>
-     </item>
-     <item>
-      <property name="text">
-       <string>framepointer</string>
-      </property>
-     </item>
-    </widget>
-   </item>
-   <item row="0" column="0">
-    <widget class="QLabel" name="label_3">
-     <property name="text">
-      <string>Android SDK</string>
-     </property>
-     <property name="alignment">
-      <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
-     </property>
-    </widget>
-   </item>
-   <item row="7" column="1">
-    <widget class="QComboBox" name="typeComboBox">
-     <property name="toolTip">
-      <string/>
-     </property>
-     <item>
-      <property name="text">
-       <string>white list</string>
-      </property>
-     </item>
-     <item>
-      <property name="text">
-       <string>black list</string>
-      </property>
-     </item>
-    </widget>
-   </item>
-   <item row="3" column="1">
     <widget class="QComboBox" name="modeComboBox">
      <item>
       <property name="text">
@@ -171,22 +78,31 @@
     </widget>
    </item>
    <item row="1" column="1">
-    <layout class="QHBoxLayout" name="horizontalLayout_2">
+    <layout class="QHBoxLayout" name="horizontalLayout">
+     <property name="spacing">
+      <number>4</number>
+     </property>
      <property name="sizeConstraint">
       <enum>QLayout::SetMinimumSize</enum>
      </property>
      <item>
-      <widget class="QLineEdit" name="lineEditNDKFolder">
+      <widget class="QLineEdit" name="lineEditSDKFolder">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
        <property name="readOnly">
         <bool>true</bool>
        </property>
        <property name="placeholderText">
-        <string>Path to Android NDK</string>
+        <string>Path to Android SDK</string>
        </property>
       </widget>
      </item>
      <item>
-      <widget class="QPushButton" name="btnNDKFolder">
+      <widget class="QPushButton" name="btnSDKFolder">
        <property name="sizePolicy">
         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
          <horstretch>0</horstretch>
@@ -207,7 +123,7 @@
      </item>
     </layout>
    </item>
-   <item row="8" column="1">
+   <item row="9" column="1">
     <widget class="QStackedWidget" name="libraryStackedWidget">
      <property name="currentIndex">
       <number>1</number>
@@ -290,7 +206,32 @@
      </widget>
     </widget>
    </item>
-   <item row="5" column="0">
+   <item row="7" column="1">
+    <widget class="QSpinBox" name="thresholdSpinBox">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="toolTip">
+      <string>Malloc stacktrace collect threshold.</string>
+     </property>
+     <property name="suffix">
+      <string> byte</string>
+     </property>
+     <property name="prefix">
+      <string/>
+     </property>
+     <property name="maximum">
+      <number>1048576</number>
+     </property>
+     <property name="value">
+      <number>1024</number>
+     </property>
+    </widget>
+   </item>
+   <item row="6" column="0">
     <widget class="QLabel" name="label">
      <property name="text">
       <string>Architecture</string>
@@ -300,17 +241,17 @@
      </property>
     </widget>
    </item>
-   <item row="1" column="0">
-    <widget class="QLabel" name="label_5">
-     <property name="text">
-      <string>Android NDK</string>
+   <item row="5" column="0">
+    <widget class="QLabel" name="label_8">
+     <property name="contextMenuPolicy">
+      <enum>Qt::NoContextMenu</enum>
      </property>
-     <property name="alignment">
-      <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
+     <property name="text">
+      <string>Build</string>
      </property>
     </widget>
    </item>
-   <item row="6" column="0">
+   <item row="7" column="0">
     <widget class="QLabel" name="label_2">
      <property name="text">
       <string>Threshold</string>
@@ -320,32 +261,103 @@
      </property>
     </widget>
    </item>
-   <item row="0" column="1">
-    <layout class="QHBoxLayout" name="horizontalLayout">
-     <property name="spacing">
-      <number>4</number>
+   <item row="9" column="0">
+    <widget class="QLabel" name="label_4">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
      </property>
+     <property name="text">
+      <string>Libraries</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
+     </property>
+    </widget>
+   </item>
+   <item row="3" column="0">
+    <widget class="QLabel" name="label_9">
+     <property name="text">
+      <string>Compiler</string>
+     </property>
+    </widget>
+   </item>
+   <item row="8" column="1">
+    <widget class="QComboBox" name="typeComboBox">
+     <property name="toolTip">
+      <string/>
+     </property>
+     <item>
+      <property name="text">
+       <string>white list</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>black list</string>
+      </property>
+     </item>
+    </widget>
+   </item>
+   <item row="8" column="0">
+    <widget class="QLabel" name="label_7">
+     <property name="text">
+      <string>Type</string>
+     </property>
+    </widget>
+   </item>
+   <item row="5" column="1">
+    <widget class="QComboBox" name="buildComboBox">
+     <item>
+      <property name="text">
+       <string>default</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>instrumented</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>framepointer</string>
+      </property>
+     </item>
+    </widget>
+   </item>
+   <item row="3" column="1">
+    <widget class="QComboBox" name="compilerComboBox">
+     <item>
+      <property name="text">
+       <string>gcc</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>llvm</string>
+      </property>
+     </item>
+    </widget>
+   </item>
+   <item row="2" column="1">
+    <layout class="QHBoxLayout" name="horizontalLayout_2">
      <property name="sizeConstraint">
       <enum>QLayout::SetMinimumSize</enum>
      </property>
      <item>
-      <widget class="QLineEdit" name="lineEditSDKFolder">
-       <property name="sizePolicy">
-        <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-         <horstretch>0</horstretch>
-         <verstretch>0</verstretch>
-        </sizepolicy>
-       </property>
+      <widget class="QLineEdit" name="lineEditNDKFolder">
        <property name="readOnly">
         <bool>true</bool>
        </property>
        <property name="placeholderText">
-        <string>Path to Android SDK</string>
+        <string>Path to Android NDK</string>
        </property>
       </widget>
      </item>
      <item>
-      <widget class="QPushButton" name="btnSDKFolder">
+      <widget class="QPushButton" name="btnNDKFolder">
        <property name="sizePolicy">
         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
          <horstretch>0</horstretch>
@@ -366,43 +378,62 @@
      </item>
     </layout>
    </item>
-   <item row="7" column="0">
-    <widget class="QLabel" name="label_7">
-     <property name="text">
-      <string>Type</string>
-     </property>
-    </widget>
-   </item>
-   <item row="4" column="0">
-    <widget class="QLabel" name="label_8">
-     <property name="contextMenuPolicy">
-      <enum>Qt::NoContextMenu</enum>
-     </property>
-     <property name="text">
-      <string>Build</string>
-     </property>
-    </widget>
-   </item>
-   <item row="2" column="0">
-    <widget class="QLabel" name="label_9">
-     <property name="text">
-      <string>Compiler</string>
-     </property>
-    </widget>
-   </item>
-   <item row="2" column="1">
-    <widget class="QComboBox" name="compilerComboBox">
+   <item row="6" column="1">
+    <widget class="QComboBox" name="archComboBox">
      <item>
       <property name="text">
-       <string>gcc</string>
+       <string>armeabi-v7a</string>
       </property>
      </item>
      <item>
       <property name="text">
-       <string>llvm</string>
+       <string>arm64-v8a</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>armeabi</string>
       </property>
      </item>
     </widget>
+   </item>
+   <item row="1" column="0">
+    <widget class="QLabel" name="label_3">
+     <property name="text">
+      <string>Android SDK</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
+     </property>
+    </widget>
+   </item>
+   <item row="0" column="0">
+    <widget class="QLabel" name="label_10">
+     <property name="text">
+      <string>Saved</string>
+     </property>
+    </widget>
+   </item>
+   <item row="0" column="1">
+    <layout class="QHBoxLayout" name="horizontalLayout_3">
+     <property name="spacing">
+      <number>6</number>
+     </property>
+     <item>
+      <widget class="QPushButton" name="btnLoad">
+       <property name="text">
+        <string>Load</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btnSave">
+       <property name="text">
+        <string>Save</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
    </item>
   </layout>
  </widget>

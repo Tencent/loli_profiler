@@ -12,18 +12,23 @@ class ConfigDialog : public QDialog {
 public:
     explicit ConfigDialog(QWidget *parent = nullptr);
     ~ConfigDialog();
-    void LoadConfigFile(const QString& arch, const QString& compiler);
+    void LoadConfigFile();
+    void ReadCurrentSettings();
+    void WriteCurrentSettings();
     void OnPasteClipboard();
-    QString GetArchString() const;
-    QString GetCompilerString() const;
+    void SaveConfigFile();
 
     struct Settings {
         int threshold_ = 128;
-        QStringList whitelist_;
-        QStringList blacklist_;
         QString mode_ = "strict";
         QString build_ = "default";
         QString type_ = "white list";
+        QString arch_ = "armeabi-v7a";
+        QString compiler_ = "gcc";
+        QStringList whitelist_;
+        QStringList blacklist_;
+        Settings() = default;
+        Settings(const Settings&) = default;
     };
     static Settings ParseConfigFile();
     static bool IsNoStackMode();
@@ -37,6 +42,8 @@ private slots:
     void on_btnNDKFolder_clicked();
     void on_modeComboBox_currentIndexChanged(const QString &arg);
     void on_typeComboBox_currentIndexChanged(int index);
+    void on_btnLoad_clicked();
+    void on_btnSave_clicked();
 
 private:
     Ui::ConfigDialog *ui;

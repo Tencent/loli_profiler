@@ -8,8 +8,18 @@
 
 #include <functional>
 
-class SelectAppDialog : public QDialog
-{
+class ArrowLineEdit : public QLineEdit {
+    Q_OBJECT
+public:
+    ArrowLineEdit(QListWidget* listView, QWidget *parent = nullptr);
+    void keyPressEvent(QKeyEvent *event);
+private slots:
+    void onTextChanged(const QString&);
+private:
+    QListWidget* listView_;
+};
+
+class SelectAppDialog : public QDialog {
     Q_OBJECT
 public:
     SelectAppDialog(QWidget *parent = nullptr, Qt::WindowFlags f = Qt::WindowFlags());

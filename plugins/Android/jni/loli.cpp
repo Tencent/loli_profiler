@@ -382,6 +382,8 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
             buildtype = words[1];
             isFramePointer_ = words[1] == "framepointer";
             isInstrumented_ = words[1] == "instrumented";
+        } else if (words[0] == "saved") {
+            break;
         }
     }
     hookLibraries = isBlacklist_ ? blacklist : whitelist;

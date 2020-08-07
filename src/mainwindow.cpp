@@ -66,6 +66,9 @@ MainWindow::MainWindow(QWidget *parent) :
 
     maxTime_ = std::numeric_limits<double>::max();
 
+    // Parse or create config file
+    ConfigDialog::ParseConfigFile();
+
     progressDialog_ = new QProgressDialog(this, Qt::WindowTitleHint | Qt::CustomizeWindowHint);
     progressDialog_->setWindowModality(Qt::WindowModal);
     progressDialog_->setAutoClose(true);
@@ -204,8 +207,8 @@ const QString SETTINGS_LOWER__SPLITER = "Lower_Spliter";
 const QString SETTINGS_SCALEHSLIDER = "ChartScaleHSlider";
 const QString SETTINGS_LASTOPENDIR = "lastopen_dir";
 const QString SETTINGS_LASTSYMBOLDIR = "lastsymbol_dir";
-const QString SETTINGS_ARCH = "target_arch";
-const QString SETTINGS_COMPILER = "target_compiler";
+//const QString SETTINGS_ARCH = "target_arch";
+//const QString SETTINGS_COMPILER = "target_compiler";
 const QString SETTINGS_ANDROIDSDK = "AndroidSDK";
 const QString SETTINGS_ANDROIDNDK = "AndroidNDK";
 
@@ -227,8 +230,8 @@ void MainWindow::LoadSettings() {
     auto lastSymbolDir = settings.value(SETTINGS_LASTSYMBOLDIR).toString();
     if (QDir(lastSymbolDir).exists())
         lastSymbolDir_ = lastSymbolDir;
-    targetArch_ = settings.value(SETTINGS_ARCH, "armeabi-v7a").toString();
-    targetCompiler_ = settings.value(SETTINGS_COMPILER, "gcc").toString();
+//    targetArch_ = settings.value(SETTINGS_ARCH, "armeabi-v7a").toString();
+//    targetCompiler_ = settings.value(SETTINGS_COMPILER, "gcc").toString();
     PathUtils::SetSDKPath(settings.value(SETTINGS_ANDROIDSDK).toString());
     PathUtils::SetNDKPath(settings.value(SETTINGS_ANDROIDNDK).toString());
 }
@@ -1086,12 +1089,15 @@ void MainWindow::InterpretStacktraceData() {
 void MainWindow::FixedUpdate() {
     if (!isConnected_)
         return;
-    if (time_ - lastScreenshotTime_ >= 5 && !screenshotProcess_->IsRunning()) {
-        lastScreenshotTime_ = time_;
-        screenshotProcess_->CaptureScreenshot();
-    }
-    if (!memInfoProcess_->IsRunning() && !memInfoProcess_->HasErrors()) {
-        memInfoProcess_->DumpMemInfoAsync(ui->appNameLineEdit->text());
+    // don't request meminfo & screenshot while dumping smaps file
+    if (!smapsTimer_->isActive()) {
+        if (time_ - lastScreenshotTime_ >= 5 && !screenshotProcess_->IsRunning()) {
+            lastScreenshotTime_ = time_;
+            screenshotProcess_->CaptureScreenshot();
+        }
+        if (!memInfoProcess_->IsRunning() && !memInfoProcess_->HasErrors()) {
+            memInfoProcess_->DumpMemInfoAsync(ui->appNameLineEdit->text());
+        }
     }
     if (!stacktraceProcess_->IsConnecting() && !stacktraceProcess_->IsConnected()) {
         stacktraceProcess_->ConnectToServer(port_);
@@ -1514,9 +1520,6 @@ void MainWindow::on_launchPushButton_clicked() {
         return;
     }
 
-    // make sure config file exists
-    ConfigDialog::ParseConfigFile();
-
     progressDialog_->setWindowTitle("Launch Progress");
     progressDialog_->setLabelText("Preparing ...");
     progressDialog_->setMinimum(0);
@@ -1569,10 +1572,12 @@ void MainWindow::on_launchPushButton_clicked() {
         }
     }
 
+    auto settings = ConfigDialog::GetCurrentSettings();
+
     showJDWPErrorLog_ = true;
     startAppProcess_->SetPythonPath(pythonPath);
     startAppProcess_->SetExecutablePath(adbPath);
-    startAppProcess_->StartApp(ui->appNameLineEdit->text(), targetCompiler_, targetArch_, enableInject, progressDialog_);
+    startAppProcess_->StartApp(ui->appNameLineEdit->text(), settings.compiler_, settings.arch_, enableInject, progressDialog_);
 
     isCapturing_ = true;
     Print("Starting application ...");
@@ -1589,7 +1594,7 @@ void MainWindow::on_symbloPushButton_clicked() {
     if (!QFile::exists(symbloPath))
         return;
     lastSymbolDir_ = QFileInfo(symbloPath).dir().absolutePath();
-    auto nmPath = PathUtils::GetNDKToolPath("nm", targetArch_ != "arm64-v8a");
+    auto nmPath = PathUtils::GetNDKToolPath("nm", ConfigDialog::GetCurrentSettings().arch_ != "arm64-v8a");
     if (nmPath.isEmpty() || !QFile::exists(nmPath)) {
         QMessageBox::warning(this, "Warning", ANDROID_NDK_NOTFOUND_MSG);
         return;
@@ -1705,19 +1710,19 @@ void MainWindow::on_symbloPushButton_clicked() {
 }
 
 void MainWindow::on_configPushButton_clicked() {
-    QSettings settings("MoreFun", "LoliProfiler");
-    targetArch_ = settings.value(SETTINGS_ARCH).toString();
-    targetCompiler_ = settings.value(SETTINGS_COMPILER).toString();
+//    QSettings settings("MoreFun", "LoliProfiler");
+//    targetArch_ = settings.value(SETTINGS_ARCH).toString();
+//    targetCompiler_ = settings.value(SETTINGS_COMPILER).toString();
     ConfigDialog dialog(this);
     dialog.setWindowFlags(dialog.windowFlags() | Qt::WindowTitleHint | Qt::WindowCloseButtonHint);
     dialog.setWindowModality(Qt::WindowModal);
-    dialog.LoadConfigFile(targetArch_, targetCompiler_);
-    connect(&dialog, &QDialog::finished, [this, &dialog, &settings](int) {
-        targetArch_ = dialog.GetArchString();
-        targetCompiler_ = dialog.GetCompilerString();
-        settings.setValue(SETTINGS_ARCH, targetArch_);
-        settings.setValue(SETTINGS_COMPILER, targetCompiler_);
-    });
+    dialog.LoadConfigFile();
+//    connect(&dialog, &QDialog::finished, [this, &dialog, &settings](int) {
+//        targetArch_ = dialog.GetArchString();
+//        targetCompiler_ = dialog.GetCompilerString();
+//        settings.setValue(SETTINGS_ARCH, targetArch_);
+//        settings.setValue(SETTINGS_COMPILER, targetCompiler_);
+//    });
     dialog.exec();
 }
 

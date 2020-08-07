@@ -1,6 +1,7 @@
 #include "configdialog.h"
 #include "ui_configdialog.h"
 #include "pathutils.h"
+#include "selectappdialog.h"
 
 #include <QClipboard>
 #include <QMimeData>
@@ -12,9 +13,12 @@
 #include <QMenu>
 #include <QTextStream>
 #include <QSettings>
+#include <QListWidget>
+#include <QLineEdit>
 #include <QDebug>
 
 static ConfigDialog::Settings currentSettings_;
+static QMap<QString, ConfigDialog::Settings> savedSettings_;
 static bool settingsInitialized_ = false;
 
 ConfigDialog::ConfigDialog(QWidget *parent) :
@@ -26,16 +30,21 @@ ConfigDialog::~ConfigDialog() {
     delete ui;
 }
 
-void ConfigDialog::LoadConfigFile(const QString& arch, const QString& compiler) {
+void ConfigDialog::LoadConfigFile() {
     ui->lineEditSDKFolder->setText(PathUtils::GetSDKPath());
     ui->lineEditNDKFolder->setText(PathUtils::GetNDKPath());
     ParseConfigFile();
-    ui->compilerComboBox->setCurrentText(compiler);
+    ReadCurrentSettings();
+}
+
+void ConfigDialog::ReadCurrentSettings() {
+    ui->compilerComboBox->setCurrentText(currentSettings_.compiler_);
     ui->modeComboBox->setCurrentText(currentSettings_.mode_);
     ui->buildComboBox->setCurrentText(currentSettings_.build_);
-    ui->archComboBox->setCurrentText(arch);
-    ui->typeComboBox->setCurrentText(currentSettings_.type_);
+    ui->archComboBox->setCurrentText(currentSettings_.arch_);
+    ui->blacklistWidget->clear();
     ui->blacklistWidget->addItems(currentSettings_.blacklist_);
+    ui->whitelistWidget->clear();
     ui->whitelistWidget->addItems(currentSettings_.whitelist_);
     for (int i = 0; i < ui->blacklistWidget->count(); i++) {
         auto item = ui->blacklistWidget->item(i);
@@ -46,7 +55,27 @@ void ConfigDialog::LoadConfigFile(const QString& arch, const QString& compiler) 
         item->setFlags(item->flags() | Qt::ItemIsEditable);
     }
     ui->thresholdSpinBox->setValue(currentSettings_.threshold_);
+    ui->typeComboBox->setCurrentText(currentSettings_.type_);
     ui->libraryStackedWidget->setCurrentIndex(ui->typeComboBox->currentIndex());
+}
+
+void ConfigDialog::WriteCurrentSettings() {
+    currentSettings_.mode_ = ui->modeComboBox->currentText();
+    currentSettings_.build_ = ui->buildComboBox->currentText();
+    currentSettings_.type_ = ui->typeComboBox->currentText();
+    currentSettings_.threshold_ = ui->thresholdSpinBox->value();
+    currentSettings_.arch_ = ui->archComboBox->currentText();
+    currentSettings_.compiler_ = ui->compilerComboBox->currentText();
+    auto numLibs = ui->whitelistWidget->count();
+    currentSettings_.whitelist_.clear();
+    for (int i = 0; i < numLibs; i++) {
+        currentSettings_.whitelist_ << ui->whitelistWidget->item(i)->text();
+    }
+    currentSettings_.blacklist_.clear();
+    numLibs = ui->blacklistWidget->count();
+    for (int i = 0; i < numLibs; i++) {
+        currentSettings_.blacklist_ << ui->blacklistWidget->item(i)->text();
+    }
 }
 
 void ConfigDialog::OnPasteClipboard() {
@@ -68,12 +97,43 @@ void ConfigDialog::OnPasteClipboard() {
     }
 }
 
-QString ConfigDialog::GetArchString() const {
-    return ui->archComboBox->currentText();
-}
-
-QString ConfigDialog::GetCompilerString() const {
-    return ui->compilerComboBox->currentText();
+void ConfigDialog::SaveConfigFile() {
+    auto cfgPath = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).first();
+    WriteCurrentSettings();
+    QFile file(cfgPath + "/loli2.conf");
+    file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+    if (file.open(QIODevice::ReadWrite | QIODevice::Truncate | QIODevice::Text)) {
+        QTextStream stream(&file);
+        auto saveSettings = [](QTextStream& stream, const Settings& settings) {
+            stream << "threshold:" << settings.threshold_ << endl;
+            stream << "whitelist:";
+            auto numLibs = settings.whitelist_.count();
+            for (int i = 0; i < numLibs; i++) {
+                stream << settings.whitelist_[i];
+                if (i != numLibs) stream << ',';
+            }
+            stream << endl;
+            stream << "blacklist:";
+            numLibs = settings.blacklist_.count();
+            for (int i = 0; i < numLibs; i++) {
+                stream << settings.blacklist_[i];
+                if (i != numLibs) stream << ',';
+            }
+            stream << endl;
+            stream << "mode:" << settings.mode_ << endl;
+            stream << "build:" << settings.build_ << endl;
+            stream << "type:" << settings.type_ << endl;
+            stream << "arch:" << settings.arch_ << endl;
+            stream << "compiler:" << settings.compiler_ << endl;
+        };
+        saveSettings(stream, currentSettings_);
+        for (auto it = savedSettings_.begin(); it != savedSettings_.end(); ++it) {
+            stream << "saved:" << it.key() << endl;
+            saveSettings(stream, it.value());
+        }
+        stream.flush();
+    }
+    file.close();
 }
 
 ConfigDialog::Settings ConfigDialog::ParseConfigFile() {
@@ -83,6 +143,8 @@ ConfigDialog::Settings ConfigDialog::ParseConfigFile() {
     auto cfgPath = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).first();
     QFile file(cfgPath + "/loli2.conf");
     file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+    Settings* settings = &currentSettings_;
+    savedSettings_.clear();
     if (file.open(QIODevice::ReadOnly)) {
         QTextStream stream(file.readAll());
         QString line;
@@ -91,17 +153,23 @@ ConfigDialog::Settings ConfigDialog::ParseConfigFile() {
             if (words.size() < 2)
                 continue;
             if (words[0] == "threshold") {
-                currentSettings_.threshold_ = words[1].toInt();
+                settings->threshold_ = words[1].toInt();
             } else if (words[0] == "whitelist") {
-                currentSettings_.whitelist_ = words[1].split(',', QString::SplitBehavior::SkipEmptyParts);
+                settings->whitelist_ = words[1].split(',', QString::SplitBehavior::SkipEmptyParts);
             } else if (words[0] == "blacklist") {
-                currentSettings_.blacklist_ = words[1].split(',', QString::SplitBehavior::SkipEmptyParts);
+                settings->blacklist_ = words[1].split(',', QString::SplitBehavior::SkipEmptyParts);
             } else if (words[0] == "mode") {
-                currentSettings_.mode_ = words[1];
+                settings->mode_ = words[1];
             } else if (words[0] == "build") {
-                currentSettings_.build_ = words[1];
+                settings->build_ = words[1];
             } else if (words[0] == "type") {
-                currentSettings_.type_ = words[1];
+                settings->type_ = words[1];
+            } else if (words[0] == "arch") {
+                settings->arch_ = words[1];
+            } else if (words[0] == "compiler") {
+                settings->compiler_ = words[1];
+            } else if (words[0] == "saved") {
+                settings = &savedSettings_[words[1]];
             }
         }
     }
@@ -135,7 +203,8 @@ bool ConfigDialog::CreateIfNoConfigFile(QWidget *parent) {
             stream << "threshold:256" << endl <<
                       "whitelist:libunity,libil2cpp" << endl <<
                       "blacklist:libloli,libart,libc++,libc,libcutils" << endl <<
-                      "mode:strict" << endl << "build:default" << endl << "type:white list";
+                      "mode:strict" << endl << "build:default" << endl << "type:white list" << endl <<
+                      "arch:armeabi-v7a" << endl << "compiler:gcc";
             stream.flush();
             return true;
         } else {
@@ -146,42 +215,7 @@ bool ConfigDialog::CreateIfNoConfigFile(QWidget *parent) {
 }
 
 void ConfigDialog::on_ConfigDialog_finished(int) {
-    auto cfgPath = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).first();
-    QStringList libraries;
-    QFile file(cfgPath + "/loli2.conf");
-    file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
-    if (file.open(QIODevice::ReadWrite | QIODevice::Truncate | QIODevice::Text)) {
-        QTextStream stream(&file);
-        stream << "threshold:" << ui->thresholdSpinBox->value() << endl;
-        stream << "whitelist:";
-        auto numLibs = ui->whitelistWidget->count();
-        for (int i = 0; i < numLibs; i++) {
-            libraries << ui->whitelistWidget->item(i)->text();
-            stream << ui->whitelistWidget->item(i)->text();
-            if (i != numLibs - 1) stream << ',';
-        }
-        stream << endl;
-        stream << "blacklist:";
-        numLibs = ui->blacklistWidget->count();
-        for (int i = 0; i < numLibs; i++) {
-            libraries << ui->blacklistWidget->item(i)->text();
-            stream << ui->blacklistWidget->item(i)->text();
-            if (i != numLibs - 1) stream << ',';
-        }
-        stream << endl;
-        stream << "mode:" << ui->modeComboBox->currentText();
-        stream << endl;
-        stream << "build:" << ui->buildComboBox->currentText();
-        stream << endl;
-        stream << "type:" << ui->typeComboBox->currentText();
-        stream.flush();
-    }
-    currentSettings_.mode_ = ui->modeComboBox->currentText();
-    currentSettings_.build_ = ui->buildComboBox->currentText();
-    currentSettings_.type_ = ui->typeComboBox->currentText();
-    currentSettings_.whitelist_ = libraries;
-    currentSettings_.threshold_ = ui->thresholdSpinBox->value();
-    file.close();
+    SaveConfigFile();
 }
 
 void ConfigDialog::on_btnSDKFolder_clicked() {
@@ -217,4 +251,82 @@ void ConfigDialog::on_modeComboBox_currentIndexChanged(const QString &arg) {
 
 void ConfigDialog::on_typeComboBox_currentIndexChanged(int index) {
     ui->libraryStackedWidget->setCurrentIndex(index);
+}
+
+void ConfigDialog::on_btnLoad_clicked() {
+    QDialog dialog(this, Qt::WindowTitleHint | Qt::WindowCloseButtonHint);
+    QListWidget* listWidget = new QListWidget(&dialog);
+    auto layout = new QVBoxLayout();
+    layout->setMargin(2);
+    layout->setSpacing(2);
+    listWidget->setSelectionMode(QListWidget::SelectionMode::SingleSelection);
+    listWidget->addItems(savedSettings_.keys());
+    listWidget->setContextMenuPolicy(Qt::ContextMenuPolicy::ActionsContextMenu);
+    QAction* deleteAction = new QAction("Delete Selected", listWidget);
+    bool anyItemRemoved = false;
+    connect(deleteAction, &QAction::triggered, [&](){
+        auto selectedItems = listWidget->selectedItems();
+        if (selectedItems.size() == 0)
+            return;
+        auto item = selectedItems[0];
+        savedSettings_.remove(item->text());
+        delete listWidget->takeItem(listWidget->row(item));
+        anyItemRemoved = true;
+    });
+    listWidget->addAction(deleteAction);
+    connect(listWidget, &QListWidget::itemActivated, [&](QListWidgetItem* item) {
+        currentSettings_ = savedSettings_[item->text()];
+        ReadCurrentSettings();
+        dialog.close();
+    });
+    layout->addWidget(listWidget);
+    listWidget->setFocus();
+    dialog.setLayout(layout);
+    dialog.setWindowModality(Qt::WindowModal);
+    dialog.setWindowTitle("Load Saved Settings");
+    dialog.setMinimumSize(400, 300);
+    dialog.exec();
+    if (anyItemRemoved) {
+        SaveConfigFile();
+    }
+}
+
+void ConfigDialog::on_btnSave_clicked() {
+    QDialog dialog(this, Qt::WindowTitleHint | Qt::WindowCloseButtonHint);
+    auto layout = new QVBoxLayout();
+    layout->setMargin(2);
+    layout->setSpacing(2);
+    auto listWidget = new QListWidget();
+    listWidget->setSelectionMode(QListWidget::SelectionMode::SingleSelection);
+    listWidget->addItems(savedSettings_.keys());
+    listWidget->setCurrentItem(listWidget->item(0));
+    auto lineEdit = new ArrowLineEdit(listWidget);
+    lineEdit->setPlaceholderText("Type name here and press enter to commit.");
+    connect(listWidget, &QListWidget::itemActivated, [&](QListWidgetItem *item) {
+        lineEdit->setText(item->text());
+        lineEdit->setFocus();
+    });
+    connect(lineEdit, &QLineEdit::returnPressed, [&]() {
+        auto key = lineEdit->text();
+        if (key.size() == 0) {
+            return;
+        }
+        if (savedSettings_.contains(key)) {
+            if (QMessageBox::question(&dialog, "Attention",
+                                      QString("%1 exists, override?").arg(key)) == QMessageBox::No) {
+                return;
+            }
+        }
+        WriteCurrentSettings();
+        savedSettings_[key] = currentSettings_;
+        dialog.close();
+    });
+    layout->addWidget(lineEdit);
+    layout->addWidget(listWidget);
+    lineEdit->setFocus();
+    dialog.setLayout(layout);
+    dialog.setWindowModality(Qt::WindowModal);
+    dialog.setWindowTitle("Saved Current Settings");
+    dialog.setMinimumSize(300, 50);
+    dialog.exec();
 }

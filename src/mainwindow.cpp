@@ -1061,9 +1061,7 @@ void MainWindow::InterpretStacktraceData() {
         QCoreApplication::instance()->sendPostedEvents();
         for (int i = 0; i < futures.size(); i++) {
             progressDialog_->setValue(i);
-            auto future = futures[i];
-            if (!future.isFinished())
-                futures[i].waitForFinished();
+            auto& future = futures[i];
             const auto& trace = future.result();
             for (const auto& record : trace.records_) {
                 TryAddNewAddress(record.first.Get(), record.second);

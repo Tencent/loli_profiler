@@ -149,6 +149,14 @@ void *loli_index_memalign(size_t alignment, size_t size, int index) {
     return addr;
 }
 
+int loli_index_posix_memalign(void** ptr, size_t alignment, size_t size, int index) {
+    int ecode = posix_memalign(ptr, alignment, size);
+    if (ecode == 0) {
+        loli_maybe_record_alloc(size, *ptr, loliFlags::MEMALIGN_, index);
+    }
+    return ecode;
+}
+
 void *loli_index_realloc(void *ptr, size_t new_size, int index) {
     void* addr = realloc(ptr, new_size);
     if (addr != 0) {
@@ -215,6 +223,8 @@ bool loli_hook_library(const char* library, so_info_map& infoMap) {
         xhook_register(regex.c_str(), "free", (void*)loli_free, nullptr);
         xhook_register(regex.c_str(), "calloc", (void*)info->calloc, nullptr);
         xhook_register(regex.c_str(), "memalign", (void*)info->memalign, nullptr);
+        xhook_register(regex.c_str(), "aligned_alloc", (void*)info->memalign, nullptr);
+        xhook_register(regex.c_str(), "posix_memalign", (void*)info->posix_memalign, nullptr);
         xhook_register(regex.c_str(), "realloc", (void*)info->realloc, nullptr);
         return true;
     } else {

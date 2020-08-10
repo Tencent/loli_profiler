@@ -86,6 +86,7 @@ private slots:
     void OnTimelineRubberBandSelected(double from, double to);
     void OnTimelineRubberBandHide();
     void OnStackTableViewContextMenu(const QPoint & pos);
+    void OnDumpingLineNumbers();
     void OnStackTableViewSelectionChanged(const QItemSelection &selected, const QItemSelection &deselected);
 
     void StartAppProcessFinished(AdbProcess* process);

@@ -1153,6 +1153,83 @@ void MainWindow::OnStackTableViewContextMenu(const QPoint & pos) {
         stream.flush();
         QApplication::clipboard()->setText(output);
     });
+    auto actionLinenumber = new QAction("Copy with LineNumber");
+    menu.addAction(actionLinenumber);
+    connect(actionLinenumber, &QAction::triggered, this, [this]() {
+        const auto& indexes = ui->stackTableView->selectionModel()->selection().indexes();
+        if (indexes.size() == 0)
+            return;
+        auto selectedIndex = indexes.front();
+        if (!selectedIndex.isValid())
+            return;
+        auto addr2linePath = PathUtils::GetNDKToolPath("addr2line", ConfigDialog::GetCurrentSettings().arch_ != "arm64-v8a");
+        if (addr2linePath.isEmpty() || !QFile::exists(addr2linePath)) {
+            QMessageBox::warning(this, "Warning", ANDROID_NDK_NOTFOUND_MSG);
+            return;
+        }
+        auto proxyModel = static_cast<StackTraceProxyModel*>(ui->stackTableView->model());
+        auto srcModel = static_cast<StackTraceModel*>(proxyModel->sourceModel());
+        auto& selectedRecord = srcModel->recordAt(proxyModel->mapToSource(selectedIndex).row());
+        auto& callStack = callStackMap_[selectedRecord.uuid_];
+        // <libName, <libPath, List of lib addresses>>
+        QMap<QString, QPair<QString, QStringList>> libraries;
+        for (int i = 0; i < callStack.size(); i++) {
+            const auto& libName = callStack[i].first.Get();
+            const auto& funcAddr = QString::number(callStack[i].second, 16);
+            if (libraries.contains(libName)) {
+                libraries[libName].second << funcAddr;
+                continue;
+            }
+            auto& libInfo = libraries[libName];
+            libInfo.first = QString();
+            auto symbloPath = QFileDialog::getOpenFileName(this, QString("Select Symblo For %1").arg(libName),
+                                                           GetLastSymbolDir(), tr("Library Files (*.sym *.sym.so *.so)"));
+            if (!QFile::exists(symbloPath))
+                continue;
+            libInfo.first = symbloPath;
+            libInfo.second << funcAddr;
+        }
+        // <libName + address, sourcecode path and line number>
+        QMap<QString, QString> addressInfos;
+        for (auto it = libraries.begin(); it != libraries.end(); ++it) {
+            auto libName = it.key();
+            auto libInfo = it.value();
+            auto libPath = libInfo.first;
+            const auto& addresses = libInfo.second;
+            if (libPath.isEmpty())
+                continue;
+            QProcess addr2lineProcess;
+            auto arguments = QStringList() << "-e" << libPath << addresses;
+            AdbProcess::SetArguments(&addr2lineProcess, arguments);
+            addr2lineProcess.setProgram(addr2linePath);
+            addr2lineProcess.start();
+            if (addr2lineProcess.waitForStarted()) {
+                if (addr2lineProcess.waitForFinished(10000)) {
+                    QString retStr = addr2lineProcess.readAll();
+                    QTextStream stream(&retStr);
+                    QString line;
+                    for (int i = 0; i < addresses.size() && stream.readLineInto(&line); i++) {
+                        addressInfos[libName + addresses[i]] = line;
+                    }
+                }
+            }
+        }
+        QString output;
+        QTextStream stream(&output);
+        for (int i = 0; i < callStack.size(); i++) {
+            const auto& libName = callStack[i].first.Get();
+            const auto& funcAddr = callStack[i].second;
+            const auto& funcName = TryAddNewAddress(libName, funcAddr);
+            auto addrKey = libName + QString::number(funcAddr, 16);
+            if (addressInfos.contains(addrKey)) {
+                stream << libName << ", " << addressInfos[addrKey] << endl;
+            } else {
+                stream << libName << ", " << funcName << endl;
+            }
+        }
+        stream.flush();
+        QApplication::clipboard()->setText(output);
+    });
     menu.exec(ui->stackTableView->viewport()->mapToGlobal(pos));
 }
 

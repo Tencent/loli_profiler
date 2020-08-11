@@ -93,6 +93,12 @@ build.bat
 
 ### ChangeList
 
+#### v0.9.9d
+
+提供[接口](https://git.code.oa.com/xinhou/loli_profiler/wikis/tutorial/hooking-memory-pool)支持Hook使用内存池的进程
+
+可将单条内存申请记录翻译为代码文件+行号，方便定位问题
+
 #### v0.9.9b
 
 实现了数据Streaming功能，有效降低了内存占用

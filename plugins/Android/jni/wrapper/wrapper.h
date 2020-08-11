@@ -15,6 +15,7 @@
 extern "C" {
 #endif // __cplusplus
 
+typedef void (*LOLI_ALLOC_FPTR)(void*, size_t);
 typedef void* (*MALLOC_FPTR)(size_t);
 typedef void (*FREE_FPTR)(void*);
 typedef void* (*CALLOC_FPTR)(int,int);
@@ -26,6 +27,7 @@ typedef int (*BACKTRACE_FPTR)(void** buffer, size_t max);
 typedef struct _hook_info {
     char* so_name = nullptr;
     uintptr_t so_baseaddr = 0;
+    LOLI_ALLOC_FPTR custom_alloc;
     MALLOC_FPTR malloc;
     FREE_FPTR free;
     CALLOC_FPTR calloc;

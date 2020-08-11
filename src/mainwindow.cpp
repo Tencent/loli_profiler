@@ -557,6 +557,14 @@ void MainWindow::ConnectionFailed() {
     ui->symbloPushButton->setEnabled(true);
     ui->toolBar->setEnabled(true);
     ui->stackTableView->setSortingEnabled(true);
+    // adb forward --remove-all
+    QProcess process;
+    process.setProgram(PathUtils::GetADBExecutablePath());
+    AdbProcess::SetArguments(&process, QStringList() << "forward" << "--remove-all");
+    process.start();
+    if (process.waitForStarted()) {
+        process.waitForFinished();
+    }
 }
 
 int MainWindow::GetScreenshotIndex(const QPointF& pos) const { // TODO: optimize with binary search
@@ -1095,7 +1103,8 @@ void MainWindow::FixedUpdate() {
         }
     }
     if (!stacktraceProcess_->IsConnecting() && !stacktraceProcess_->IsConnected()) {
-        stacktraceProcess_->ConnectToServer(port_);
+        static int port = 8000;
+        stacktraceProcess_->ConnectToServer(port++);
         Print("Connecting to application server ... ");
     }
     time_++;
@@ -1282,10 +1291,9 @@ void MainWindow::StartAppProcessFinished(AdbProcess* process) {
         return;
     }
     isConnected_ = true;
-    port_++;
     screenshotProcess_->SetExecutablePath(PathUtils::GetADBExecutablePath());
     stacktraceProcess_->SetExecutablePath(PathUtils::GetADBExecutablePath());
-    stacktraceProcess_->ForwardPort(port_);
+//    stacktraceProcess_->ForwardPort(port_);
     memInfoProcess_->SetExecutablePath(PathUtils::GetADBExecutablePath());
     lastScreenshotTime_ = time_ = 0;
     Print("Application Started!");

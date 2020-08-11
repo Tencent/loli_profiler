@@ -28,6 +28,12 @@ HOOK_INFO::~_hook_info() {
 
 #define SLOT_NUM 512
 
+#define _LOLI_ALLOC_WRAPPER(INDEX)\
+void _LOLI_ALLOC##INDEX(void *ptr, size_t size)\
+{\
+    loli_index_custom_alloc(ptr, size, INDEX);\
+}
+
 #define _MALLOC_WRAPPER(INDEX)\
 void *_MALLOC##INDEX(size_t size)\
 {\
@@ -59,6 +65,7 @@ void *_REALLOC##INDEX(void *ptr, size_t new_size)\
 }
 
 #define NSLOT_MACRO(NUM)\
+_##NUM##_MACRO(_LOLI_ALLOC_WRAPPER, 0)\
 _##NUM##_MACRO(_MALLOC_WRAPPER, 0)\
 _##NUM##_MACRO(_CALLOC_WRAPPER, 0)\
 _##NUM##_MACRO(_MEMALIGN_WRAPPER, 0)\
@@ -68,7 +75,7 @@ _##NUM##_MACRO(_REALLOC_WRAPPER, 0)
 NSLOT_MACRO(512)
 
 #define _REG_HOOK_INFO(INDEX)\
-Reg_Hook_Info(INDEX, &_MALLOC##INDEX, &_CALLOC##INDEX, &_MEMALIGN##INDEX, &_POSIX_MEMALIGN##INDEX, &_REALLOC##INDEX);
+Reg_Hook_Info(INDEX, &_LOLI_ALLOC##INDEX, &_MALLOC##INDEX, &_CALLOC##INDEX, &_MEMALIGN##INDEX, &_POSIX_MEMALIGN##INDEX, &_REALLOC##INDEX);
 
 #define TEST_1_FUNC(INDEX, FUNC,...)\
 (_##FUNC##INDEX(__VA_ARGS__));
@@ -77,9 +84,10 @@ Reg_Hook_Info(INDEX, &_MALLOC##INDEX, &_CALLOC##INDEX, &_MEMALIGN##INDEX, &_POSI
 static HOOK_INFO hk_infos[SLOT_NUM];
 static int hk_info_index = -1;
 
-inline void Reg_Hook_Info(int index, MALLOC_FPTR p1, CALLOC_FPTR p3, MEMALIGN_FPTR p4, POSIX_MEMALIGN_FPTR p5, REALLOC_FPTR p6) {
+inline void Reg_Hook_Info(int index, LOLI_ALLOC_FPTR p0, MALLOC_FPTR p1, CALLOC_FPTR p3, MEMALIGN_FPTR p4, POSIX_MEMALIGN_FPTR p5, REALLOC_FPTR p6) {
     // __android_log_print(ANDROID_LOG_INFO, "Loli", "Reg hook info %d", index);
     hk_infos[index].so_name = nullptr;
+    hk_infos[index].custom_alloc = p0;
     hk_infos[index].malloc = p1;
     hk_infos[index].calloc = p3;
     hk_infos[index].memalign = p4;

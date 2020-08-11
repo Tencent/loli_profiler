@@ -131,6 +131,10 @@ inline void loli_maybe_record_alloc(size_t size, void* addr, loliFlags flag, int
 extern "C" {
 #endif // __cplusplus
 
+void loli_index_custom_alloc(void* addr, size_t size, int index) {
+    loli_maybe_record_alloc(size, addr, loliFlags::MALLOC_, index);
+}
+
 void *loli_index_malloc(size_t size, int index) {
     void* addr = malloc(size);
     loli_maybe_record_alloc(size, addr, loliFlags::MALLOC_, index);
@@ -187,6 +191,15 @@ void loli_free(void* ptr) {
     free(ptr);
 }
 
+void loli_custom_free(void* ptr) {
+    if (ptr == nullptr) 
+        return;
+    static thread_local io::buffer obuffer(128);
+    obuffer.clear();
+    obuffer << static_cast<uint8_t>(FREE_) << static_cast<uint32_t>(++callSeq_) << reinterpret_cast<uint64_t>(ptr);
+    loli_server_send(obuffer.data(), obuffer.size());
+}
+
 BACKTRACE_FPTR loli_get_backtrace(const char* path) {
     BACKTRACE_FPTR backtrace = nullptr;
     void *handle = fake_dlopen(path, RTLD_LAZY);
@@ -219,6 +232,8 @@ bool loli_hook_library(const char* library, so_info_map& infoMap) {
             info->backtrace = loli_get_backtrace(brief.first.c_str());
         }
         auto regex = std::string(".*/") + library + "\\.so$";
+        xhook_register(regex.c_str(), "loli_alloc", (void*)info->custom_alloc, nullptr);
+        xhook_register(regex.c_str(), "loli_free", (void*)loli_custom_free, nullptr);
         xhook_register(regex.c_str(), "malloc", (void*)info->malloc, nullptr);
         xhook_register(regex.c_str(), "free", (void*)loli_free, nullptr);
         xhook_register(regex.c_str(), "calloc", (void*)info->calloc, nullptr);

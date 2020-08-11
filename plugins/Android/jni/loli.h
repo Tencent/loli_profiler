@@ -6,6 +6,7 @@
 extern "C" {
 #endif // __cplusplus
 
+void loli_index_custom_alloc(void* addr, size_t size, int index);
 void *loli_index_malloc(size_t size, int index);
 void *loli_index_calloc(int n, int size, int index);
 void *loli_index_memalign(size_t alignment, size_t size, int index);

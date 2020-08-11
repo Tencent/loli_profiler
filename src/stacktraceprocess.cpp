@@ -46,6 +46,7 @@ void StackTraceProcess::ForwardPort(int port) {
 }
 
 void StackTraceProcess::ConnectToServer(int port) {
+    ForwardPort(port);
     connectingServer_ = true;
     socket_->connectToHost("127.0.0.1", static_cast<quint16>(port));
 }

@@ -18,16 +18,6 @@ void StartAppProcess::StartApp(const QString& appName, const QString& compiler, 
     errorStr_ = QString();
     auto execPath = GetExecutablePath();
     QStringList arguments;
-    { // remove forward ports
-        dialog->setLabelText("Reset port forwarding.");
-        arguments << "forward" << "--remove-all";
-        QProcess process;
-        process.setProgram(execPath);
-        AdbProcess::SetArguments(&process, arguments);
-        if (!StartProcess(&process, "adb forward --remove-all")) {
-            return;
-        }
-    }
     { // push remote folder to /data/local/tmp
         dialog->setLabelText("Pushing libloli.so to device.");
         arguments << "push" << "remote/" + compiler + "/" + arch + "/libloli.so" << "/data/local/tmp";

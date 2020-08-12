@@ -113,19 +113,6 @@ void loli_server_loop(int sock) {
                 }
             }
         } else {
-            // fill cached messages
-            auto now = std::chrono::steady_clock::now();
-            if (std::chrono::duration<double, std::milli>(now - lastTickTime).count() > 66.6) {
-                lastTickTime = now;
-                std::lock_guard<loli::spinlock> lock(cacheLock_);
-                if (sendCache.size() > 0) {
-                    sendCache.insert(sendCache.end(), cache_.begin(), cache_.end());
-                    cache_.clear();
-                }
-                else {
-                    sendCache = std::move(cache_);
-                }
-            }
             // check for client connectivity
             FD_ZERO(&fds);
             FD_SET(clientSock, &fds);
@@ -142,6 +129,10 @@ void loli_server_loop(int sock) {
                         if (type == static_cast<std::uint8_t>(loliCommands::SMAPS_DUMP)) {
                             LOLILOGI("Dumping smaps");
                             loli_dump_smaps();
+                            {
+                                std::lock_guard<loli::spinlock> lock(cacheLock_);
+                                cache_.clear();
+                            }
                             io::buffer obuffer(8);
                             obuffer.clear();
                             obuffer << static_cast<uint8_t>(255) << static_cast<int32_t>(0);
@@ -150,6 +141,19 @@ void loli_server_loop(int sock) {
                             ignoreCache_ = true;
                         }
                     }
+                }
+            }
+            // fill cached messages
+            auto now = std::chrono::steady_clock::now();
+            if (std::chrono::duration<double, std::milli>(now - lastTickTime).count() > 66.6 || ignoreCache_) {
+                lastTickTime = now;
+                std::lock_guard<loli::spinlock> lock(cacheLock_);
+                if (sendCache.size() > 0) {
+                    sendCache.insert(sendCache.end(), cache_.begin(), cache_.end());
+                    cache_.clear();
+                }
+                else {
+                    sendCache = std::move(cache_);
                 }
             }
             // send cached messages with limited banwidth

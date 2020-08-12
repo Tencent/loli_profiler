@@ -1406,6 +1406,8 @@ void MainWindow::StacktraceDataReceived() {
 void MainWindow::StacktraceConnectionLost() {
     if (!isCapturing_)
         return;
+    Print("Connection lost ...");
+    Print("Kill your app or re-plug USB cable and try again.");
     ConnectionFailed();
 }
 

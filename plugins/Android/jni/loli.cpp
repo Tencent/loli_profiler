@@ -74,7 +74,7 @@ void toggle_ignore_current(bool value) {
 }
 
 inline void loli_maybe_record_alloc(size_t size, void* addr, loliFlags flag, int index) {
-    if (ignore_current_) {
+    if (ignore_current_ || size == 0) {
         return;
     }
 
@@ -221,6 +221,24 @@ BACKTRACE_FPTR loli_get_backtrace(const char* path) {
     return backtrace;
 }
 
+typedef void (*LOLI_SET_ALLOCANDFREE_FPTR)(LOLI_ALLOC_FPTR, FREE_FPTR);
+
+LOLI_SET_ALLOCANDFREE_FPTR loli_get_allocandfree(const char* path) {
+    void *handle = fake_dlopen(path, RTLD_LAZY);
+    if (handle) {
+        LOLI_SET_ALLOCANDFREE_FPTR ptr = nullptr;
+        *(void **) (&ptr) = fake_dlsym(handle, "loli_set_allocandfree");
+         if (ptr == nullptr) {
+            LOLILOGI("Error dlsym loli_set_allocandfree: %s", path);
+            return nullptr;
+        }
+        return ptr;
+    } else {
+        LOLILOGI("Error dlopen: %s", path);
+    }
+    return nullptr;
+}
+
 // demangled name, <full name, base address>
 using so_info_map = std::unordered_map<std::string, std::pair<std::string, uintptr_t>>;
 
@@ -231,9 +249,10 @@ bool loli_hook_library(const char* library, so_info_map& infoMap) {
         if (mode_ != loliDataMode::NOSTACK && isInstrumented_) {
             info->backtrace = loli_get_backtrace(brief.first.c_str());
         }
+        if (auto set_allocandfree = loli_get_allocandfree(brief.first.c_str())) {
+            set_allocandfree(info->custom_alloc, loli_custom_free);
+        }
         auto regex = std::string(".*/") + library + "\\.so$";
-        xhook_register(regex.c_str(), "loli_alloc", (void*)info->custom_alloc, nullptr);
-        xhook_register(regex.c_str(), "loli_free", (void*)loli_custom_free, nullptr);
         xhook_register(regex.c_str(), "malloc", (void*)info->malloc, nullptr);
         xhook_register(regex.c_str(), "free", (void*)loli_free, nullptr);
         xhook_register(regex.c_str(), "calloc", (void*)info->calloc, nullptr);

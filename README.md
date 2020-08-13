@@ -93,6 +93,12 @@ build.bat
 
 ### ChangeList
 
+#### v1.0.1
+
+提升了网络相关代码的稳定性
+
+提升了重复测试时的稳定性
+
 #### v0.9.9d
 
 提供[接口](https://git.code.oa.com/xinhou/loli_profiler/wikis/tutorial/hooking-memory-pool)支持Hook使用内存池的进程

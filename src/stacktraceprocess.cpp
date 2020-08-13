@@ -52,7 +52,8 @@ void StackTraceProcess::ConnectToServer(int port) {
 }
 
 void StackTraceProcess::Disconnect() {
-    socket_->close();
+    // Aborts the current connection and resets the socket.
+    socket_->abort();
     packetSize_ = 0;
 }
 
@@ -60,15 +61,25 @@ void StackTraceProcess::Send(const char* data, int length) {
     socket_->write(data, length);
 }
 
-void StackTraceProcess::Interpret(const QByteArray& bytes) {
-    quint32 originSize = *reinterpret_cast<const quint32*>(bytes.data());
-//    qDebug() << "originSize: " << originSize;
+void StackTraceProcess::ReadPacket(const QByteArray& bytes) {
+    quint32 packetType = *reinterpret_cast<const quint32*>(bytes.data());
+    if (packetType == 0) { // stack trace data
+        ReadStackTracePacket(bytes);
+    } else if (packetType == 1) { // recived command
+        CommandHandler(*reinterpret_cast<const quint32*>(bytes.data() + 4));
+    } else {
+        qDebug() << "Unknown packetType: " << packetType;
+    }
+}
+
+void StackTraceProcess::ReadStackTracePacket(const QByteArray &bytes) {
+    quint32 originSize = *reinterpret_cast<const quint32*>(bytes.data() + 4);
     if (originSize > compressBufferSize_) {
         compressBufferSize_ = static_cast<quint32>(originSize * 1.5f);
         delete[] compressBuffer_;
         compressBuffer_ = new char[compressBufferSize_];
     }
-    auto decompressSize = LZ4_decompress_safe(bytes.data() + 4, compressBuffer_, bytes.size() - 4, static_cast<qint32>(compressBufferSize_));
+    auto decompressSize = LZ4_decompress_safe(bytes.data() + 8, compressBuffer_, bytes.size() - 8, static_cast<qint32>(compressBufferSize_));
     if (decompressSize == 0) {
         qDebug() << "LZ4 decompression failed!";
         return;
@@ -96,10 +107,6 @@ void StackTraceProcess::Interpret(const QByteArray& bytes) {
             quint64 addr;
             lineStream >> seq >> addr;
             freeInfo_.push_back(qMakePair(seq, addr));
-        } else if (type == static_cast<quint8>(loliFlags::COMMAND_)) {
-            qint32 cmd;
-            lineStream >> cmd;
-            CommandHandler(cmd);
         } else {
             RawStackInfo info;
             lineStream >> info.seq_ >> info.time_ >> info.size_ >> info.addr_ >> info.recType_;
@@ -128,8 +135,8 @@ void StackTraceProcess::Interpret(const QByteArray& bytes) {
     emit DataReceived();
 }
 
-void StackTraceProcess::CommandHandler(int cmd) {
-    if (cmd == static_cast<int>(loliCommands::SMAPS_DUMP)) {
+void StackTraceProcess::CommandHandler(quint32 cmd) {
+    if (cmd == static_cast<quint32>(loliCommands::SMAPS_DUMP)) {
         emit SMapsDumped();
     }
 }
@@ -143,16 +150,16 @@ void StackTraceProcess::OnDataReceived() {
     while (remainBytes > 0) {
         if (packetSize_ == 0) {
             packetSize_ = *reinterpret_cast<quint32*>(buffer_ + bufferPos);
-//            qDebug() << "receiving: " <<  packetSize_;
+//            qDebug() << "packetSize_: " << packetSize_;
             remainBytes -= 4;
             bufferPos = size - remainBytes;
             bufferCache_.resize(0);
             if (remainBytes > 0) {
-                if (packetSize_ < remainBytes) { // the data is stored in the same packet, then read them all
+                if (packetSize_ <= remainBytes) { // the data is stored in the same packet, then read them all
                     bufferCache_.append(buffer_ + bufferPos, static_cast<int>(packetSize_));
                     remainBytes -= packetSize_;
                     bufferPos = size - remainBytes;
-                    Interpret(bufferCache_);
+                    ReadPacket(bufferCache_);
                     bufferCache_.resize(0);
                     packetSize_ = 0;
                 } else { // the data is splited to another packet, we just append whatever we got
@@ -166,7 +173,7 @@ void StackTraceProcess::OnDataReceived() {
                 bufferCache_.append(buffer_ + bufferPos, static_cast<int>(remainPacketSize));
                 remainBytes -= remainPacketSize;
                 bufferPos = size - remainBytes;
-                Interpret(bufferCache_);
+                ReadPacket(bufferCache_);
                 bufferCache_.resize(0);
                 packetSize_ = 0;
             } else { // the remaining data is splited to another packet, we just append whatever we got

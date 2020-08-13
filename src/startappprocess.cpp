@@ -125,6 +125,7 @@ void StartAppProcess::StartApp(const QString& appName, const QString& compiler, 
     errorStr_ = "python jdwp-shellifier.py";
     dialog->setLabelText("Injecting libloli.so to target application.");
     dialog->setCancelButtonText("Cancel");
+    dialog->raise();
     arguments.clear();
     arguments << "jdwp-shellifier.py" << "--target" << "127.0.0.1" << "--port" << "8700" << "--break-on" << "android.app.Activity.onResume" << "--loadlib" << "libloli.so";
     process_->setWorkingDirectory(QCoreApplication::applicationDirPath());

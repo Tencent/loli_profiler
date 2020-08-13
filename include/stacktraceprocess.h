@@ -12,7 +12,6 @@ enum class loliFlags : quint8 {
     CALLOC_ = 2,
     MEMALIGN_ = 3,
     REALLOC_ = 4,
-    COMMAND_ = 255,
 };
 
 enum class loliCommands : quint8 {
@@ -55,8 +54,9 @@ signals:
     void SMapsDumped();
 
 private:
-    void Interpret(const QByteArray& bytes);
-    void CommandHandler(int cmd);
+    void ReadPacket(const QByteArray& bytes);
+    void ReadStackTracePacket(const QByteArray& bytes);
+    void CommandHandler(quint32 cmd);
     void OnDataReceived();
     void OnConnected();
     void OnDisconnected();

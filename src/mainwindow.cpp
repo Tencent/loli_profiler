@@ -69,17 +69,17 @@ MainWindow::MainWindow(QWidget *parent) :
     // Parse or create config file
     ConfigDialog::ParseConfigFile();
 
-    progressDialog_ = new QProgressDialog(this, Qt::WindowTitleHint | Qt::CustomizeWindowHint);
+    progressDialog_ = new QProgressDialog(this, Qt::WindowTitleHint | Qt::CustomizeWindowHint | Qt::MSWindowsFixedSizeDialogHint);
     progressDialog_->setWindowModality(Qt::WindowModal);
     progressDialog_->setAutoClose(true);
     progressDialog_->setCancelButton(nullptr);
-    progressDialog_->setSizeGripEnabled(false);
     progressDialog_->close();
     connect(progressDialog_, &QProgressDialog::canceled, [this]() {
         if (startAppProcess_->IsRunning()) {
             showJDWPErrorLog_ = false;
             startAppProcess_->Process()->kill();
             startAppProcess_->Process()->readAll();
+            ConnectionFailed();
             Print("User canceled.");
         }
     });
@@ -189,7 +189,7 @@ MainWindow::MainWindow(QWidget *parent) :
     smapsTimer_->setSingleShot(true);
     smapsTimer_->setInterval(10000);
     connect(smapsTimer_, &QTimer::timeout, [this]() {
-        Print("Failed to pull smaps data.");
+        Print("Dump proc/smaps command timeout.");
         StopCaptureProcess();
     });
 }
@@ -947,8 +947,7 @@ void MainWindow::StopCaptureProcess() {
     progressDialog_->setValue(0);
     progressDialog_->setCancelButtonText(QString());
     progressDialog_->show();
-    progressDialog_->setValue(1);
-    progressDialog_->setLabelText("Requesting smaps info from device.");
+    progressDialog_->raise();
     auto readSMaps = false;
     auto smapsPath = QCoreApplication::applicationDirPath() + "/smaps.txt";
     QProcess process;
@@ -966,6 +965,7 @@ void MainWindow::StopCaptureProcess() {
         }
         file.remove();
     }
+    progressDialog_->setValue(1);
     if (!readSMaps) {
         Print("Failed to cat proc/pid/smaps");
     } else {
@@ -980,7 +980,7 @@ void MainWindow::StopCaptureProcess() {
         ui->libraryComboBox->addItem(library);
     OnTimelineRubberBandHide();
     ShowSummary();
-    progressDialog_->setValue(2);
+    progressDialog_->hide();
 }
 
 static QVector<QPair<HashString, SMapsSection*>> sMapsCache_;
@@ -1059,16 +1059,13 @@ void MainWindow::InterpretStacktraceData() {
             currentIndex += payload;
         }
         futures.push_back(QtConcurrent::run(this, &MainWindow::InterpretRecordsLibrary, currentIndex, recordsCache_.size() - currentIndex));
-        progressDialog_->setWindowTitle("Translating data");
         progressDialog_->setLabelText(QString("Translating %1 records by %2 jobs").arg(recordsCache_.size()).arg(threadCount));
         progressDialog_->setMinimum(0);
-        progressDialog_->setMaximum(threadCount);
-        progressDialog_->setValue(0);
-        progressDialog_->setCancelButtonText(QString());
-        progressDialog_->show();
+        progressDialog_->setMaximum(progressDialog_->maximum() + threadCount);
+        progressDialog_->raise();
         QCoreApplication::instance()->sendPostedEvents();
         for (int i = 0; i < futures.size(); i++) {
-            progressDialog_->setValue(i);
+            progressDialog_->setValue(progressDialog_->value() + 1);
             auto& future = futures[i];
             const auto& trace = future.result();
             for (const auto& record : trace.records_) {
@@ -1080,7 +1077,6 @@ void MainWindow::InterpretStacktraceData() {
                 }
             }
         }
-        progressDialog_->hide();
     }
     ResetFilters();
     stacktraceModel_->append(recordsCache_);
@@ -1103,8 +1099,7 @@ void MainWindow::FixedUpdate() {
         }
     }
     if (!stacktraceProcess_->IsConnecting() && !stacktraceProcess_->IsConnected()) {
-        static int port = 8000;
-        stacktraceProcess_->ConnectToServer(port++);
+        stacktraceProcess_->ConnectToServer(8000);
         Print("Connecting to application server ... ");
     }
     time_++;

@@ -124,28 +124,32 @@ void loli_server_loop(int sock) {
                     continue;
                 } else {
                     if (length > 0) {
-                        std::uint8_t type = *reinterpret_cast<std::uint8_t*>(buffer_);
+                        uint8_t type = *reinterpret_cast<uint8_t*>(buffer_);
                         LOLILOGI("Server Recv: %i", (int)type);
                         if (type == static_cast<std::uint8_t>(loliCommands::SMAPS_DUMP)) {
                             LOLILOGI("Dumping smaps");
                             loli_dump_smaps();
+                            uint32_t packetSize = 8;
+                            send(clientSock, &packetSize, 4, 0); // send packet size
+                            uint32_t packetType = 1;
+                            send(clientSock, &packetType, 4, 0); // send packet type
+                            uint32_t command = static_cast<uint32_t>(loliCommands::SMAPS_DUMP);
+                            send(clientSock, &command, 4, 0);
+                            ignoreCache_ = true;
                             {
                                 std::lock_guard<loli::spinlock> lock(cacheLock_);
                                 cache_.clear();
                             }
-                            io::buffer obuffer(8);
-                            obuffer.clear();
-                            obuffer << static_cast<uint8_t>(255) << static_cast<int32_t>(0);
-                            loli_server_send(obuffer.data(), obuffer.size());
-                            // loli_server_send("255\\0"); // loliFlags::COMMAND_ = 255, loliCommands::SMAPS_DUMP = 0
-                            ignoreCache_ = true;
                         }
                     }
                 }
             }
+            if (ignoreCache_) {
+                continue;
+            }
             // fill cached messages
             auto now = std::chrono::steady_clock::now();
-            if (std::chrono::duration<double, std::milli>(now - lastTickTime).count() > 66.6 || ignoreCache_) {
+            if (std::chrono::duration<double, std::milli>(now - lastTickTime).count() > 66.6) {
                 lastTickTime = now;
                 std::lock_guard<loli::spinlock> lock(cacheLock_);
                 if (sendCache.size() > 0) {
@@ -188,11 +192,13 @@ void loli_server_loop(int sock) {
                 if (compressSize == 0) {
                     LOLILOGE("LZ4 compression failed!");
                 } else {
-                    compressSize += 4;
+                    uint32_t packetSize = compressSize + 8;
                     // send messages
-                    send(clientSock, &compressSize, 4, 0); // send net buffer size
+                    send(clientSock, &packetSize, 4, 0); // send packet size
+                    uint32_t packetType = 0;
+                    send(clientSock, &packetType, 4, 0); // send packet type
                     send(clientSock, &srcSize, 4, 0); // send uncompressed buffer size (for decompression)
-                    send(clientSock, compressBuffer, compressSize - 4, 0); // then send data
+                    send(clientSock, compressBuffer, compressSize, 0); // then send data
                     // LOLILOGI("send size %i, compressed size %i, lineCount: %i", srcSize, compressSize, static_cast<int>(cacheCopy.size()));
                 }
                 cacheCopy.clear();
@@ -245,6 +251,7 @@ int loli_server_start(int port) {
     started_ = true;
     serverRunning_ = true;
     hasClient_ = false;
+    ignoreCache_ = false;
     socketThread_ = std::thread(loli_server_loop, sock);
     return 0;
 }

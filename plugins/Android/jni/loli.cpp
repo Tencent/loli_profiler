@@ -228,10 +228,6 @@ LOLI_SET_ALLOCANDFREE_FPTR loli_get_allocandfree(const char* path) {
     if (handle) {
         LOLI_SET_ALLOCANDFREE_FPTR ptr = nullptr;
         *(void **) (&ptr) = fake_dlsym(handle, "loli_set_allocandfree");
-         if (ptr == nullptr) {
-            LOLILOGI("Error dlsym loli_set_allocandfree: %s", path);
-            return nullptr;
-        }
         return ptr;
     } else {
         LOLILOGI("Error dlopen: %s", path);

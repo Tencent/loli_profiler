@@ -133,7 +133,7 @@ build.bat
 * 程序下载 https://git.code.oa.com/xinhou/loli_profiler/wikis/home
 * 使用手册 https://git.code.oa.com/xinhou/loli_profiler/wikis/tutorial
 * 常见问题 https://git.code.oa.com/xinhou/loli_profiler/wikis/faq
-* KM原理介绍文章 http://km.oa.com/articles/show/408991
+* KM原理介绍文章 http://km.oa.com/group/29321/articles/show/434653
 * xHook https://github.com/iqiyi/xHook
 * JDWP库 https://koz.io/library-injection-for-debuggable-android-apps/
 * TreeMap实现 https://github.com/yahoo/YMTreeMap

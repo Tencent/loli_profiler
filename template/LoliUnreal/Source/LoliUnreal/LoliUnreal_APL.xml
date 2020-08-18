@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root xmlns:android="http://schemas.android.com/apk/res/android">
+  <init>
+    <log text="LoliUnreal init"/>
+  </init>
+
+  <gameActivityImportAdditions>
+    <insert>
+      import java.lang.System;
+    </insert>
+  </gameActivityImportAdditions>
+
+  <!-- optional additions to GameActivity onResume in GameActivity.java	-->
+  <gameActivityOnResumeAdditions>
+    <insert>
+      System.loadLibrary("jdwputil");
+    </insert>
+  </gameActivityOnResumeAdditions>
+  
+  <!-- optional files or directories to copy to Intermediate/Android/APK -->
+  <resourceCopies>
+    <isArch arch="armeabi-v7a">
+      <log text="Copying libjdwputil.so"/>
+      <copyFile src="$S(PluginDir)/../../ThirdParty/Android/armeabi-v7a/libjdwputil.so" dst="$S(BuildDir)/libs/armeabi-v7a/libjdwputil.so" />
+    </isArch>
+    <isArch arch="arm64-v8a">
+      <log text="Copying libjdwputil.so"/>
+      <copyFile src="$S(PluginDir)/../../ThirdParty/Android/arm64-v8a/libjdwputil.so" dst="$S(BuildDir)/libs/arm64-v8a/libjdwputil.so" />
+    </isArch>
+  </resourceCopies>
+  
+	<!-- optional libraries to load in GameActivity.java before libUE4.so -->
+	<soLoadLibrary>
+    <!--libjdwputil.so should be loaded after libUE4.so is loaded-->
+    <!--<loadLibrary name="jdwputil" failmsg="jdwputil library not loaded and required!" />-->
+	</soLoadLibrary>
+</root>

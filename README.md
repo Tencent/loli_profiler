@@ -93,25 +93,29 @@ build.bat
 
 ### ChangeList
 
-#### v1.0.1
+**v1.0.2**
+
+CI自动构建jdwputil动态库，提供UE4插件，方便UE4项目使用调试Release版APK的功能
+
+**v1.0.1**
 
 提升了网络相关代码的稳定性
 
 提升了重复测试时的稳定性
 
-#### v0.9.9d
+**v0.9.9d**
 
 提供[接口](https://git.code.oa.com/xinhou/loli_profiler/wikis/tutorial/hooking-memory-pool)支持Hook使用内存池的进程
 
 可将单条内存申请记录翻译为代码文件+行号，方便定位问题
 
-#### v0.9.9b
+**v0.9.9b**
 
 实现了数据Streaming功能，有效降低了内存占用
 
 可对大型（游戏）项目进行长时间的数据采集
 
-#### v0.9.9
+**v0.9.9**
 
 支持基于Framepointer的堆栈回溯优化，已在UE4.24、4.25上测试有效
 
@@ -121,7 +125,7 @@ build.bat
 
 优化了离线函数地址翻译步骤（感谢lusliu提供的思路），速度提升20x
 
-#### v0.9.8
+**v0.9.8**
 
 支持调试经过编译器插桩优化的UE4的APK，可将多线程情况下的堆栈获取速度提升10倍
 

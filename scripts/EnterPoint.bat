@@ -3,6 +3,7 @@
 echo dir %cd%
 
 set AndroidPluginPath="./plugins/Android"
+set AndroidPluginPath2="./plugins/JdwpUtil"
 set RelasePath=".\build\cmake\bin\release"
 set WindeployqtPath="%QT5Path:"=%\bin\windeployqt.exe"
 set DeployPath=".\dist"

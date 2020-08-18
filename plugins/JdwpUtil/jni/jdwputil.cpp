@@ -63,7 +63,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
     if (vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK) {
         return JNI_ERR;
     }
-    LOLILOGI("JNI_OnLoad");
+    LOLILOGI("JNI_OnLoad: jdwputil");
     RestartJDWP();
     return JNI_VERSION_1_6;
 }
@@ -93,9 +93,17 @@ int RestartJDWP() {
 
     void *handler = nullptr;
     if (apiLevel == 29) { // Android 10
+#ifdef __aarch64__
+        handler = fake_dlopen("/apex/com.android.runtime/lib64/libart.so", RTLD_NOW);
+#else
         handler = fake_dlopen("/apex/com.android.runtime/lib/libart.so", RTLD_NOW);
+#endif
     } else {
+#ifdef __aarch64__
+        handler = fake_dlopen("/system/lib64/libart.so", RTLD_NOW);
+#else
         handler = fake_dlopen("/system/lib/libart.so", RTLD_NOW);
+#endif
     }
     if (handler == NULL) {
         LOLILOGE("Error fake_dlopen libart.so");

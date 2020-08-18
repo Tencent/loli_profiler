@@ -1,0 +1,24 @@
+{
+	"FileVersion": 1,
+	"Version": 1,
+	"VersionName": "1.0",
+	"FriendlyName": "LoliUnreal",
+	"Description": "This plugin enables jdwp debugging capability on release build for Android Platform.",
+	"Category": "Mobile",
+	"CreatedBy": "Tencent",
+	"CreatedByURL": "www.tencent.com",
+	"DocsURL": "",
+	"MarketplaceURL": "",
+	"Modules": [
+		{
+			"Name": "LoliUnreal",
+			"Type": "Runtime",
+			"LoadingPhase": "Default",
+			"WhitelistPlatforms": [ "Android" ]
+		}
+	],
+	"EnabledByDefault": false,
+	"CanContainContent": false,
+	"IsBetaVersion": false,
+	"Installed": false
+}

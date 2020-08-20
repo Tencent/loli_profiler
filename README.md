@@ -141,5 +141,6 @@ CI自动构建jdwputil动态库，提供UE4插件，方便UE4项目使用调试R
 * xHook https://github.com/iqiyi/xHook
 * JDWP库 https://koz.io/library-injection-for-debuggable-android-apps/
 * TreeMap实现 https://github.com/yahoo/YMTreeMap
+* FramePointer堆栈回溯实现 https://chromium.googlesource.com/chromium/src/base/+/master/debug/stack_trace.cc
 * 图标 https://www.flaticon.com/authors/smashicons
 * 工具图标 https://www.flaticon.com/authors/freepik

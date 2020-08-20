@@ -109,20 +109,19 @@ size_t loli_trace_stackframepointers(void** out_trace, size_t max_depth, size_t 
     // Usage of __builtin_frame_address() enables frame pointers in this
     // function even if they are not enabled globally. So 'fp' will always
     // be valid.
-    uintptr_t fp = reinterpret_cast<uintptr_t>(__builtin_frame_address(0)) -
-                        kStackFrameAdjustment;
+    uintptr_t fp = reinterpret_cast<uintptr_t>(__builtin_frame_address(0)) - kStackFrameAdjustment;
     uintptr_t stack_end = loli_get_stackend();
     size_t depth = 0;
     while (depth < max_depth) {
         if (skip_initial != 0) {
-        skip_initial--;
+            skip_initial--;
         } else {
-        out_trace[depth++] = reinterpret_cast<void*>(loli_get_stackframepc(fp));
+            out_trace[depth++] = reinterpret_cast<void*>(loli_get_stackframepc(fp));
         }
         uintptr_t next_fp = loli_get_nextstackframe(fp);
         if (loli_is_stackframe_valid(next_fp, fp, stack_end)) {
-        fp = next_fp;
-        continue;
+            fp = next_fp;
+            continue;
         }
         // Failed to find next frame.
         break;

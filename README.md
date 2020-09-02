@@ -88,7 +88,7 @@ sh build.sh
 Windows:
 
 ```bash
-set QT5Path=D:/SDK/QT/5.14.1/msvc2017_64
+set QT5Path="D:/SDK/QT/5.14.1/msvc2017_64"
 set MSBUILD_EXE="%ProgramFiles(x86)%\Microsoft Visual Studio\2017\Community\MSBuild\15.0\Bin\MSBuild.exe"
 set Ndk_R16_CMD="/android-ndk-r16b/ndk-build.cmd"
 set Ndk_R20_CMD="/android-ndk-r20b/ndk-build.cmd"

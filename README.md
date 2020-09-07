@@ -10,7 +10,7 @@
 
 OTeam地址：https://techmap.oa.com/oteam/8618
 
-性能已在大型UE4项目验证（骁龙855及以上CPU可较流畅体验），目前官方已支持4.24，4.25。
+性能已在大型UE4项目验证（骁龙855及以上CPU可较流畅体验，约增加 1.6x-2.2x Overhead），目前官方已支持4.24，4.25
 
 可参考[此教程](https://git.code.oa.com/xinhou/loli_profiler/wikis/tutorial/ue4-integration)对您的UE4引擎进行修改以支持LoliProfiler。其他版本的UE4或Unity引擎可联系我协助测试
 

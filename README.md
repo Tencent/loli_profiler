@@ -16,11 +16,14 @@ OTeam地址：https://techmap.oa.com/oteam/8618
 
 ### 使用过的项目
 
-| 《全民K歌》                | 《微视Android》                   | 《秦时明月世界》              | 《天涯明月刀手游》                |
-| -------------------------- | --------------------------------- | ----------------------------- | --------------------------------- |
-| ![](res/icons/karaoke.png) | ![](res/icons/weishi_android.png) | ![](res/icons/qsmy_world.png) | ![](res/icons/tiandao_mobile.jpg) |
+| 《全民K歌》                       | 《微视Android》                   | 《秦时明月世界》              | 《天涯明月刀手游》                            |
+| --------------------------------- | --------------------------------- | ----------------------------- | --------------------------------------------- |
+| ![](res/icons/karaoke.png)        | ![](res/icons/weishi_android.png) | ![](res/icons/qsmy_world.png) | ![](res/icons/tiandao_mobile.jpg)             |
+| [评测](http://mk.oa.com/note/686) |                                   |                               | [评测](http://mk.oa.com/note/676?ADTAG=bsygz) |
 
 *若本工具对您所在的项目组有所帮助，欢迎联系我更新此列表*
+
+
 
 # Loli Profiler
 

@@ -1593,6 +1593,12 @@ void MainWindow::on_actionAbout_triggered() {
 
 void MainWindow::on_launchPushButton_clicked() {
     if (isConnected_) {
+        auto appName = ui->appNameLineEdit->text();
+        auto appPid = memInfoProcess_->GetAppPid();
+        if (startAppProcess_->GetSMapsByRunAs(appName, appPid)) {
+            StopCaptureProcess();
+            return;
+        }
         // create a temporary smaps file for apk because apk doesn't have the permission to create new file
         PushEmptySMapsFile();
         auto type = static_cast<quint8>(loliCommands::SMAPS_DUMP);

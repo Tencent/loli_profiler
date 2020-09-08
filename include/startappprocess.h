@@ -21,6 +21,7 @@ public:
     }
 
     void StartApp(const QString& appName, const QString& compiler, const QString& arch, bool interceptMode, QProgressDialog* dialog);
+    bool GetSMapsByRunAs(const QString& appName, const QString& appPid);
 
 protected:
     bool StartProcess(QProcess* process, const QString& message);

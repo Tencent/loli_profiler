@@ -134,6 +134,26 @@ void StartAppProcess::StartApp(const QString& appName, const QString& compiler, 
     ExecuteAsync();
 }
 
+bool StartAppProcess::GetSMapsByRunAs(const QString& appName, const QString& appPid) {
+    auto execPath = GetExecutablePath();
+    QStringList arguments;
+    QProcess process;
+    process.setProgram(execPath);
+    arguments << "shell" << "run-as" << appName << "cat" << "/proc/" + appPid + "/smaps" << ">" << "/data/local/tmp/smaps.txt";
+    AdbProcess::SetArguments(&process, arguments);
+    process.start();
+    if (!process.waitForStarted()) {
+        return false;
+    }
+    if (!process.waitForFinished()) {
+        return false;
+    }
+    if (QString(process.readAll()).size() > 0) {
+        return false;
+    }
+    return true;
+}
+
 bool StartAppProcess::StartProcess(QProcess* process, const QString& message) {
     process->start();
     if (!process->waitForStarted()) {

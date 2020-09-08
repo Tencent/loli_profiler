@@ -100,6 +100,10 @@ build.bat
 
 ### ChangeList
 
+**v1.0.3**
+
+默认使用run-as cat获取smaps，更稳定，失败后再fallback到走socket
+
 **v1.0.2**
 
 CI自动构建jdwputil动态库，提供UE4插件，方便UE4项目使用调试Release版APK的功能

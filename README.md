@@ -100,7 +100,7 @@ build.bat
 
 ### ChangeList
 
-**v1.0.3**
+**v1.0.4**
 
 默认使用run-as cat获取smaps，更稳定，失败后再fallback到走socket
 

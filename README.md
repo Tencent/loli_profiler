@@ -6,15 +6,11 @@
 
 **若您觉得工具对您有所帮助，并支持我们的开发，可以用Star+Watch来表示您的支持** :smile: 
 
-已完成3个Milestone的开发，Preview版本可在[WeTest商店](https://wetest.oa.com/store/loli-profiler)下载体验
+最新版本可在[WeTest商店](https://wetest.oa.com/store/loli-profiler)下载体验，[OTeam地址](https://techmap.oa.com/oteam/8618)
 
-OTeam地址：https://techmap.oa.com/oteam/8618
+性能已在大型UE4项目验证（骁龙855及以上CPU可较流畅体验，约增加 1.6x-2.2x Overhead）
 
-性能已在大型UE4项目验证（骁龙855及以上CPU可较流畅体验，约增加 1.6x-2.2x Overhead），目前官方已支持UE4.24，4.25，Unity2017.4
-
-可参考[此教程](https://git.code.oa.com/xinhou/loli_profiler/wikis/tutorial/ue4-integration)对您的UE4引擎进行修改以更好的支持LoliProfiler
-
-可参考[此教程](https://git.code.oa.com/xinhou/loli_profiler/wikis/tutorial/unity-integration)对您的Unity引擎进行修改以更好的支持LoliProfiler
+目前官方已验证且高效的[支持UE引擎](https://git.code.oa.com/xinhou/loli_profiler/wikis/tutorial/ue4-integration)（4.24、4.25），[Unity引擎](https://git.code.oa.com/xinhou/loli_profiler/wikis/tutorial/unity-integration)（5.6、2017.4、2018.4）
 
 其他版本的UE4或Unity引擎可联系我协助测试
 

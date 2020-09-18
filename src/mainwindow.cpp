@@ -722,6 +722,13 @@ void MainWindow::ReadSMapsFile(QFile* file) {
         auto strList = line.split(' ', QString::SplitBehavior::SkipEmptyParts);
         if (strList.size() >= 6) {
             auto libName = Demangle(strList[5]);
+            if (libName.startsWith('[')) {
+                libName.clear();
+                auto namePart = strList.constBegin() + 5;
+                for (; namePart != strList.constEnd(); ++namePart) {
+                    libName += *namePart;
+                }
+            }
             curSection = &sMapsSections_[libName];
             auto addrs = strList[0].split('-');
             if (addrs.size() > 1) {
@@ -980,6 +987,16 @@ void MainWindow::StopCaptureProcess() {
         ui->libraryComboBox->addItem(library);
     OnTimelineRubberBandHide();
     ShowSummary();
+    // ask user if kill app
+    if (QMessageBox::question(this, "Question", "Do you need to kill the profiling app?") ==
+            QMessageBox::StandardButton::Yes) {
+        QProcess killApp;
+        AdbProcess::SetArguments(&killApp, QStringList() << "shell" << "am" << "force-stop" << ui->appNameLineEdit->text());
+        killApp.setProgram(PathUtils::GetADBExecutablePath());
+        killApp.start();
+        killApp.waitForStarted();
+        killApp.waitForFinished();
+    }
     progressDialog_->hide();
 }
 
@@ -1621,7 +1638,7 @@ void MainWindow::on_launchPushButton_clicked() {
     }
 
     auto launchModeInfo = QMessageBox::information(this, "Launch Mode",
-                                         "Launch new instance or inject running app?", "Launch", "Inject", "Cancel", 0, 2);
+                                         "Launch new instance or attach to running app?", "Launch", "Attach", "Cancel", 0, 2);
     bool enableInject = launchModeInfo == 1;
     if (launchModeInfo == 2) {
         return;

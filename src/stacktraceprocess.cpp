@@ -11,7 +11,7 @@
 #include <QProcess>
 #include <QDebug>
 
-#define BUFFER_SIZE 65535
+#define BUFFER_SIZE 1048576
 
 StackTraceProcess::StackTraceProcess(QObject* parent)
     : QObject(parent), socket_(new QTcpSocket(this)) {
@@ -142,43 +142,56 @@ void StackTraceProcess::CommandHandler(quint32 cmd) {
 }
 
 void StackTraceProcess::OnDataReceived() {
-    auto size = socket_->read(buffer_, BUFFER_SIZE);
-    if (size <= 0)
-        return;
-    qint64 bufferPos = 0; // pos = size - remains
-    qint64 remainBytes = size;
-    while (remainBytes > 0) {
-        if (packetSize_ == 0) {
-            packetSize_ = *reinterpret_cast<quint32*>(buffer_ + bufferPos);
-//            qDebug() << "packetSize_: " << packetSize_;
-            remainBytes -= 4;
-            bufferPos = size - remainBytes;
-            bufferCache_.resize(0);
-            if (remainBytes > 0) {
-                if (packetSize_ <= remainBytes) { // the data is stored in the same packet, then read them all
-                    bufferCache_.append(buffer_ + bufferPos, static_cast<int>(packetSize_));
-                    remainBytes -= packetSize_;
+    while (socket_->bytesAvailable() > 0) {
+        auto size = socket_->read(buffer_, BUFFER_SIZE);
+        if (size <= 0)
+            return;
+        qint64 bufferPos = 0; // pos = size - remains
+        qint64 remainBytes = size;
+        while (remainBytes > 0) {
+            if (packetSize_ == 0) {
+                // handles the condiction when buffer's size is less than 4 byte
+                // because we need at least 4 byte to interpret the packet's size
+                if (bufferCache_.size() + remainBytes < 4) {
+                    bufferCache_.append(buffer_ + bufferPos, static_cast<int>(remainBytes));
+                    break;
+                } else {
+                    int remainSize = 4 - bufferCache_.size();
+                    if (remainSize > 0) {
+                        bufferCache_.append(buffer_ + bufferPos, remainSize);
+                        remainBytes -= remainSize;
+                    }
+                }
+                packetSize_ = *reinterpret_cast<quint32*>(bufferCache_.data());
+    //            qDebug() << "packetSize_: " << packetSize_;
+                bufferPos = size - remainBytes;
+                bufferCache_.resize(0);
+                if (remainBytes > 0) {
+                    if (packetSize_ <= remainBytes) { // the data is stored in the same packet, then read them all
+                        bufferCache_.append(buffer_ + bufferPos, static_cast<int>(packetSize_));
+                        remainBytes -= packetSize_;
+                        bufferPos = size - remainBytes;
+                        ReadPacket(bufferCache_);
+                        bufferCache_.resize(0);
+                        packetSize_ = 0;
+                    } else { // the data is splited to another packet, we just append whatever we got
+                        bufferCache_.append(buffer_ + bufferPos, static_cast<int>(remainBytes));
+                        break;
+                    }
+                }
+            } else {
+                auto remainPacketSize = packetSize_ - static_cast<uint>(bufferCache_.size());
+                if (remainPacketSize <= remainBytes) { // the remaining data is stored in this packet, read what we need
+                    bufferCache_.append(buffer_ + bufferPos, static_cast<int>(remainPacketSize));
+                    remainBytes -= remainPacketSize;
                     bufferPos = size - remainBytes;
                     ReadPacket(bufferCache_);
                     bufferCache_.resize(0);
                     packetSize_ = 0;
-                } else { // the data is splited to another packet, we just append whatever we got
+                } else { // the remaining data is splited to another packet, we just append whatever we got
                     bufferCache_.append(buffer_ + bufferPos, static_cast<int>(remainBytes));
                     break;
                 }
-            }
-        } else {
-            auto remainPacketSize = packetSize_ - static_cast<uint>(bufferCache_.size());
-            if (remainPacketSize <= remainBytes) { // the remaining data is stored in this packet, read what we need
-                bufferCache_.append(buffer_ + bufferPos, static_cast<int>(remainPacketSize));
-                remainBytes -= remainPacketSize;
-                bufferPos = size - remainBytes;
-                ReadPacket(bufferCache_);
-                bufferCache_.resize(0);
-                packetSize_ = 0;
-            } else { // the remaining data is splited to another packet, we just append whatever we got
-                bufferCache_.append(buffer_ + bufferPos, static_cast<int>(remainBytes));
-                break;
             }
         }
     }

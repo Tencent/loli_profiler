@@ -269,6 +269,9 @@ void loli_hook_blacklist(const std::unordered_set<std::string>& blacklist, so_in
         xhook_ignore(regex.c_str(), NULL);
     }
     for (auto& pair : infoMap) {
+        if (blacklist.find(pair.first) != blacklist.end()) {
+            continue;
+        }
         if (!loli_hook_library(pair.first.c_str(), infoMap)) {
             return;
         }

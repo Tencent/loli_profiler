@@ -100,6 +100,10 @@ build.bat
 
 ### ChangeList
 
+**v1.0.6**
+
+修复TCP Socket数据处理的[BUG](#90)，提升大型项目数据采集的稳定性
+
 **v1.0.5**
 
 保留SMaps段中的完整名称，将intercept改为attach to更易理解

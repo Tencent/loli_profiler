@@ -1708,7 +1708,7 @@ void MainWindow::on_launchPushButton_clicked() {
     showJDWPErrorLog_ = true;
     startAppProcess_->SetPythonPath(pythonPath);
     startAppProcess_->SetExecutablePath(adbPath);
-    startAppProcess_->StartApp(ui->appNameLineEdit->text(), settings.compiler_, settings.arch_, enableInject, progressDialog_);
+    startAppProcess_->StartApp(ui->appNameLineEdit->text(), ui->processNameEdit->text(), settings.compiler_, settings.arch_, enableInject, progressDialog_);
 
     isCapturing_ = true;
     Print("Starting application ...");

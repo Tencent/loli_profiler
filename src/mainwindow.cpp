@@ -1112,7 +1112,7 @@ void MainWindow::FixedUpdate() {
             screenshotProcess_->CaptureScreenshot();
         }
         if (!memInfoProcess_->IsRunning() && !memInfoProcess_->HasErrors()) {
-            memInfoProcess_->DumpMemInfoAsync(ui->appNameLineEdit->text());
+            memInfoProcess_->DumpMemInfoAsync(ui->appNameLineEdit->text(), ui->processNameEdit->text());
         }
     }
     if (!stacktraceProcess_->IsConnecting() && !stacktraceProcess_->IsConnected()) {
@@ -1309,7 +1309,7 @@ void MainWindow::StartAppProcessFinished(AdbProcess* process) {
     memInfoProcess_->SetExecutablePath(PathUtils::GetADBExecutablePath());
     lastScreenshotTime_ = time_ = 0;
     Print("Application Started!");
-    memInfoProcess_->DumpMemInfoAsync(ui->appNameLineEdit->text());
+    memInfoProcess_->DumpMemInfoAsync(ui->appNameLineEdit->text(), ui->processNameEdit->text());
 }
 
 void MainWindow::StartAppProcessErrorOccurred() {

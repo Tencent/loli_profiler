@@ -77,18 +77,28 @@ SelectAppDialog::SelectAppDialog(QWidget *parent , Qt::WindowFlags f)
     layout->setSpacing(2);
     listWidget_ = new QListWidget();
     listWidget_->setSelectionMode(QListWidget::SelectionMode::SingleSelection);
+    auto hbLayout = new QHBoxLayout();
     searchLineEdit_ = new ArrowLineEdit(listWidget_);
     connect(searchLineEdit_, &QLineEdit::returnPressed, [this]() {
         auto selected = listWidget_->selectedItems();
         if (selected.count() > 0 && callback_)
-            callback_(selected[0]->text());
+            callback_(selected[0]->text(), subProcessNameLineEdit_->text());
         close();
     });
     connect(listWidget_, &QListWidget::itemClicked, [this](QListWidgetItem *item) {
-        callback_(item->text());
+        callback_(item->text(), subProcessNameLineEdit_->text());
         close();
     });
-    layout->addWidget(searchLineEdit_);
+
+    subProcessNameLineEdit_ = new QLineEdit();
+    subProcessNameLineEdit_->setPlaceholderText("subProcessName");
+
+    hbLayout->addWidget(searchLineEdit_);
+    hbLayout->addWidget(subProcessNameLineEdit_);
+    hbLayout->setStretchFactor(searchLineEdit_, 2);
+    hbLayout->setStretchFactor(subProcessNameLineEdit_, 1);
+    layout->addLayout(hbLayout);
+
     layout->addWidget(listWidget_);
     searchLineEdit_->setFocus();
     setLayout(layout);
@@ -98,7 +108,7 @@ SelectAppDialog::SelectAppDialog(QWidget *parent , Qt::WindowFlags f)
     resize(400, 300);
 }
 
-void SelectAppDialog::SelectApp(QStringList apps, QLineEdit *appNameLineEdit) {
+void SelectAppDialog::SelectApp(QStringList apps, std::function<void(const QString&, const QString&)> outCallback) {
     listWidget_->clear();
     for (auto& app : apps) {
         auto lineParts = app.split(':');
@@ -107,7 +117,5 @@ void SelectAppDialog::SelectApp(QStringList apps, QLineEdit *appNameLineEdit) {
         }
     }
     listWidget_->setCurrentItem(listWidget_->item(0));
-    callback_ = [appNameLineEdit](const QString& str) {
-        appNameLineEdit->setText(str);
-    };
+    callback_ = outCallback;
 }

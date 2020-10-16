@@ -991,7 +991,7 @@ void MainWindow::StopCaptureProcess() {
     if (QMessageBox::question(this, "Question", "Do you need to kill the profiling app?") ==
             QMessageBox::StandardButton::Yes) {
         QProcess killApp;
-        AdbProcess::SetArguments(&killApp, QStringList() << "shell" << "am" << "force-stop" << ui->appNameLineEdit->text());
+        AdbProcess::SetArguments(&killApp, QStringList() << "shell" << "am" << "force-stop" << appName_);
         killApp.setProgram(PathUtils::GetADBExecutablePath());
         killApp.start();
         killApp.waitForStarted();
@@ -1112,7 +1112,7 @@ void MainWindow::FixedUpdate() {
             screenshotProcess_->CaptureScreenshot();
         }
         if (!memInfoProcess_->IsRunning() && !memInfoProcess_->HasErrors()) {
-            memInfoProcess_->DumpMemInfoAsync(ui->appNameLineEdit->text(), ui->processNameEdit->text());
+            memInfoProcess_->DumpMemInfoAsync(appName_, subProcessName_);
         }
     }
     if (!stacktraceProcess_->IsConnecting() && !stacktraceProcess_->IsConnected()) {
@@ -1309,7 +1309,7 @@ void MainWindow::StartAppProcessFinished(AdbProcess* process) {
     memInfoProcess_->SetExecutablePath(PathUtils::GetADBExecutablePath());
     lastScreenshotTime_ = time_ = 0;
     Print("Application Started!");
-    memInfoProcess_->DumpMemInfoAsync(ui->appNameLineEdit->text(), ui->processNameEdit->text());
+    memInfoProcess_->DumpMemInfoAsync(appName_, subProcessName_);
 }
 
 void MainWindow::StartAppProcessErrorOccurred() {
@@ -1708,7 +1708,7 @@ void MainWindow::on_launchPushButton_clicked() {
     showJDWPErrorLog_ = true;
     startAppProcess_->SetPythonPath(pythonPath);
     startAppProcess_->SetExecutablePath(adbPath);
-    startAppProcess_->StartApp(ui->appNameLineEdit->text(), ui->processNameEdit->text(), settings.compiler_, settings.arch_, enableInject, progressDialog_);
+    startAppProcess_->StartApp(appName_, subProcessName_, settings.compiler_, settings.arch_, enableInject, progressDialog_);
 
     isCapturing_ = true;
     Print("Starting application ...");
@@ -1875,7 +1875,11 @@ void MainWindow::on_selectAppToolButton_clicked() {
     }
 
     SelectAppDialog selectAppDialog(this, Qt::WindowTitleHint | Qt::WindowCloseButtonHint);
-    selectAppDialog.SelectApp(lines, ui->appNameLineEdit);
+    selectAppDialog.SelectApp(lines, [this](const QString& appName, const QString& subProcessName) {
+        this->ui->appNameLineEdit->setText(appName);
+        this->appName_ = appName;
+        this->subProcessName_ = subProcessName;
+    });
     selectAppDialog.exec();
 }
 

@@ -24,11 +24,12 @@ class SelectAppDialog : public QDialog {
 public:
     SelectAppDialog(QWidget *parent = nullptr, Qt::WindowFlags f = Qt::WindowFlags());
 public:
-    void SelectApp(QStringList apps,QLineEdit *appNameLineEdit);
+    void SelectApp(QStringList apps, std::function<void(const QString&, const QString&)> outCallback);
 private:
     QListWidget* listWidget_;
     QLineEdit* searchLineEdit_;
-    std::function<void(const QString&)> callback_;
+    QLineEdit* subProcessNameLineEdit_;
+    std::function<void(const QString&, const QString&)> callback_;
 };
 
 #endif // SELECTAPPDIALOG_H

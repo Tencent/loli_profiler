@@ -72,7 +72,7 @@ void StartAppProcess::StartApp(const QString& appName, const QString& subProcess
         arguments.clear();
         //if need attch subProcess
         // https://stackoverflow.com/questions/15608876/find-out-the-running-process-id-by-package-name
-        if(subProcessName!=nullptr&&subProcessName.length()>0){
+        if(subProcessName!=nullptr && !subProcessName.isEmpty()){
             arguments << "shell" << "for p in /proc/[0-9]*; do [[ $(<$p/cmdline) = " + appName + ":" + subProcessName + " ]] && echo ${p##*/}; done";
         }else{
             arguments << "shell" << "for p in /proc/[0-9]*; do [[ $(<$p/cmdline) = " + appName + " ]] && echo ${p##*/}; done";

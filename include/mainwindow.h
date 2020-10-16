@@ -129,6 +129,8 @@ private:
     QHash<QUuid, QVector<QPair<HashString, quint64>>> callStackMap_;
     QSet<QString> libraries_;
     QString appPid_;
+    QString appName_;
+    QString subProcessName_;
     QString lastOpenDir_;
     QString lastSymbolDir_;
     QTimer* mainTimer_;

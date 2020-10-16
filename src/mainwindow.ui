@@ -184,23 +184,32 @@
             </size>
            </property>
            <layout class="QGridLayout" name="gridLayout">
-            <item row="2" column="0">
-             <widget class="QLineEdit" name="appNameLineEdit">
-              <property name="sizePolicy">
-               <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
-                <horstretch>0</horstretch>
-                <verstretch>0</verstretch>
-               </sizepolicy>
+            <item row="1" column="0" colspan="2">
+             <widget class="QPushButton" name="symbloPushButton">
+              <property name="toolTip">
+               <string>Load symbols after capture is done</string>
               </property>
-              <property name="placeholderText">
-               <string>com.company.app</string>
+              <property name="text">
+               <string>Load Symblos</string>
               </property>
              </widget>
             </item>
-            <item row="2" column="2">
-             <widget class="QPushButton" name="launchPushButton">
+            <item row="2" column="1">
+             <widget class="QToolButton" name="selectAppToolButton">
+              <property name="toolTip">
+               <string>Select Target Application</string>
+              </property>
               <property name="text">
-               <string>Launch</string>
+               <string>...</string>
+              </property>
+              <property name="popupMode">
+               <enum>QToolButton::DelayedPopup</enum>
+              </property>
+              <property name="autoRaise">
+               <bool>false</bool>
+              </property>
+              <property name="arrowType">
+               <enum>Qt::NoArrow</enum>
               </property>
              </widget>
             </item>
@@ -214,7 +223,7 @@
               </property>
              </widget>
             </item>
-            <item row="4" column="0">
+            <item row="3" column="0">
              <widget class="QWidget" name="widget_2" native="true">
               <property name="sizePolicy">
                <sizepolicy hsizetype="Minimum" vsizetype="Expanding">
@@ -224,13 +233,10 @@
               </property>
              </widget>
             </item>
-            <item row="1" column="0" colspan="2">
-             <widget class="QPushButton" name="symbloPushButton">
-              <property name="toolTip">
-               <string>Load symbols after capture is done</string>
-              </property>
+            <item row="2" column="2">
+             <widget class="QPushButton" name="launchPushButton">
               <property name="text">
-               <string>Load Symblos</string>
+               <string>Launch</string>
               </property>
              </widget>
             </item>
@@ -259,29 +265,16 @@
               </property>
              </widget>
             </item>
-            <item row="2" column="1">
-             <widget class="QToolButton" name="selectAppToolButton">
-              <property name="toolTip">
-               <string>Select Target Application</string>
+            <item row="2" column="0">
+             <widget class="QLineEdit" name="appNameLineEdit">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
               </property>
-              <property name="text">
-               <string>...</string>
-              </property>
-              <property name="popupMode">
-               <enum>QToolButton::DelayedPopup</enum>
-              </property>
-              <property name="autoRaise">
-               <bool>false</bool>
-              </property>
-              <property name="arrowType">
-               <enum>Qt::NoArrow</enum>
-              </property>
-             </widget>
-            </item>
-            <item row="3" column="0" colspan="2">
-             <widget class="QLineEdit" name="processNameEdit">
               <property name="placeholderText">
-               <string>subProcessName</string>
+               <string>com.company.app</string>
               </property>
              </widget>
             </item>
@@ -581,7 +574,7 @@
      <x>0</x>
      <y>0</y>
      <width>1024</width>
-     <height>22</height>
+     <height>25</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuFile">
@@ -655,7 +648,7 @@
   </widget>
   <action name="actionOpen">
    <property name="icon">
-    <iconset resource="../res/icon.qrc">
+    <iconset resource="res/icon.qrc">
      <normaloff>:/toolbutton/btn_open.png</normaloff>:/toolbutton/btn_open.png</iconset>
    </property>
    <property name="text">
@@ -667,7 +660,7 @@
   </action>
   <action name="actionSave">
    <property name="icon">
-    <iconset resource="../res/icon.qrc">
+    <iconset resource="res/icon.qrc">
      <normaloff>:/toolbutton/btn_save.png</normaloff>:/toolbutton/btn_save.png</iconset>
    </property>
    <property name="text">
@@ -692,7 +685,7 @@
   </action>
   <action name="actionStat_SMaps">
    <property name="icon">
-    <iconset resource="../res/icon.qrc">
+    <iconset resource="res/icon.qrc">
      <normaloff>:/toolbutton/btn_stat.png</normaloff>:/toolbutton/btn_stat.png</iconset>
    </property>
    <property name="text">
@@ -701,7 +694,7 @@
   </action>
   <action name="actionVisualize_SMaps">
    <property name="icon">
-    <iconset resource="../res/icon.qrc">
+    <iconset resource="res/icon.qrc">
      <normaloff>:/toolbutton/btn_visualize.png</normaloff>:/toolbutton/btn_visualize.png</iconset>
    </property>
    <property name="text">
@@ -710,7 +703,7 @@
   </action>
   <action name="actionShow_Merged_Callstacks">
    <property name="icon">
-    <iconset resource="../res/icon.qrc">
+    <iconset resource="res/icon.qrc">
      <normaloff>:/toolbutton/btn_callstacks.png</normaloff>:/toolbutton/btn_callstacks.png</iconset>
    </property>
    <property name="text">
@@ -719,7 +712,7 @@
   </action>
   <action name="actionShow_Callstacks_In_TreeMap">
    <property name="icon">
-    <iconset resource="../res/icon.qrc">
+    <iconset resource="res/icon.qrc">
      <normaloff>:/toolbutton/btn_treemap.png</normaloff>:/toolbutton/btn_treemap.png</iconset>
    </property>
    <property name="text">
@@ -741,7 +734,8 @@
   </customwidget>
  </customwidgets>
  <resources>
-  <include location="../res/icon.qrc"/>
+  <include location="res/icon.qrc"/>
  </resources>
  <connections/>
 </ui>
+ 

@@ -11,7 +11,7 @@ MemInfoProcess::MemInfoProcess(QObject* parent)
 void MemInfoProcess::DumpMemInfoAsync(const QString& appName, const QString& subProcessName) {
     appName_ = appName;
     QStringList arguments;
-    if(subProcessName!=nullptr && subProcessName.length() > 0){
+    if(subProcessName!=nullptr && !subProcessName.isEmpty()){
         appName_ = appName + ":" + subProcessName;
     }
     arguments << "shell" << "dumpsys" << "meminfo" << "--package" << appName_;

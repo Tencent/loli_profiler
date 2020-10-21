@@ -715,28 +715,22 @@ void MainWindow::ReadSMapsFile(QFile* file) {
     QTextStream stream(file);
     SMapsSection total;
     SMapsSection* curSection = nullptr;
+    QRegExp sectionTitleRx("([0-9a-z]+)\\-([0-9a-z]+)\\s([0-9a-z-]+)\\s([0-9a-z]+)\\s([0-9a-z]+)\\:([0-9a-z]+)\\s([0-9a-z]+)\\s+(\\S.+)");
     while (!stream.atEnd()) {
         auto line = stream.readLine();
         if (line.isEmpty())
             continue;
         auto strList = line.split(' ', QString::SplitBehavior::SkipEmptyParts);
-        if (strList.size() >= 6) {
-            auto libName = Demangle(strList[5]);
-            if (libName.startsWith('[')) {
-                libName.clear();
-                auto namePart = strList.constBegin() + 5;
-                for (; namePart != strList.constEnd(); ++namePart) {
-                    libName += *namePart;
-                }
+        if (sectionTitleRx.indexIn(line) != -1) {
+            QString libName = sectionTitleRx.cap(8);
+            if (!libName.startsWith('[')) {
+                libName = Demangle(libName);
             }
             curSection = &sMapsSections_[libName];
-            auto addrs = strList[0].split('-');
-            if (addrs.size() > 1) {
-                auto start = addrs[0].toULongLong(nullptr, 16);
-                auto end = addrs[1].toULongLong(nullptr, 16);
-                auto offset = strList[2].toULongLong(nullptr, 16);
-                curSection->addrs_.push_back(SMapsSectionAddr(start, end, offset));
-            }
+            auto start = sectionTitleRx.cap(1).toULongLong(nullptr, 16);
+            auto end = sectionTitleRx.cap(2).toULongLong(nullptr, 16);
+            auto offset = sectionTitleRx.cap(4).toULongLong(nullptr, 16);
+            curSection->addrs_.push_back(SMapsSectionAddr(start, end, offset));
         } else if (strList.size() >= 2) {
             if (curSection == nullptr)
                 continue;

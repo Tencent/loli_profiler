@@ -43,7 +43,7 @@ public:
         return appPid_;
     }
 
-    void DumpMemInfoAsync(const QString& appName);
+    void DumpMemInfoAsync(const QString& appName, const QString& subProcessName);
 
 protected:
     void OnProcessFinihed() override;

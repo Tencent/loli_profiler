@@ -12,7 +12,7 @@ StartAppProcess::StartAppProcess(QObject* parent)
 
 }
 
-void StartAppProcess::StartApp(const QString& appName, const QString& compiler, const QString& arch, bool interceptMode, QProgressDialog* dialog) {
+void StartAppProcess::StartApp(const QString& appName, const QString& subProcessName, const QString& compiler, const QString& arch, bool interceptMode, QProgressDialog* dialog) {
     startResult_ = false;
     interceptMode_ = interceptMode;
     errorStr_ = QString();
@@ -70,8 +70,14 @@ void StartAppProcess::StartApp(const QString& appName, const QString& compiler, 
     unsigned int pid = 0;
     if (interceptMode) { // pid of
         arguments.clear();
+        //if need attch subProcess
         // https://stackoverflow.com/questions/15608876/find-out-the-running-process-id-by-package-name
-        arguments << "shell" << "for p in /proc/[0-9]*; do [[ $(<$p/cmdline) = " + appName + " ]] && echo ${p##*/}; done";
+        if(subProcessName!=nullptr && !subProcessName.isEmpty()){
+            arguments << "shell" << "for p in /proc/[0-9]*; do [[ $(<$p/cmdline) = " + appName + ":" + subProcessName + " ]] && echo ${p##*/}; done";
+        }else{
+            arguments << "shell" << "for p in /proc/[0-9]*; do [[ $(<$p/cmdline) = " + appName + " ]] && echo ${p##*/}; done";
+        }
+
         QProcess process;
         process.setProgram(execPath);
         AdbProcess::SetArguments(&process, arguments);

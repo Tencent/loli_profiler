@@ -74,6 +74,7 @@
 * QT 5 或更高（安装QtCharts插件）
 * C++11 编译器，CMake
 * Android NDK r16b / r20
+* Visual Studio 2017（Windows 系统需要安装到 C 盘默认路径）
 
 **一键构建**
 

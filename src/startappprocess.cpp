@@ -18,6 +18,23 @@ void StartAppProcess::StartApp(const QString& appName, const QString& subProcess
     errorStr_ = QString();
     auto execPath = GetExecutablePath();
     QStringList arguments;
+    { // restart adb server
+        dialog->setLabelText("Restarting adb server.");
+        arguments << "kill-server";
+        QProcess process;
+        process.setWorkingDirectory(QCoreApplication::applicationDirPath());
+        process.setProgram(execPath);
+        AdbProcess::SetArguments(&process, arguments);
+        if (!StartProcess(&process, "adb kill-server")) {
+            return;
+        }
+        arguments.clear();
+        arguments << "start-server";
+        AdbProcess::SetArguments(&process, arguments);
+        if (!StartProcess(&process, "adb start-server")) {
+            return;
+        }
+    }
     { // push remote folder to /data/local/tmp
         dialog->setLabelText("Pushing libloli.so to device.");
         arguments << "push" << "remote/" + compiler + "/" + arch + "/libloli.so" << "/data/local/tmp";

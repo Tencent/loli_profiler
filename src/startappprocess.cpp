@@ -68,16 +68,17 @@ void StartAppProcess::StartApp(const QString& appName, const QString& subProcess
         dialog->setValue(dialog->value() + 1);
     }
     unsigned int pid = 0;
-    if (interceptMode) { // pid of
+    { // pid of
+        QThread::sleep(2);
+        dialog->setLabelText("Gettting pid.");
         arguments.clear();
-        //if need attch subProcess
+        // if need attch subProcess
         // https://stackoverflow.com/questions/15608876/find-out-the-running-process-id-by-package-name
-        if(subProcessName!=nullptr && !subProcessName.isEmpty()){
-            arguments << "shell" << "for p in /proc/[0-9]*; do [[ $(<$p/cmdline) = " + appName + ":" + subProcessName + " ]] && echo ${p##*/}; done";
-        }else{
+        if (subProcessName.isNull() || subProcessName.isEmpty()) {
             arguments << "shell" << "for p in /proc/[0-9]*; do [[ $(<$p/cmdline) = " + appName + " ]] && echo ${p##*/}; done";
+        } else {
+            arguments << "shell" << "for p in /proc/[0-9]*; do [[ $(<$p/cmdline) = " + appName + ":" + subProcessName + " ]] && echo ${p##*/}; done";
         }
-
         QProcess process;
         process.setProgram(execPath);
         AdbProcess::SetArguments(&process, arguments);
@@ -86,33 +87,6 @@ void StartAppProcess::StartApp(const QString& appName, const QString& subProcess
         }
         pid = process.readAll().trimmed().toUInt();
 //        qDebug() << pid;
-        dialog->setValue(dialog->value() + 1);
-    }
-    if (!interceptMode) { // adb jdwp
-        QThread::sleep(1);
-        dialog->setLabelText("Gettting jdwp id.");
-        arguments.clear();
-        arguments << "jdwp";
-        QProcess process;
-        process.setProgram(execPath);
-        AdbProcess::SetArguments(&process, arguments);
-        process.start();
-        if (!process.waitForStarted()) {
-            errorStr_ = "erro starting: adb jdwp";
-            emit ProcessErrorOccurred();
-            return;
-        }
-        if (!process.waitForFinished(3000)) {
-            QString retStr = process.readAll();
-            process.close();
-            auto lines = retStr.split('\n', QString::SkipEmptyParts);
-            if (lines.count() == 0) {
-                errorStr_ = "erro interpreting: adb jdwp";
-                emit ProcessErrorOccurred();
-                return;
-            }
-            pid = lines[lines.count() - 1].trimmed().toUInt();
-        }
         dialog->setValue(dialog->value() + 1);
     }
     { // adb forward

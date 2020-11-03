@@ -230,6 +230,8 @@ void MainWindow::LoadSettings() {
         lastSymbolDir_ = lastSymbolDir;
     PathUtils::SetSDKPath(settings.value(SETTINGS_ANDROIDSDK).toString());
     PathUtils::SetNDKPath(settings.value(SETTINGS_ANDROIDNDK).toString());
+    // initialize appName by previous settings
+    appName_ = ui->appNameLineEdit->text();
 }
 
 void MainWindow::SaveSettings() {

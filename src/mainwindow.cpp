@@ -1202,7 +1202,7 @@ void MainWindow::OnDumpingLineNumbers() {
     if (selectSymbolSearchPath) {
         symbolSearchPath = QFileDialog::getExistingDirectory(this, "Re-select symbol search directory?", symbolSearchPath);
     }
-    if (!QDir(symbolSearchPath).exists()) {
+    if (symbolSearchPath.isEmpty() || !QDir(symbolSearchPath).exists()) {
         QMessageBox::information(this, "Warning", "Invalide symbol search path.");
         return;
     }

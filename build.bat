@@ -7,9 +7,19 @@ rem set MSBUILD_EXE="%ProgramFiles(x86)%\Microsoft Visual Studio\2017\Community\
 rem set Ndk_R16_CMD="E:/SDK/AndroidNDKForUnity/android-ndk-r16b/ndk-build.cmd"
 rem set Ndk_R20_CMD="E:/SDK/AndroidNDKForUnity/android-ndk-r20/ndk-build.cmd"
 
+if [%QT5Path%] == [] (
+    echo empty QT5Path
+    goto Exit
+)
+
 if not exist %QT5Path% (
 	echo QT5Path not found ERROR: %QT5Path%
 	goto Exit
+)
+
+if [%MSBUILD_EXE%] == [] (
+    echo empty MSBUILD_EXE
+    goto Exit
 )
 
 if not exist %MSBUILD_EXE% (
@@ -17,9 +27,19 @@ if not exist %MSBUILD_EXE% (
 	goto Exit
 )
 
+if [%Ndk_R16_CMD%] == [] (
+    echo empty Ndk_R16_CMD
+    goto Exit
+)
+
 if not exist %Ndk_R16_CMD% (
 	echo Ndk_R16_CMD not found ERROR: %Ndk_R16_CMD%
 	goto Exit
+)
+
+if [%Ndk_R20_CMD%] == [] (
+    echo empty Ndk_R20_CMD
+    goto Exit
 )
 
 if not exist %Ndk_R20_CMD% (

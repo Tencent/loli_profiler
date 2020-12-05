@@ -118,7 +118,8 @@ void loli_server_loop(int sock) {
         } else {
             // check for client connectivity
             FD_ZERO(&fds);
-            FD_SET(clientSock, &fds);
+            if (clientSock >= 0)
+                FD_SET(clientSock, &fds);
             if (select(clientSock + 1, &fds, NULL, NULL, &time) > 0 && FD_ISSET(clientSock, &fds)) {
                 int length = recv(clientSock, buffer_, BUFSIZ, 0);
                 if (length <= 0) {

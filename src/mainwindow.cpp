@@ -1652,7 +1652,7 @@ void MainWindow::on_launchPushButton_clicked() {
     }
 
     auto launchModeInfo = QMessageBox::information(this, "Launch Mode",
-                                         "Launch new instance or attach to running app?", "Launch", "Attach", "Cancel", 0, 2);
+        "Launch new instance or attach to running app?", "Launch", "Attach", "Cancel", 0, 2);
     bool enableInject = launchModeInfo == 1;
     if (launchModeInfo == 2) {
         return;

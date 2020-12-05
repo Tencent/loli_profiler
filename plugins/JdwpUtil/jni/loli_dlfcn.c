@@ -154,7 +154,7 @@ void *fake_dlopen(const char *libpath, int flags)
 
     err_exit:
     if(fd >= 0) close(fd);
-    if(elf != MAP_FAILED) munmap(elf, size);
+    if(elf != 0 && elf != MAP_FAILED) munmap(elf, size);
     fake_dlclose(ctx);
     return 0;
 }

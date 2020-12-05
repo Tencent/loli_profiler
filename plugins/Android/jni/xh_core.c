@@ -100,6 +100,7 @@ static void xh_core_sigsegv_handler(int sig)
 static int xh_core_add_sigsegv_handler()
 {
     struct sigaction act;
+    memset(&act, '\0', sizeof(act));
 
     if(!xh_core_sigsegv_enable) return 0;
     

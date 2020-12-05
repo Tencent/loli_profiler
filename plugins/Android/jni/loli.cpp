@@ -207,6 +207,7 @@ BACKTRACE_FPTR loli_get_backtrace(const char* path) {
         void (*set_loli_ignore_func)(void (*funcPtr)(bool)) = nullptr;
         *(void **) (&set_loli_ignore_func) = fake_dlsym(handle, "set_loli_ignore_func");
          if (set_loli_ignore_func == nullptr) {
+            fake_dlclose(handler);
             LOLILOGI("Error dlsym set_loli_ignore_func: %s", path);
             return backtrace;
         }
@@ -215,6 +216,7 @@ BACKTRACE_FPTR loli_get_backtrace(const char* path) {
         if (backtrace == nullptr) {
             LOLILOGI("Error dlsym get_stack_backtrace: %s", path);
         }
+        fake_dlclose(handler);
     } else {
         LOLILOGI("Error dlopen: %s", path);
     }
@@ -228,6 +230,7 @@ LOLI_SET_ALLOCANDFREE_FPTR loli_get_allocandfree(const char* path) {
     if (handle) {
         LOLI_SET_ALLOCANDFREE_FPTR ptr = nullptr;
         *(void **) (&ptr) = fake_dlsym(handle, "loli_set_allocandfree");
+        fake_dlclose(handle);
         return ptr;
     } else {
         LOLILOGI("Error dlopen: %s", path);

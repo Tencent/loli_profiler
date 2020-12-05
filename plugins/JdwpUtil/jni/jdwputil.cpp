@@ -114,6 +114,7 @@ int RestartJDWP() {
     allowJdwp = (void (*)(bool)) fake_dlsym(handler, "_ZN3art3Dbg14SetJdwpAllowedEb");
     if (allowJdwp == NULL) {
         LOLILOGE("Error fake_dlsym _ZN3art3Dbg14SetJdwpAllowedEb");
+        fake_dlclose(handler);
         return -1;
     }
     allowJdwp(true);
@@ -121,6 +122,7 @@ int RestartJDWP() {
     void (*stopJdwp)() = (void (*)()) fake_dlsym(handler, "_ZN3art3Dbg8StopJdwpEv");
     if (stopJdwp == NULL) {
         LOLILOGE("Error fake_dlsym _ZN3art3Dbg8StopJdwpEv");
+        fake_dlclose(handler);
         return -1;
     }
     stopJdwp();
@@ -131,6 +133,7 @@ int RestartJDWP() {
         configureJdwp = (void (*)(const JdwpOptions& jdwp_opts)) fake_dlsym(handler, 
             "_ZN3art3Dbg13ConfigureJdwpERKNS_4JDWP11JdwpOptionsE");
         if (configureJdwp == nullptr) {
+            fake_dlclose(handler);
             LOLILOGE("Error fake_dlsym _ZN3art3Dbg13ConfigureJdwpERKNS_4JDWP11JdwpOptionsE");
             return -1;
         }
@@ -145,6 +148,7 @@ int RestartJDWP() {
         std::string options = "transport=dt_android_adb,address=8700,server=y,suspend=n";
 
         if (parseJdwpOptions == NULL) {
+            fake_dlclose(handler);
             LOLILOGE("Error fake_dlsym parseJdwpOptions");
             return -1;
         }
@@ -154,9 +158,11 @@ int RestartJDWP() {
 
     void (*startJdwp)() = (void (*)()) fake_dlsym(handler, "_ZN3art3Dbg9StartJdwpEv");
     if (startJdwp == NULL) {
+        fake_dlclose(handler);
         LOLILOGE("Error fake_dlsym _ZN3art3Dbg9StartJdwpEv");
         return -1;
     }
+    fake_dlclose(handler);
     startJdwp();
     return 0;
 }

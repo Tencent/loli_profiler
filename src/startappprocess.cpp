@@ -12,7 +12,8 @@ StartAppProcess::StartAppProcess(QObject* parent)
 
 }
 
-void StartAppProcess::StartApp(const QString& appName, const QString& subProcessName, const QString& compiler, const QString& arch, bool interceptMode, QProgressDialog* dialog) {
+void StartAppProcess::StartApp(const QString& appName, const QString& subProcessName, const QString& compiler, 
+    const QString& arch, bool interceptMode, QProgressDialog* dialog) {
     startResult_ = false;
     interceptMode_ = interceptMode;
     errorStr_ = QString();
@@ -92,9 +93,12 @@ void StartAppProcess::StartApp(const QString& appName, const QString& subProcess
         // if need attch subProcess
         // https://stackoverflow.com/questions/15608876/find-out-the-running-process-id-by-package-name
         if (subProcessName.isNull() || subProcessName.isEmpty()) {
-            arguments << "shell" << "for p in /proc/[0-9]*; do [[ $(<$p/cmdline) = " + appName + " ]] && echo ${p##*/}; done";
+            arguments << "shell" << 
+                "for p in /proc/[0-9]*; do [[ $(<$p/cmdline) = " + appName + " ]] && echo ${p##*/}; done";
         } else {
-            arguments << "shell" << "for p in /proc/[0-9]*; do [[ $(<$p/cmdline) = " + appName + ":" + subProcessName + " ]] && echo ${p##*/}; done";
+            arguments << "shell" << 
+                "for p in /proc/[0-9]*; do [[ $(<$p/cmdline) = " + appName + ":" + 
+                subProcessName + " ]] && echo ${p##*/}; done";
         }
         QProcess process;
         process.setProgram(execPath);
@@ -124,7 +128,8 @@ void StartAppProcess::StartApp(const QString& appName, const QString& subProcess
     dialog->setCancelButtonText("Cancel");
     dialog->raise();
     arguments.clear();
-    arguments << "jdwp-shellifier.py" << "--target" << "127.0.0.1" << "--port" << "8700" << "--break-on" << "android.app.Activity.onResume" << "--loadlib" << "libloli.so";
+    arguments << "jdwp-shellifier.py" << "--target" << "127.0.0.1" << "--port" << "8700" << 
+        "--break-on" << "android.app.Activity.onResume" << "--loadlib" << "libloli.so";
     process_->setWorkingDirectory(QCoreApplication::applicationDirPath());
     process_->setProgram(pythonPath_);
     AdbProcess::SetArguments(process_, arguments);
@@ -136,7 +141,8 @@ bool StartAppProcess::GetSMapsByRunAs(const QString& appName, const QString& app
     QStringList arguments;
     QProcess process;
     process.setProgram(execPath);
-    arguments << "shell" << "run-as" << appName << "cat" << "/proc/" + appPid + "/smaps" << ">" << "/data/local/tmp/smaps.txt";
+    arguments << "shell" << "run-as" << appName << "cat" << "/proc/" + appPid + 
+        "/smaps" << ">" << "/data/local/tmp/smaps.txt";
     AdbProcess::SetArguments(&process, arguments);
     process.start();
     if (!process.waitForStarted()) {

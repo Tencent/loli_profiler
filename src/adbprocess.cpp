@@ -18,7 +18,8 @@ void AdbProcess::Connect() {
     if (connected_)
         return;
     connect(process_, &QProcess::errorOccurred, this, &AdbProcess::AdbProcessErrorOccurred);
-    connect(process_, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this, &AdbProcess::AdbProcessFinished);
+    connect(process_, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), 
+        this, &AdbProcess::AdbProcessFinished);
     connected_ = true;
 }
 
@@ -26,7 +27,8 @@ void AdbProcess::Disconnect() {
     if (!connected_)
         return;
     disconnect(process_, &QProcess::errorOccurred, this, &AdbProcess::AdbProcessErrorOccurred);
-    disconnect(process_, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this, &AdbProcess::AdbProcessFinished);
+    disconnect(process_, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), 
+        this, &AdbProcess::AdbProcessFinished);
     connected_ = false;
 }
 

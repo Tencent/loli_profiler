@@ -47,8 +47,9 @@
 
 #define ANDROID_SDK_NOTFOUND_MSG "Android SDK not found. Please select Android SDK's location in configuration panel."
 #define ANDROID_NDK_NOTFOUND_MSG "Android NDK not found. Please select Android NDK's location in configuration panel."
-#define STRIP_NON_PERSISTENT_MSG "Enable memory optimization? Turn this on for large projects that produces massive amount of data. "\
-                                    "This will optimize loli-profiler's memory usage by data streaming."
+#define STRIP_NON_PERSISTENT_MSG "Enable memory optimization? "\
+            "Turn this on for large projects that produces massive amount of data. "\
+            "This will optimize loli-profiler's memory usage by data streaming."
 
 enum class IOErrorCode : qint32 {
     NONE = 0,
@@ -69,7 +70,8 @@ MainWindow::MainWindow(QWidget *parent) :
     // Parse or create config file
     ConfigDialog::ParseConfigFile();
 
-    progressDialog_ = new QProgressDialog(this, Qt::WindowTitleHint | Qt::CustomizeWindowHint | Qt::MSWindowsFixedSizeDialogHint);
+    progressDialog_ = new QProgressDialog(this, 
+        Qt::WindowTitleHint | Qt::CustomizeWindowHint | Qt::MSWindowsFixedSizeDialogHint);
     progressDialog_->setWindowModality(Qt::WindowModal);
     progressDialog_->setAutoClose(true);
     progressDialog_->setCancelButton(nullptr);
@@ -86,20 +88,27 @@ MainWindow::MainWindow(QWidget *parent) :
 
     // setup adb process
     startAppProcess_ = new StartAppProcess(this);
-    connect(startAppProcess_, &StartAppProcess::ProcessFinished, this, &MainWindow::StartAppProcessFinished);
-    connect(startAppProcess_, &StartAppProcess::ProcessErrorOccurred, this, &MainWindow::StartAppProcessErrorOccurred);
+    connect(startAppProcess_, &StartAppProcess::ProcessFinished, 
+        this, &MainWindow::StartAppProcessFinished);
+    connect(startAppProcess_, &StartAppProcess::ProcessErrorOccurred, 
+        this, &MainWindow::StartAppProcessErrorOccurred);
 
     screenshotProcess_ = new ScreenshotProcess(this);
-    connect(screenshotProcess_, &ScreenshotProcess::ProcessFinished, this, &MainWindow::ScreenshotProcessFinished);
-    connect(screenshotProcess_, &ScreenshotProcess::ProcessErrorOccurred, this, &MainWindow::ScreenshotProcessErrorOccurred);
+    connect(screenshotProcess_, &ScreenshotProcess::ProcessFinished, 
+        this, &MainWindow::ScreenshotProcessFinished);
+    connect(screenshotProcess_, &ScreenshotProcess::ProcessErrorOccurred, 
+        this, &MainWindow::ScreenshotProcessErrorOccurred);
 
     memInfoProcess_ = new MemInfoProcess(this);
     connect(memInfoProcess_, &MemInfoProcess::ProcessFinished, this, &MainWindow::MemInfoProcessFinished);
-    connect(memInfoProcess_, &MemInfoProcess::ProcessErrorOccurred, this, &MainWindow::MemInfoProcessErrorOccurred);
+    connect(memInfoProcess_, &MemInfoProcess::ProcessErrorOccurred, 
+        this, &MainWindow::MemInfoProcessErrorOccurred);
 
     stacktraceProcess_ = new StackTraceProcess(this);
-    connect(stacktraceProcess_, &StackTraceProcess::DataReceived, this, &MainWindow::StacktraceDataReceived);
-    connect(stacktraceProcess_, &StackTraceProcess::ConnectionLost, this, &MainWindow::StacktraceConnectionLost);
+    connect(stacktraceProcess_, &StackTraceProcess::DataReceived, 
+        this, &MainWindow::StacktraceDataReceived);
+    connect(stacktraceProcess_, &StackTraceProcess::ConnectionLost, 
+        this, &MainWindow::StacktraceConnectionLost);
     connect(stacktraceProcess_, &StackTraceProcess::SMapsDumped, [this]() {
         smapsTimer_->stop();
         StopCaptureProcess();
@@ -143,10 +152,14 @@ MainWindow::MainWindow(QWidget *parent) :
     memInfoChartView_->setContentsMargins(0, 0, 0, 0);
     memInfoChartView_->setFixedHeight(250);
 
-    connect(memInfoChartView_, &InteractiveChartView::OnSyncScroll, this, &MainWindow::OnSyncScroll);
-    connect(memInfoChartView_, &InteractiveChartView::OnSelectionChange, this, &MainWindow::OnTimeSelectionChange);
-    connect(memInfoChartView_, &InteractiveChartView::OnRubberBandSelected, this, &MainWindow::OnTimelineRubberBandSelected);
-    connect(memInfoChartView_, &InteractiveChartView::OnRubberBandHide, this, &MainWindow::OnTimelineRubberBandHide);
+    connect(memInfoChartView_, &InteractiveChartView::OnSyncScroll, 
+        this, &MainWindow::OnSyncScroll);
+    connect(memInfoChartView_, &InteractiveChartView::OnSelectionChange, 
+        this, &MainWindow::OnTimeSelectionChange);
+    connect(memInfoChartView_, &InteractiveChartView::OnRubberBandSelected, 
+        this, &MainWindow::OnTimelineRubberBandSelected);
+    connect(memInfoChartView_, &InteractiveChartView::OnRubberBandHide, 
+        this, &MainWindow::OnTimelineRubberBandHide);
 
     // steup chart scroll area
     scrollArea_ = new FixedScrollArea();
@@ -179,7 +192,8 @@ MainWindow::MainWindow(QWidget *parent) :
     stacktraceModel_ = new StackTraceModel(this);
     stacktraceProxyModel_ = new StackTraceProxyModel(stacktraceModel_, this);
     SwitchStackTraceModel(stacktraceProxyModel_);
-    connect(ui->stackTableView, &QTableView::customContextMenuRequested, this, &MainWindow::OnStackTableViewContextMenu);
+    connect(ui->stackTableView, &QTableView::customContextMenuRequested, 
+        this, &MainWindow::OnStackTableViewContextMenu);
 
     mainTimer_ = new QTimer(this);
     connect(mainTimer_, SIGNAL(timeout()), this, SLOT(FixedUpdate()));
@@ -703,7 +717,8 @@ void MainWindow::SwitchStackTraceModel(StackTraceProxyModel* model) {
     if (model == ui->stackTableView->model())
         return;
     ui->stackTableView->setModel(model);
-    connect(ui->stackTableView->selectionModel(), &QItemSelectionModel::selectionChanged, this, &MainWindow::OnStackTableViewSelectionChanged);
+    connect(ui->stackTableView->selectionModel(), &QItemSelectionModel::selectionChanged, 
+        this, &MainWindow::OnStackTableViewSelectionChanged);
 }
 
 QString Demangle(const QString& name) {
@@ -717,7 +732,8 @@ void MainWindow::ReadSMapsFile(QFile* file) {
     QTextStream stream(file);
     SMapsSection total;
     SMapsSection* curSection = nullptr;
-    QRegExp sectionTitleRx("([0-9a-z]+)\\-([0-9a-z]+)\\s([0-9a-z-]+)\\s([0-9a-z]+)\\s([0-9a-z]+)\\:([0-9a-z]+)\\s([0-9a-z]+)\\s+(\\S.+)");
+    QRegExp sectionTitleRx(
+        "([0-9a-z]+)\\-([0-9a-z]+)\\s([0-9a-z-]+)\\s([0-9a-z]+)\\s([0-9a-z]+)\\:([0-9a-z]+)\\s([0-9a-z]+)\\s+(\\S.+)");
     while (!stream.atEnd()) {
         auto line = stream.readLine();
         if (line.isEmpty())
@@ -853,11 +869,11 @@ void MainWindow::GetMergedCallstacks(QList<QTreeWidgetItem*>& topLevelItems) {
 }
 
 void MainWindow::ResetFilters() {
-   minTime_ = 0;
-   maxTime_ = std::numeric_limits<double>::max();
-   ui->memSizeComboBox->setCurrentIndex(0);
-   ui->allocComboBox->setCurrentIndex(0);
-   ui->libraryComboBox->setCurrentIndex(0);
+    minTime_ = 0;
+    maxTime_ = std::numeric_limits<double>::max();
+    ui->memSizeComboBox->setCurrentIndex(0);
+    ui->allocComboBox->setCurrentIndex(0);
+    ui->libraryComboBox->setCurrentIndex(0);
 }
 
 void MainWindow::PushEmptySMapsFile() {
@@ -1071,7 +1087,8 @@ void MainWindow::InterpretStacktraceData() {
             futures.push_back(QtConcurrent::run(this, &MainWindow::InterpretRecordsLibrary, currentIndex, payload));
             currentIndex += payload;
         }
-        futures.push_back(QtConcurrent::run(this, &MainWindow::InterpretRecordsLibrary, currentIndex, recordsCache_.size() - currentIndex));
+        futures.push_back(QtConcurrent::run(this, &MainWindow::InterpretRecordsLibrary, 
+            currentIndex, recordsCache_.size() - currentIndex));
         progressDialog_->setLabelText(QString("Translating %1 records by %2 jobs").arg(recordsCache_.size()).arg(threadCount));
         progressDialog_->setMinimum(0);
         progressDialog_->setMaximum(progressDialog_->maximum() + threadCount);

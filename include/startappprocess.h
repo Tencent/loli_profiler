@@ -20,7 +20,8 @@ public:
         return errorStr_;
     }
 
-    void StartApp(const QString& appName, const QString& subProcessName, const QString& compiler, const QString& arch, bool interceptMode, QProgressDialog* dialog);
+    void StartApp(const QString& appName, const QString& subProcessName, const QString& compiler, 
+        const QString& arch, bool interceptMode, QProgressDialog* dialog);
     bool GetSMapsByRunAs(const QString& appName, const QString& appPid);
 
 protected:

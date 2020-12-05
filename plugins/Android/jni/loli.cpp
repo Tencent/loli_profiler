@@ -104,7 +104,8 @@ inline void loli_maybe_record_alloc(size_t size, void* addr, loliFlags flag, int
     static thread_local io::buffer obuffer(2048);
     obuffer.clear();
     // std::ostringstream oss;
-    auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime_).count();
+    auto time = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now() - startTime_).count();
     if (mode_ == loliDataMode::NOSTACK) {
         std::string soname = std::string(hookInfo->so_name) + ".so";
         obuffer << static_cast<uint8_t>(flag) << static_cast<uint32_t>(++callSeq_) << static_cast<int64_t>(time) 
@@ -206,7 +207,7 @@ BACKTRACE_FPTR loli_get_backtrace(const char* path) {
     if (handler) {
         void (*set_loli_ignore_func)(void (*funcPtr)(bool)) = nullptr;
         *(void **) (&set_loli_ignore_func) = fake_dlsym(handler, "set_loli_ignore_func");
-         if (set_loli_ignore_func == nullptr) {
+        if (set_loli_ignore_func == nullptr) {
             fake_dlclose(handler);
             LOLILOGI("Error dlsym set_loli_ignore_func: %s", path);
             return backtrace;

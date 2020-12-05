@@ -40,20 +40,20 @@ QString PathUtils::GetNDKToolPath(const QString& name, bool armv7) {
     if (armv7) {
 #ifdef Q_OS_WIN
         toolPath = ndkPath_ + "/toolchains/arm-linux-androideabi-4.9" +
-                                   QString("/prebuilt/windows-x86_64/bin/arm-linux-androideabi-%1.exe").arg(name);
+            QString("/prebuilt/windows-x86_64/bin/arm-linux-androideabi-%1.exe").arg(name);
 #else
         toolPath = ndkPath_ + "/toolchains/arm-linux-androideabi-4.9" +
-                                   QString("/prebuilt/darwin-x86_64/bin/arm-linux-androideabi-%1").arg(name);
+            QString("/prebuilt/darwin-x86_64/bin/arm-linux-androideabi-%1").arg(name);
 #endif
         if (QFile::exists(toolPath))
             return toolPath;
     } else {
 #ifdef Q_OS_WIN
         toolPath = ndkPath_ + "/toolchains/aarch64-linux-android-4.9" +
-                                   QString("/prebuilt/windows-x86_64/bin/aarch64-linux-android-%1.exe").arg(name);
+            QString("/prebuilt/windows-x86_64/bin/aarch64-linux-android-%1.exe").arg(name);
 #else
         toolPath = ndkPath_ + "/toolchains/aarch64-linux-android-4.9" +
-                                   QString("/prebuilt/darwin-x86_64/bin/aarch64-linux-android-%1").arg(name);
+            QString("/prebuilt/darwin-x86_64/bin/aarch64-linux-android-%1").arg(name);
 #endif
         if (QFile::exists(toolPath))
             return toolPath;

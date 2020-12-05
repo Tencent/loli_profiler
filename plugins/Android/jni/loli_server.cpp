@@ -204,7 +204,8 @@ void loli_server_loop(int sock) {
                     send(clientSock, &packetType, 4, 0); // send packet type
                     send(clientSock, &srcSize, 4, 0); // send uncompressed buffer size (for decompression)
                     send(clientSock, compressBuffer, compressSize, 0); // then send data
-                    // LOLILOGI("send size %i, compressed size %i, lineCount: %i", srcSize, compressSize, static_cast<int>(cacheCopy.size()));
+                    // LOLILOGI("send size %i, compressed size %i, lineCount: %i", srcSize, 
+                    //    compressSize, static_cast<int>(cacheCopy.size()));
                 }
                 cacheCopy.clear();
             }

@@ -79,7 +79,8 @@ void StackTraceProcess::ReadStackTracePacket(const QByteArray &bytes) {
         delete[] compressBuffer_;
         compressBuffer_ = new char[compressBufferSize_];
     }
-    auto decompressSize = LZ4_decompress_safe(bytes.data() + 8, compressBuffer_, bytes.size() - 8, static_cast<qint32>(compressBufferSize_));
+    auto decompressSize = LZ4_decompress_safe(bytes.data() + 8, compressBuffer_, 
+        bytes.size() - 8, static_cast<qint32>(compressBufferSize_));
     if (decompressSize == 0) {
         qDebug() << "LZ4 decompression failed!";
         return;

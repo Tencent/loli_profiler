@@ -157,8 +157,8 @@ void loli_trim(std::string &str) {
 // result: 保存分割结果的字符串数组
 // delim: 分隔字符串
 void loli_split(const std::string& str,
-           std::vector<std::string>& tokens,
-           const std::string delim) {
+        std::vector<std::string>& tokens,
+        const std::string delim) {
     tokens.clear();
 
     char* buffer = new char[str.size() + 1];
@@ -205,11 +205,6 @@ static _Unwind_Reason_Code loli_unwind(struct _Unwind_Context* context, void* ar
 
 size_t loli_fastcapture(void **buffer, size_t max) {
     return loli_trace_stackframepointers(buffer, max, 0);
-   // size_t i(0);
-   // void *addr;
-   // for(i = 0; (i < max) && (addr = return_address(i)); ++i)
-   //    buffer[i] = addr;
-   // return i;
 }
 
 size_t loli_capture(void** buffer, size_t max) {

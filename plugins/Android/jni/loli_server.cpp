@@ -97,6 +97,7 @@ void loli_server_loop(int sock) {
     time.tv_sec = 0; // must initialize this value to prevent uninitialised memory
     time.tv_usec = 100;
     fd_set fds;
+    memset(&fds, 0, sizeof(fd_set));
     FD_ZERO(&fds);
     int clientSock = -1;
     auto lastTickTime = std::chrono::steady_clock::now();

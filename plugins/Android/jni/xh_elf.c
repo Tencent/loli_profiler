@@ -757,47 +757,8 @@ static void xh_elf_dump(xh_elf_t *self)
 
 #endif
 
-int xh_elf_init(xh_elf_t *self, uintptr_t base_addr, const char *pathname)
+int xh_elf_init_parse_dynamic_segment(xh_elf_t *self)
 {
-    if(0 == base_addr || NULL == pathname) return XH_ERRNO_INVAL;
-
-    //always reset
-    memset(self, 0, sizeof(xh_elf_t));
-    
-    self->pathname = pathname;
-    self->base_addr = (ElfW(Addr))base_addr;
-    self->ehdr = (ElfW(Ehdr) *)base_addr;
-    self->phdr = (ElfW(Phdr) *)(base_addr + self->ehdr->e_phoff); //segmentation fault sometimes
-
-    //find the first load-segment with offset 0
-    ElfW(Phdr) *phdr0 = xh_elf_get_first_segment_by_type_offset(self, PT_LOAD, 0);
-    if(NULL == phdr0)
-    {
-        XH_LOG_ERROR("Can NOT found the first load segment. %s", pathname);
-        return XH_ERRNO_FORMAT;
-    }
-
-#if XH_ELF_DEBUG
-    if(0 != phdr0->p_vaddr)
-        XH_LOG_DEBUG("first load-segment vaddr NOT 0 (vaddr: %p). %s",
-                     (void *)(phdr0->p_vaddr), pathname);
-#endif
-
-    //save load bias addr
-    if(self->base_addr < phdr0->p_vaddr) return XH_ERRNO_FORMAT;
-    self->bias_addr = self->base_addr - phdr0->p_vaddr;
-    
-    //find dynamic-segment
-    ElfW(Phdr) *dhdr = xh_elf_get_first_segment_by_type(self, PT_DYNAMIC);
-    if(NULL == dhdr)
-    {
-        XH_LOG_ERROR("Can NOT found dynamic segment. %s", pathname);
-        return XH_ERRNO_FORMAT;
-    }
-
-    //parse dynamic-segment
-    self->dyn          = (ElfW(Dyn) *)(self->bias_addr + dhdr->p_vaddr);
-    self->dyn_sz       = dhdr->p_memsz;
     ElfW(Dyn) *dyn     = self->dyn;
     ElfW(Dyn) *dyn_end = self->dyn + (self->dyn_sz / sizeof(ElfW(Dyn)));
     uint32_t  *raw;
@@ -887,6 +848,51 @@ int xh_elf_init(xh_elf_t *self, uintptr_t base_addr, const char *pathname)
             break;
         }
     }
+    return 0;
+}
+
+int xh_elf_init(xh_elf_t *self, uintptr_t base_addr, const char *pathname)
+{
+    if(0 == base_addr || NULL == pathname) return XH_ERRNO_INVAL;
+
+    //always reset
+    memset(self, 0, sizeof(xh_elf_t));
+    
+    self->pathname = pathname;
+    self->base_addr = (ElfW(Addr))base_addr;
+    self->ehdr = (ElfW(Ehdr) *)base_addr;
+    self->phdr = (ElfW(Phdr) *)(base_addr + self->ehdr->e_phoff); //segmentation fault sometimes
+
+    //find the first load-segment with offset 0
+    ElfW(Phdr) *phdr0 = xh_elf_get_first_segment_by_type_offset(self, PT_LOAD, 0);
+    if(NULL == phdr0)
+    {
+        XH_LOG_ERROR("Can NOT found the first load segment. %s", pathname);
+        return XH_ERRNO_FORMAT;
+    }
+
+#if XH_ELF_DEBUG
+    if(0 != phdr0->p_vaddr)
+        XH_LOG_DEBUG("first load-segment vaddr NOT 0 (vaddr: %p). %s",
+                     (void *)(phdr0->p_vaddr), pathname);
+#endif
+
+    //save load bias addr
+    if(self->base_addr < phdr0->p_vaddr) return XH_ERRNO_FORMAT;
+    self->bias_addr = self->base_addr - phdr0->p_vaddr;
+    
+    //find dynamic-segment
+    ElfW(Phdr) *dhdr = xh_elf_get_first_segment_by_type(self, PT_DYNAMIC);
+    if(NULL == dhdr)
+    {
+        XH_LOG_ERROR("Can NOT found dynamic segment. %s", pathname);
+        return XH_ERRNO_FORMAT;
+    }
+
+    //parse dynamic-segment
+    self->dyn          = (ElfW(Dyn) *)(self->bias_addr + dhdr->p_vaddr);
+    self->dyn_sz       = dhdr->p_memsz;
+    xh_elf_init_parse_dynamic_segment(self);
 
     //check android rel/rela
     if(0 != self->relandroid)

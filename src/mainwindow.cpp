@@ -1563,7 +1563,8 @@ void MainWindow::on_actionShow_Merged_Callstacks_triggered() {
         auto startTime = sclock::now();
         matches = treeWidget->findItems(keyword, Qt::MatchContains | Qt::MatchRecursive, 0);
         auto ms = std::chrono::duration<double, std::milli>(sclock::now() - startTime).count();
-        ui->statusBar->showMessage(QString("Found %1 matches in %2 ms, press enter to review one by one").arg(matches.size()).arg(ms), 10000);
+        ui->statusBar->showMessage(QString("Found %1 matches in %2 ms, press enter to review one by one")
+            .arg(matches.size()).arg(ms), 10000);
     });
     connect(searchLineEdit, &QLineEdit::returnPressed, [&](){
         if (matches.size() <= 0) {
@@ -1721,7 +1722,8 @@ void MainWindow::on_launchPushButton_clicked() {
     showJDWPErrorLog_ = true;
     startAppProcess_->SetPythonPath(pythonPath);
     startAppProcess_->SetExecutablePath(adbPath);
-    startAppProcess_->StartApp(appName_, subProcessName_, settings.compiler_, settings.arch_, enableInject, progressDialog_);
+    startAppProcess_->StartApp(appName_, subProcessName_, settings.compiler_, 
+        settings.arch_, enableInject, progressDialog_);
 
     isCapturing_ = true;
     Print("Starting application ...");
@@ -1734,7 +1736,7 @@ void MainWindow::on_chartScaleHSlider_valueChanged(int value) {
 
 void MainWindow::on_symbloPushButton_clicked() {
     auto symbloPath = QFileDialog::getOpenFileName(this, tr("Select Symblo File"),
-                                                   GetLastSymbolDir(), tr("Library Files (*.sym *.sym.so *.so)"));
+        GetLastSymbolDir(), tr("Library Files (*.sym *.sym.so *.so)"));
     if (!QFile::exists(symbloPath))
         return;
     lastSymbolDir_ = QFileInfo(symbloPath).dir().absolutePath();
@@ -1792,7 +1794,7 @@ void MainWindow::on_symbloPushButton_clicked() {
     QVector<SymbolRecord> sortedRecords;
 
     {
-//        TimerProfiler profile("Load Symbol");
+        // TimerProfiler profile("Load Symbol");
         QFile symbolMapFile(symbolMapFilePath);
         if (!symbolMapFile.open(QFile::OpenModeFlag::ReadOnly)) {
             progressDialog_->hide();
@@ -1802,14 +1804,14 @@ void MainWindow::on_symbloPushButton_clicked() {
         QRegExp recordRx("([0-9a-z]+)\\s([0-9a-z]+)\\s(\\w)\\s(.+)");
         QTextStream in(&symbolMapFile);
         while (!in.atEnd()) {
-           QString line = in.readLine();
-           if (recordRx.indexIn(line) < 0)
-               continue;
-           SymbolRecord record;
-           record.name = recordRx.cap(4);
-           record.size = recordRx.cap(2).toUInt(nullptr, 16);
-           record.addr = recordRx.cap(1).toULong(nullptr, 16);
-           sortedRecords.push_back(record);
+            QString line = in.readLine();
+            if (recordRx.indexIn(line) < 0)
+                continue;
+            SymbolRecord record;
+            record.name = recordRx.cap(4);
+            record.size = recordRx.cap(2).toUInt(nullptr, 16);
+            record.addr = recordRx.cap(1).toULong(nullptr, 16);
+            sortedRecords.push_back(record);
         }
         symbolMapFile.close();
     }
@@ -1819,7 +1821,7 @@ void MainWindow::on_symbloPushButton_clicked() {
     QCoreApplication::instance()->sendPostedEvents();
 
     if (sortedRecords.size() > 0) {
-//        TimerProfiler profile("Translate Symbol");
+        // TimerProfiler profile("Translate Symbol");
         auto& addrMap = it.value();
         auto addrMapIt = addrMap.begin();
         for (; addrMapIt != addrMap.end(); ++addrMapIt) {
@@ -1923,9 +1925,8 @@ void MainWindow::on_actionExport_To_Text_triggered() {
         QMessageBox::warning(this, "Warning", "Can't create file!", QMessageBox::StandardButton::Ok);
         return;
     }
-    bool optimal = QMessageBox::information(this, "Export Option",
-                             "Export smaller text file?",
-                             QMessageBox::StandardButton::Yes | QMessageBox::StandardButton::No) == QMessageBox::StandardButton::Yes;
+    bool optimal = QMessageBox::information(this, "Export Option", "Export smaller text file?",
+        QMessageBox::StandardButton::Yes | QMessageBox::StandardButton::No) == QMessageBox::StandardButton::Yes;
     ExportToText(&tempFile, optimal);
     if (QFileInfo::exists(fileName) && !QFile(fileName).remove()) {
         QMessageBox::warning(this, "Warning", "Error removing file!", QMessageBox::StandardButton::Ok);

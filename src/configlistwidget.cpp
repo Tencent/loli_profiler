@@ -62,7 +62,7 @@ void ConfigListWidget::OnContextMenuRequested(const QPoint &pos) {
         for (int i = 0; i < count(); i++) {
             items << item(i)->text();
         }
-       QApplication::clipboard()->setText(items.join(','));
+        QApplication::clipboard()->setText(items.join(','));
     });
     menu.exec(mapToGlobal(pos));
 }

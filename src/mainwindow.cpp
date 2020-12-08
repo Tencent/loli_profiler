@@ -732,17 +732,25 @@ void MainWindow::ReadSMapsFile(QFile* file) {
     QTextStream stream(file);
     SMapsSection total;
     SMapsSection* curSection = nullptr;
+//    QRegExp sectionTitleRx(
+//        "([0-9a-z]+)\\-([0-9a-z]+)\\s([0-9a-z-]+)\\s([0-9a-z]+)\\s([0-9a-z]+)\\:([0-9a-z]+)\\s([0-9a-z]+)\\s+(\\S.+)");
     QRegExp sectionTitleRx(
-        "([0-9a-z]+)\\-([0-9a-z]+)\\s([0-9a-z-]+)\\s([0-9a-z]+)\\s([0-9a-z]+)\\:([0-9a-z]+)\\s([0-9a-z]+)\\s+(\\S.+)");
+        "([0-9a-z]+)\\-([0-9a-z]+)\\s([0-9a-z-]+)\\s([0-9a-z]+)\\s([0-9a-z]+)\\:([0-9a-z]+)\\s([0-9a-z]+)");
     while (!stream.atEnd()) {
         auto line = stream.readLine();
         if (line.isEmpty())
             continue;
         auto strList = line.split(' ', QString::SplitBehavior::SkipEmptyParts);
         if (sectionTitleRx.indexIn(line) != -1) {
-            QString libName = sectionTitleRx.cap(8);
+            int matchedLength = sectionTitleRx.matchedLength();
+            if (matchedLength == -1)
+                continue;
+            QString libName = line.right(line.length() - matchedLength).trimmed();
             if (!libName.startsWith('[')) {
                 libName = Demangle(libName);
+            }
+            if (libName.isEmpty()) {
+                libName = "anonymous";
             }
             curSection = &sMapsSections_[libName];
             auto start = sectionTitleRx.cap(1).toULongLong(nullptr, 16);

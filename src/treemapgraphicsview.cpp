@@ -91,7 +91,8 @@ void TreeMap::Tessellate(QVector<double>& areas, QRectF rect, QRectF& remaining,
     }
 }
 
-double TreeMap::WorstAspectRatio(QVector<double>& weights, double groupWeight, double proposedWeight, double length, double limit) {
+double TreeMap::WorstAspectRatio(QVector<double>& weights, double groupWeight, double proposedWeight, 
+    double length, double limit) {
     auto computedGroupWeight = groupWeight + proposedWeight;
     auto width = computedGroupWeight / length;
     auto worstAspect = AspectRatio(width, proposedWeight / width);

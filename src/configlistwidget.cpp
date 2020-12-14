@@ -58,11 +58,11 @@ void ConfigListWidget::OnContextMenuRequested(const QPoint &pos) {
     menu.addAction("Delete Selected Items", [this]{ OnDeleteItemsClicked(); });
     menu.addAction("Clear All Items", [this]{ OnClearItemsClicked(); });
     menu.addAction("Copy To Clipboard", [this] {
-       QStringList items;
-       for (int i = 0; i < count(); i++) {
-           items << item(i)->text();
-       }
-       QApplication::clipboard()->setText(items.join(','));
+        QStringList items;
+        for (int i = 0; i < count(); i++) {
+            items << item(i)->text();
+        }
+        QApplication::clipboard()->setText(items.join(','));
     });
     menu.exec(mapToGlobal(pos));
 }

@@ -15,7 +15,8 @@ public:
     static void Tessellate(QVector<qulonglong>& values, QRectF rect, QVector<QRectF>& rects);
 private:
     static void Tessellate(QVector<double>& areas, QRectF rect, QRectF& remaining, QVector<QRectF>& rects);
-    static double WorstAspectRatio(QVector<double>& weights, double groupWeight, double proposedWeight, double length, double limit);
+    static double WorstAspectRatio(QVector<double>& weights, double groupWeight, double proposedWeight, 
+        double length, double limit);
     static double AspectRatio(double edge1, double edge2);
     enum class LayoutDirection {
         HORIZONTAL,

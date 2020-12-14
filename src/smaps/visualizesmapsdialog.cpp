@@ -13,9 +13,10 @@ VisualizeSmapsDialog::VisualizeSmapsDialog(QWidget *parent) :
 
 VisualizeSmapsDialog::~VisualizeSmapsDialog() {}
 
-void VisualizeSmapsDialog::VisualizeSmap(const QHash<QString, SMapsSection>& sMapsSections_, QAbstractItemModel *curModel)
+void VisualizeSmapsDialog::VisualizeSmap(const QHash<QString, SMapsSection>& sMapsSections_, 
+    QAbstractItemModel *curModel)
 {
-   // QDialog fragDialog(this, Qt::WindowTitleHint | Qt::WindowCloseButtonHint);
+    // QDialog fragDialog(this, Qt::WindowTitleHint | Qt::WindowCloseButtonHint);
     auto layout = new QVBoxLayout(this);
     layout->setSpacing(2);
     this->setLayout(layout);
@@ -60,8 +61,9 @@ void VisualizeSmapsDialog::VisualizeSmap(const QHash<QString, SMapsSection>& sMa
             totalSize += size;
         }
         statusBar->showMessage(QString("%1 sections with %2 allocation records, total: %3 used: %4 (%5%)")
-                               .arg(QString::number(sectionsCount), QString::number(recordsCount), sizeToString(totalSize), sizeToString(totalUsedSize),
-                                    QString::number((static_cast<double>(totalUsedSize) / totalSize) * 100.0)));
+            .arg(QString::number(sectionsCount), QString::number(recordsCount), 
+                sizeToString(totalSize), sizeToString(totalUsedSize),
+                QString::number((static_cast<double>(totalUsedSize) / totalSize) * 100.0)));
     });
     QSet<QString> visibleSections;
     auto recordCount = curModel->rowCount();

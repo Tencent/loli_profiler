@@ -59,6 +59,8 @@ void loli_dump_smaps() {
     int chunk = 1024;
     char *buf = (char*)malloc(chunk);
     if (buf == nullptr) {
+        fclose(srcFile);
+        fclose(dstFile);
         LOLILOGE("Failed to malloc(%i)", chunk);
         return;
     }
@@ -95,6 +97,8 @@ void loli_server_loop(int sock) {
     time.tv_sec = 0; // must initialize this value to prevent uninitialised memory
     time.tv_usec = 100;
     fd_set fds;
+    memset(&fds, 0, sizeof(fd_set));
+    FD_ZERO(&fds);
     int clientSock = -1;
     auto lastTickTime = std::chrono::steady_clock::now();
     while (serverRunning_) {
@@ -115,7 +119,8 @@ void loli_server_loop(int sock) {
         } else {
             // check for client connectivity
             FD_ZERO(&fds);
-            FD_SET(clientSock, &fds);
+            if (clientSock >= 0)
+                FD_SET(clientSock, &fds);
             if (select(clientSock + 1, &fds, NULL, NULL, &time) > 0 && FD_ISSET(clientSock, &fds)) {
                 int length = recv(clientSock, buffer_, BUFSIZ, 0);
                 if (length <= 0) {
@@ -199,7 +204,8 @@ void loli_server_loop(int sock) {
                     send(clientSock, &packetType, 4, 0); // send packet type
                     send(clientSock, &srcSize, 4, 0); // send uncompressed buffer size (for decompression)
                     send(clientSock, compressBuffer, compressSize, 0); // then send data
-                    // LOLILOGI("send size %i, compressed size %i, lineCount: %i", srcSize, compressSize, static_cast<int>(cacheCopy.size()));
+                    // LOLILOGI("send size %i, compressed size %i, lineCount: %i", srcSize, 
+                    //    compressSize, static_cast<int>(cacheCopy.size()));
                 }
                 cacheCopy.clear();
             }
@@ -207,7 +213,7 @@ void loli_server_loop(int sock) {
     }
     delete[] compressBuffer;
     close(sock);
-    if (hasClient_)
+    if (hasClient_ && clientSock >= 0)
         close(clientSock);
 }
 
@@ -232,6 +238,7 @@ int loli_server_start(int port) {
     // bind address
     int ecode = bind(sock, (struct sockaddr*)&serverAddr, sizeof(struct sockaddr));
     if (ecode < 0) {
+        close(sock);
         LOLILOGI("start.bind %i", ecode);
         return -1;
     }
@@ -239,12 +246,14 @@ int loli_server_start(int port) {
     int sendbuff = 327675;
     ecode = setsockopt(sock, SOL_SOCKET, SO_SNDBUF, &sendbuff, sizeof(sendbuff));
     if (ecode < 0) {
+        close(sock);
         LOLILOGI("start.setsockopt %i", ecode);
         return -1;
     }
     // listen for incomming connections
     ecode = listen(sock, 2);
     if (ecode < 0) {
+        close(sock);
         LOLILOGI("start.listen %i", ecode);
         return -1;
     }

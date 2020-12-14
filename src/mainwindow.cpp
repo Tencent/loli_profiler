@@ -47,8 +47,9 @@
 
 #define ANDROID_SDK_NOTFOUND_MSG "Android SDK not found. Please select Android SDK's location in configuration panel."
 #define ANDROID_NDK_NOTFOUND_MSG "Android NDK not found. Please select Android NDK's location in configuration panel."
-#define STRIP_NON_PERSISTENT_MSG "Enable memory optimization? Turn this on for large projects that produces massive amount of data. "\
-                                    "This will optimize loli-profiler's memory usage by data streaming."
+#define STRIP_NON_PERSISTENT_MSG "Enable memory optimization? "\
+            "Turn this on for large projects that produces massive amount of data. "\
+            "This will optimize loli-profiler's memory usage by data streaming."
 
 enum class IOErrorCode : qint32 {
     NONE = 0,
@@ -69,7 +70,8 @@ MainWindow::MainWindow(QWidget *parent) :
     // Parse or create config file
     ConfigDialog::ParseConfigFile();
 
-    progressDialog_ = new QProgressDialog(this, Qt::WindowTitleHint | Qt::CustomizeWindowHint | Qt::MSWindowsFixedSizeDialogHint);
+    progressDialog_ = new QProgressDialog(this, 
+        Qt::WindowTitleHint | Qt::CustomizeWindowHint | Qt::MSWindowsFixedSizeDialogHint);
     progressDialog_->setWindowModality(Qt::WindowModal);
     progressDialog_->setAutoClose(true);
     progressDialog_->setCancelButton(nullptr);
@@ -86,20 +88,27 @@ MainWindow::MainWindow(QWidget *parent) :
 
     // setup adb process
     startAppProcess_ = new StartAppProcess(this);
-    connect(startAppProcess_, &StartAppProcess::ProcessFinished, this, &MainWindow::StartAppProcessFinished);
-    connect(startAppProcess_, &StartAppProcess::ProcessErrorOccurred, this, &MainWindow::StartAppProcessErrorOccurred);
+    connect(startAppProcess_, &StartAppProcess::ProcessFinished, 
+        this, &MainWindow::StartAppProcessFinished);
+    connect(startAppProcess_, &StartAppProcess::ProcessErrorOccurred, 
+        this, &MainWindow::StartAppProcessErrorOccurred);
 
     screenshotProcess_ = new ScreenshotProcess(this);
-    connect(screenshotProcess_, &ScreenshotProcess::ProcessFinished, this, &MainWindow::ScreenshotProcessFinished);
-    connect(screenshotProcess_, &ScreenshotProcess::ProcessErrorOccurred, this, &MainWindow::ScreenshotProcessErrorOccurred);
+    connect(screenshotProcess_, &ScreenshotProcess::ProcessFinished, 
+        this, &MainWindow::ScreenshotProcessFinished);
+    connect(screenshotProcess_, &ScreenshotProcess::ProcessErrorOccurred, 
+        this, &MainWindow::ScreenshotProcessErrorOccurred);
 
     memInfoProcess_ = new MemInfoProcess(this);
     connect(memInfoProcess_, &MemInfoProcess::ProcessFinished, this, &MainWindow::MemInfoProcessFinished);
-    connect(memInfoProcess_, &MemInfoProcess::ProcessErrorOccurred, this, &MainWindow::MemInfoProcessErrorOccurred);
+    connect(memInfoProcess_, &MemInfoProcess::ProcessErrorOccurred, 
+        this, &MainWindow::MemInfoProcessErrorOccurred);
 
     stacktraceProcess_ = new StackTraceProcess(this);
-    connect(stacktraceProcess_, &StackTraceProcess::DataReceived, this, &MainWindow::StacktraceDataReceived);
-    connect(stacktraceProcess_, &StackTraceProcess::ConnectionLost, this, &MainWindow::StacktraceConnectionLost);
+    connect(stacktraceProcess_, &StackTraceProcess::DataReceived, 
+        this, &MainWindow::StacktraceDataReceived);
+    connect(stacktraceProcess_, &StackTraceProcess::ConnectionLost, 
+        this, &MainWindow::StacktraceConnectionLost);
     connect(stacktraceProcess_, &StackTraceProcess::SMapsDumped, [this]() {
         smapsTimer_->stop();
         StopCaptureProcess();
@@ -143,10 +152,14 @@ MainWindow::MainWindow(QWidget *parent) :
     memInfoChartView_->setContentsMargins(0, 0, 0, 0);
     memInfoChartView_->setFixedHeight(250);
 
-    connect(memInfoChartView_, &InteractiveChartView::OnSyncScroll, this, &MainWindow::OnSyncScroll);
-    connect(memInfoChartView_, &InteractiveChartView::OnSelectionChange, this, &MainWindow::OnTimeSelectionChange);
-    connect(memInfoChartView_, &InteractiveChartView::OnRubberBandSelected, this, &MainWindow::OnTimelineRubberBandSelected);
-    connect(memInfoChartView_, &InteractiveChartView::OnRubberBandHide, this, &MainWindow::OnTimelineRubberBandHide);
+    connect(memInfoChartView_, &InteractiveChartView::OnSyncScroll, 
+        this, &MainWindow::OnSyncScroll);
+    connect(memInfoChartView_, &InteractiveChartView::OnSelectionChange, 
+        this, &MainWindow::OnTimeSelectionChange);
+    connect(memInfoChartView_, &InteractiveChartView::OnRubberBandSelected, 
+        this, &MainWindow::OnTimelineRubberBandSelected);
+    connect(memInfoChartView_, &InteractiveChartView::OnRubberBandHide, 
+        this, &MainWindow::OnTimelineRubberBandHide);
 
     // steup chart scroll area
     scrollArea_ = new FixedScrollArea();
@@ -179,7 +192,8 @@ MainWindow::MainWindow(QWidget *parent) :
     stacktraceModel_ = new StackTraceModel(this);
     stacktraceProxyModel_ = new StackTraceProxyModel(stacktraceModel_, this);
     SwitchStackTraceModel(stacktraceProxyModel_);
-    connect(ui->stackTableView, &QTableView::customContextMenuRequested, this, &MainWindow::OnStackTableViewContextMenu);
+    connect(ui->stackTableView, &QTableView::customContextMenuRequested, 
+        this, &MainWindow::OnStackTableViewContextMenu);
 
     mainTimer_ = new QTimer(this);
     connect(mainTimer_, SIGNAL(timeout()), this, SLOT(FixedUpdate()));
@@ -703,7 +717,8 @@ void MainWindow::SwitchStackTraceModel(StackTraceProxyModel* model) {
     if (model == ui->stackTableView->model())
         return;
     ui->stackTableView->setModel(model);
-    connect(ui->stackTableView->selectionModel(), &QItemSelectionModel::selectionChanged, this, &MainWindow::OnStackTableViewSelectionChanged);
+    connect(ui->stackTableView->selectionModel(), &QItemSelectionModel::selectionChanged, 
+        this, &MainWindow::OnStackTableViewSelectionChanged);
 }
 
 QString Demangle(const QString& name) {
@@ -717,16 +732,25 @@ void MainWindow::ReadSMapsFile(QFile* file) {
     QTextStream stream(file);
     SMapsSection total;
     SMapsSection* curSection = nullptr;
-    QRegExp sectionTitleRx("([0-9a-z]+)\\-([0-9a-z]+)\\s([0-9a-z-]+)\\s([0-9a-z]+)\\s([0-9a-z]+)\\:([0-9a-z]+)\\s([0-9a-z]+)\\s+(\\S.+)");
+//    QRegExp sectionTitleRx(
+//        "([0-9a-z]+)\\-([0-9a-z]+)\\s([0-9a-z-]+)\\s([0-9a-z]+)\\s([0-9a-z]+)\\:([0-9a-z]+)\\s([0-9a-z]+)\\s+(\\S.+)");
+    QRegExp sectionTitleRx(
+        "([0-9a-z]+)\\-([0-9a-z]+)\\s([0-9a-z-]+)\\s([0-9a-z]+)\\s([0-9a-z]+)\\:([0-9a-z]+)\\s([0-9a-z]+)");
     while (!stream.atEnd()) {
         auto line = stream.readLine();
         if (line.isEmpty())
             continue;
         auto strList = line.split(' ', QString::SplitBehavior::SkipEmptyParts);
         if (sectionTitleRx.indexIn(line) != -1) {
-            QString libName = sectionTitleRx.cap(8);
+            int matchedLength = sectionTitleRx.matchedLength();
+            if (matchedLength == -1)
+                continue;
+            QString libName = line.right(line.length() - matchedLength).trimmed();
             if (!libName.startsWith('[')) {
                 libName = Demangle(libName);
+            }
+            if (libName.isEmpty()) {
+                libName = "anonymous";
             }
             curSection = &sMapsSections_[libName];
             auto start = sectionTitleRx.cap(1).toULongLong(nullptr, 16);
@@ -853,11 +877,11 @@ void MainWindow::GetMergedCallstacks(QList<QTreeWidgetItem*>& topLevelItems) {
 }
 
 void MainWindow::ResetFilters() {
-   minTime_ = 0;
-   maxTime_ = std::numeric_limits<double>::max();
-   ui->memSizeComboBox->setCurrentIndex(0);
-   ui->allocComboBox->setCurrentIndex(0);
-   ui->libraryComboBox->setCurrentIndex(0);
+    minTime_ = 0;
+    maxTime_ = std::numeric_limits<double>::max();
+    ui->memSizeComboBox->setCurrentIndex(0);
+    ui->allocComboBox->setCurrentIndex(0);
+    ui->libraryComboBox->setCurrentIndex(0);
 }
 
 void MainWindow::PushEmptySMapsFile() {
@@ -1071,7 +1095,8 @@ void MainWindow::InterpretStacktraceData() {
             futures.push_back(QtConcurrent::run(this, &MainWindow::InterpretRecordsLibrary, currentIndex, payload));
             currentIndex += payload;
         }
-        futures.push_back(QtConcurrent::run(this, &MainWindow::InterpretRecordsLibrary, currentIndex, recordsCache_.size() - currentIndex));
+        futures.push_back(QtConcurrent::run(this, &MainWindow::InterpretRecordsLibrary, 
+            currentIndex, recordsCache_.size() - currentIndex));
         progressDialog_->setLabelText(QString("Translating %1 records by %2 jobs").arg(recordsCache_.size()).arg(threadCount));
         progressDialog_->setMinimum(0);
         progressDialog_->setMaximum(progressDialog_->maximum() + threadCount);
@@ -1546,7 +1571,8 @@ void MainWindow::on_actionShow_Merged_Callstacks_triggered() {
         auto startTime = sclock::now();
         matches = treeWidget->findItems(keyword, Qt::MatchContains | Qt::MatchRecursive, 0);
         auto ms = std::chrono::duration<double, std::milli>(sclock::now() - startTime).count();
-        ui->statusBar->showMessage(QString("Found %1 matches in %2 ms, press enter to review one by one").arg(matches.size()).arg(ms), 10000);
+        ui->statusBar->showMessage(QString("Found %1 matches in %2 ms, press enter to review one by one")
+            .arg(matches.size()).arg(ms), 10000);
     });
     connect(searchLineEdit, &QLineEdit::returnPressed, [&](){
         if (matches.size() <= 0) {
@@ -1634,7 +1660,7 @@ void MainWindow::on_launchPushButton_clicked() {
     }
 
     auto launchModeInfo = QMessageBox::information(this, "Launch Mode",
-                                         "Launch new instance or attach to running app?", "Launch", "Attach", "Cancel", 0, 2);
+        "Launch new instance or attach to running app?", "Launch", "Attach", "Cancel", 0, 2);
     bool enableInject = launchModeInfo == 1;
     if (launchModeInfo == 2) {
         return;
@@ -1704,7 +1730,8 @@ void MainWindow::on_launchPushButton_clicked() {
     showJDWPErrorLog_ = true;
     startAppProcess_->SetPythonPath(pythonPath);
     startAppProcess_->SetExecutablePath(adbPath);
-    startAppProcess_->StartApp(appName_, subProcessName_, settings.compiler_, settings.arch_, enableInject, progressDialog_);
+    startAppProcess_->StartApp(appName_, subProcessName_, settings.compiler_, 
+        settings.arch_, enableInject, progressDialog_);
 
     isCapturing_ = true;
     Print("Starting application ...");
@@ -1717,7 +1744,7 @@ void MainWindow::on_chartScaleHSlider_valueChanged(int value) {
 
 void MainWindow::on_symbloPushButton_clicked() {
     auto symbloPath = QFileDialog::getOpenFileName(this, tr("Select Symblo File"),
-                                                   GetLastSymbolDir(), tr("Library Files (*.sym *.sym.so *.so)"));
+        GetLastSymbolDir(), tr("Library Files (*.sym *.sym.so *.so)"));
     if (!QFile::exists(symbloPath))
         return;
     lastSymbolDir_ = QFileInfo(symbloPath).dir().absolutePath();
@@ -1775,7 +1802,7 @@ void MainWindow::on_symbloPushButton_clicked() {
     QVector<SymbolRecord> sortedRecords;
 
     {
-//        TimerProfiler profile("Load Symbol");
+        // TimerProfiler profile("Load Symbol");
         QFile symbolMapFile(symbolMapFilePath);
         if (!symbolMapFile.open(QFile::OpenModeFlag::ReadOnly)) {
             progressDialog_->hide();
@@ -1785,14 +1812,14 @@ void MainWindow::on_symbloPushButton_clicked() {
         QRegExp recordRx("([0-9a-z]+)\\s([0-9a-z]+)\\s(\\w)\\s(.+)");
         QTextStream in(&symbolMapFile);
         while (!in.atEnd()) {
-           QString line = in.readLine();
-           if (recordRx.indexIn(line) < 0)
-               continue;
-           SymbolRecord record;
-           record.name = recordRx.cap(4);
-           record.size = recordRx.cap(2).toUInt(nullptr, 16);
-           record.addr = recordRx.cap(1).toULong(nullptr, 16);
-           sortedRecords.push_back(record);
+            QString line = in.readLine();
+            if (recordRx.indexIn(line) < 0)
+                continue;
+            SymbolRecord record;
+            record.name = recordRx.cap(4);
+            record.size = recordRx.cap(2).toUInt(nullptr, 16);
+            record.addr = recordRx.cap(1).toULong(nullptr, 16);
+            sortedRecords.push_back(record);
         }
         symbolMapFile.close();
     }
@@ -1802,7 +1829,7 @@ void MainWindow::on_symbloPushButton_clicked() {
     QCoreApplication::instance()->sendPostedEvents();
 
     if (sortedRecords.size() > 0) {
-//        TimerProfiler profile("Translate Symbol");
+        // TimerProfiler profile("Translate Symbol");
         auto& addrMap = it.value();
         auto addrMapIt = addrMap.begin();
         for (; addrMapIt != addrMap.end(); ++addrMapIt) {
@@ -1906,9 +1933,8 @@ void MainWindow::on_actionExport_To_Text_triggered() {
         QMessageBox::warning(this, "Warning", "Can't create file!", QMessageBox::StandardButton::Ok);
         return;
     }
-    bool optimal = QMessageBox::information(this, "Export Option",
-                             "Export smaller text file?",
-                             QMessageBox::StandardButton::Yes | QMessageBox::StandardButton::No) == QMessageBox::StandardButton::Yes;
+    bool optimal = QMessageBox::information(this, "Export Option", "Export smaller text file?",
+        QMessageBox::StandardButton::Yes | QMessageBox::StandardButton::No) == QMessageBox::StandardButton::Yes;
     ExportToText(&tempFile, optimal);
     if (QFileInfo::exists(fileName) && !QFile(fileName).remove()) {
         QMessageBox::warning(this, "Warning", "Error removing file!", QMessageBox::StandardButton::Ok);

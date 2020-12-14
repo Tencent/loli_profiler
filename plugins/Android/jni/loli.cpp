@@ -104,7 +104,8 @@ inline void loli_maybe_record_alloc(size_t size, void* addr, loliFlags flag, int
     static thread_local io::buffer obuffer(2048);
     obuffer.clear();
     // std::ostringstream oss;
-    auto time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime_).count();
+    auto time = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now() - startTime_).count();
     if (mode_ == loliDataMode::NOSTACK) {
         std::string soname = std::string(hookInfo->so_name) + ".so";
         obuffer << static_cast<uint8_t>(flag) << static_cast<uint32_t>(++callSeq_) << static_cast<int64_t>(time) 
@@ -202,19 +203,21 @@ void loli_custom_free(void* ptr) {
 
 BACKTRACE_FPTR loli_get_backtrace(const char* path) {
     BACKTRACE_FPTR backtrace = nullptr;
-    void *handle = fake_dlopen(path, RTLD_LAZY);
-    if (handle) {
+    void *handler = fake_dlopen(path, RTLD_LAZY);
+    if (handler) {
         void (*set_loli_ignore_func)(void (*funcPtr)(bool)) = nullptr;
-        *(void **) (&set_loli_ignore_func) = fake_dlsym(handle, "set_loli_ignore_func");
-         if (set_loli_ignore_func == nullptr) {
+        *(void **) (&set_loli_ignore_func) = fake_dlsym(handler, "set_loli_ignore_func");
+        if (set_loli_ignore_func == nullptr) {
+            fake_dlclose(handler);
             LOLILOGI("Error dlsym set_loli_ignore_func: %s", path);
             return backtrace;
         }
         (*set_loli_ignore_func)(toggle_ignore_current);
-        *(void **) (&backtrace) = fake_dlsym(handle, "get_stack_backtrace");
+        *(void **) (&backtrace) = fake_dlsym(handler, "get_stack_backtrace");
         if (backtrace == nullptr) {
             LOLILOGI("Error dlsym get_stack_backtrace: %s", path);
         }
+        fake_dlclose(handler);
     } else {
         LOLILOGI("Error dlopen: %s", path);
     }
@@ -224,10 +227,11 @@ BACKTRACE_FPTR loli_get_backtrace(const char* path) {
 typedef void (*LOLI_SET_ALLOCANDFREE_FPTR)(LOLI_ALLOC_FPTR, FREE_FPTR);
 
 LOLI_SET_ALLOCANDFREE_FPTR loli_get_allocandfree(const char* path) {
-    void *handle = fake_dlopen(path, RTLD_LAZY);
-    if (handle) {
+    void *handler = fake_dlopen(path, RTLD_LAZY);
+    if (handler) {
         LOLI_SET_ALLOCANDFREE_FPTR ptr = nullptr;
-        *(void **) (&ptr) = fake_dlsym(handle, "loli_set_allocandfree");
+        *(void **) (&ptr) = fake_dlsym(handler, "loli_set_allocandfree");
+        fake_dlclose(handler);
         return ptr;
     } else {
         LOLILOGI("Error dlopen: %s", path);

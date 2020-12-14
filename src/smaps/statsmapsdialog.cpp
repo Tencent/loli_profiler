@@ -100,8 +100,10 @@ void StatSmapsDialog::ShowSmap(const QHash<QString, SMapsSection>& sMapsSections
     tableWidget->show();
     auto statusBar = new QStatusBar(this);
     statusBar->showMessage(QString("VM: %1, Rss: %2, Pss: %3, PC: %4, PD: %5, SC: %6, SD: %7")
-                             .arg(sizeToString(total.virtual_ * 1024), sizeToString(total.rss_ * 1024), sizeToString(total.pss_ * 1024), sizeToString(total.privateClean_ * 1024),
-                                  sizeToString(total.privateDirty_ * 1024), sizeToString(total.sharedClean_ * 1024), sizeToString(total.sharedDirty_ * 1024)));
+        .arg(sizeToString(total.virtual_ * 1024), sizeToString(total.rss_ * 1024), 
+            sizeToString(total.pss_ * 1024), sizeToString(total.privateClean_ * 1024),
+            sizeToString(total.privateDirty_ * 1024), sizeToString(total.sharedClean_ * 1024), 
+            sizeToString(total.sharedDirty_ * 1024)));
     layout->addWidget(tableWidget);
     layout->addWidget(statusBar);
     layout->setMargin(0);

@@ -44,7 +44,7 @@ void MemSectionItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *, 
         while (curSize > 0) {
             auto growth = std::min(width - curX, curSize);
             painter->drawRect(static_cast<int>(startX + curX), static_cast<int>(startY + curY),
-                                     static_cast<int>(growth), static_cast<int>(rowHeight_));
+                static_cast<int>(growth), static_cast<int>(rowHeight_));
             curSize -= growth;
             curY += rowHeight_;
             curX = 0;

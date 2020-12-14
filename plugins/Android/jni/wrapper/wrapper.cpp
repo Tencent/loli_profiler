@@ -75,7 +75,8 @@ _##NUM##_MACRO(_REALLOC_WRAPPER, 0)
 NSLOT_MACRO(512)
 
 #define _REG_HOOK_INFO(INDEX)\
-Reg_Hook_Info(INDEX, &_LOLI_ALLOC##INDEX, &_MALLOC##INDEX, &_CALLOC##INDEX, &_MEMALIGN##INDEX, &_POSIX_MEMALIGN##INDEX, &_REALLOC##INDEX);
+Reg_Hook_Info(INDEX, &_LOLI_ALLOC##INDEX, &_MALLOC##INDEX, &_CALLOC##INDEX,\
+&_MEMALIGN##INDEX, &_POSIX_MEMALIGN##INDEX, &_REALLOC##INDEX);
 
 #define TEST_1_FUNC(INDEX, FUNC,...)\
 (_##FUNC##INDEX(__VA_ARGS__));
@@ -84,7 +85,8 @@ Reg_Hook_Info(INDEX, &_LOLI_ALLOC##INDEX, &_MALLOC##INDEX, &_CALLOC##INDEX, &_ME
 static HOOK_INFO hk_infos[SLOT_NUM];
 static int hk_info_index = -1;
 
-inline void Reg_Hook_Info(int index, LOLI_ALLOC_FPTR p0, MALLOC_FPTR p1, CALLOC_FPTR p3, MEMALIGN_FPTR p4, POSIX_MEMALIGN_FPTR p5, REALLOC_FPTR p6) {
+inline void Reg_Hook_Info(int index, LOLI_ALLOC_FPTR p0, MALLOC_FPTR p1, CALLOC_FPTR p3, 
+    MEMALIGN_FPTR p4, POSIX_MEMALIGN_FPTR p5, REALLOC_FPTR p6) {
     // __android_log_print(ANDROID_LOG_INFO, "Loli", "Reg hook info %d", index);
     hk_infos[index].so_name = nullptr;
     hk_infos[index].custom_alloc = p0;

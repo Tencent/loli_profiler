@@ -33,7 +33,7 @@ void MemoryTableWidget::keyPressEvent(QKeyEvent *event) {
     if (event == QKeySequence::Copy) {
         QString output;
         QTextStream stream(&output);
-        stream << "Name, Virtual Memory, Rss, Pss, Private Clean, Private Dirty, Shared Clean, Shared Dirty" << endl;
+        stream << "Name, Virtual Memory, Rss, Pss, Private Clean, Private Dirty, Shared Clean, Shared Dirty" << Qt::endl;
         auto ranges = selectedRanges();
         for (auto& range : ranges) {
             int top = range.topRow();
@@ -41,7 +41,7 @@ void MemoryTableWidget::keyPressEvent(QKeyEvent *event) {
             for (int row = top; row <= bottom; row++) {
                 stream << item(row, 0)->text() << ", " << item(row, 1)->text() << ", " << item(row, 2)->text() << ", " <<
                           item(row, 3)->text() << ", " << item(row, 4)->text() << ", " << item(row, 5)->text() << ", " <<
-                          item(row, 6)->text() << ", " << item(row, 7)->text() << endl;
+                          item(row, 6)->text() << ", " << item(row, 7)->text() << Qt::endl;
             }
         }
         stream.flush();

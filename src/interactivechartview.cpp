@@ -149,7 +149,7 @@ void InteractiveChartView::wheelEvent(QWheelEvent *event) {
     if (usingTouch_) {
         auto delta = event->pixelDelta();
         if (!delta.isNull()) {
-            prevMouseX_ = event->x();
+            prevMouseX_ = event->position().x();
             SyncScroll(nullptr, prevMouseX_, delta.x()); // execute
             OnSyncScroll(this, prevMouseX_, delta.x()); // broadcast
             rubberBand_->hide();

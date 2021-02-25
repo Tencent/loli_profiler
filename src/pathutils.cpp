@@ -123,7 +123,7 @@ QString PathUtils::SearchAndroidSDK() {
     //C:\Users\USER\Downloads
 #else
     QString username = GetEnvVar("USER");
-    QString sdkPath = "Users/" + username + "/Library/Android/sdk";
+    QString sdkPath = "/Users/" + username + "/Library/Android/sdk";
     if (QFile::exists(sdkPath)){
         return sdkPath;
     }

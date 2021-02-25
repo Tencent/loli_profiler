@@ -86,7 +86,7 @@ void ConfigDialog::OnPasteClipboard() {
         return;
     }
     auto textData = mimeData->text();
-    auto parts = textData.split(',', QString::SplitBehavior::SkipEmptyParts);
+    auto parts = textData.split(',', Qt::SkipEmptyParts);
     auto listwidget = ui->libraryStackedWidget->currentIndex() == 0 ? ui->whitelistWidget : ui->blacklistWidget;
     for (auto& part : parts) {
         if (part.size() > 0) {
@@ -98,37 +98,38 @@ void ConfigDialog::OnPasteClipboard() {
 }
 
 void ConfigDialog::SaveConfigFile() {
-    auto cfgPath = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).first();
+    auto cfgPaths = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation);
+    auto cfgPath = cfgPaths.first();
     WriteCurrentSettings();
     QFile file(cfgPath + "/loli2.conf");
     file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
     if (file.open(QIODevice::ReadWrite | QIODevice::Truncate | QIODevice::Text)) {
         QTextStream stream(&file);
         auto saveSettings = [](QTextStream& stream, const Settings& settings) {
-            stream << "threshold:" << settings.threshold_ << endl;
+            stream << "threshold:" << settings.threshold_ << Qt::endl;
             stream << "whitelist:";
             auto numLibs = settings.whitelist_.count();
             for (int i = 0; i < numLibs; i++) {
                 stream << settings.whitelist_[i];
                 if (i != numLibs) stream << ',';
             }
-            stream << endl;
+            stream << Qt::endl;
             stream << "blacklist:";
             numLibs = settings.blacklist_.count();
             for (int i = 0; i < numLibs; i++) {
                 stream << settings.blacklist_[i];
                 if (i != numLibs) stream << ',';
             }
-            stream << endl;
-            stream << "mode:" << settings.mode_ << endl;
-            stream << "build:" << settings.build_ << endl;
-            stream << "type:" << settings.type_ << endl;
-            stream << "arch:" << settings.arch_ << endl;
-            stream << "compiler:" << settings.compiler_ << endl;
+            stream << Qt::endl;
+            stream << "mode:" << settings.mode_ << Qt::endl;
+            stream << "build:" << settings.build_ << Qt::endl;
+            stream << "type:" << settings.type_ << Qt::endl;
+            stream << "arch:" << settings.arch_ << Qt::endl;
+            stream << "compiler:" << settings.compiler_ << Qt::endl;
         };
         saveSettings(stream, currentSettings_);
         for (auto it = savedSettings_.begin(); it != savedSettings_.end(); ++it) {
-            stream << "saved:" << it.key() << endl;
+            stream << "saved:" << it.key() << Qt::endl;
             saveSettings(stream, it.value());
         }
         stream.flush();
@@ -140,7 +141,8 @@ ConfigDialog::Settings ConfigDialog::ParseConfigFile() {
     if (!CreateIfNoConfigFile(nullptr)) {
         return currentSettings_;
     }
-    auto cfgPath = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).first();
+    auto cfgPaths = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation);
+    auto cfgPath = cfgPaths.first();
     QFile file(cfgPath + "/loli2.conf");
     file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
     Settings* settings = &currentSettings_;
@@ -155,9 +157,9 @@ ConfigDialog::Settings ConfigDialog::ParseConfigFile() {
             if (words[0] == "threshold") {
                 settings->threshold_ = words[1].toInt();
             } else if (words[0] == "whitelist") {
-                settings->whitelist_ = words[1].split(',', QString::SplitBehavior::SkipEmptyParts);
+                settings->whitelist_ = words[1].split(',', Qt::SkipEmptyParts);
             } else if (words[0] == "blacklist") {
-                settings->blacklist_ = words[1].split(',', QString::SplitBehavior::SkipEmptyParts);
+                settings->blacklist_ = words[1].split(',', Qt::SkipEmptyParts);
             } else if (words[0] == "mode") {
                 settings->mode_ = words[1];
             } else if (words[0] == "build") {
@@ -200,11 +202,11 @@ bool ConfigDialog::CreateIfNoConfigFile(QWidget *parent) {
         file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
         if (file.open(QIODevice::ReadWrite | QIODevice::Truncate | QIODevice::Text)) {
             QTextStream stream(&file);
-            stream << "threshold:256" << endl <<
-                      "whitelist:libunity,libil2cpp" << endl <<
-                      "blacklist:libloli,libart,libc++,libc,libcutils" << endl <<
-                      "mode:strict" << endl << "build:default" << endl << "type:white list" << endl <<
-                      "arch:armeabi-v7a" << endl << "compiler:gcc";
+            stream << "threshold:256" << Qt::endl <<
+                      "whitelist:libunity,libil2cpp" << Qt::endl <<
+                      "blacklist:libloli,libart,libc++,libc,libcutils" << Qt::endl <<
+                      "mode:strict" << Qt::endl << "build:default" << Qt::endl << "type:white list" << Qt::endl <<
+                      "arch:armeabi-v7a" << Qt::endl << "compiler:gcc";
             stream.flush();
             return true;
         } else {

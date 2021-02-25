@@ -10,14 +10,14 @@ set -xeuo pipefail
 #     echo QT5Path not found ERROR: $QT5Path
 #     exit -1
 # fi
-if [ ! -f $Ndk_R16_CMD ];then
-    echo Ndk_R16_CMD not found ERROR: $Ndk_R16_CMD
-    exit -1
-fi
-if [ ! -f $Ndk_R20_CMD ];then
-    echo Ndk_R20_CMD not found ERROR: $Ndk_R20_CMD
-    exit -1
-fi
+# if [ ! -f $Ndk_R16_CMD ];then
+#     echo Ndk_R16_CMD not found ERROR: $Ndk_R16_CMD
+#     exit -1
+# fi
+# if [ ! -f $Ndk_R20_CMD ];then
+#     echo Ndk_R20_CMD not found ERROR: $Ndk_R20_CMD
+#     exit -1
+# fi
 
 echo QT5Path path: $QT5Path
 echo Ndk_R16_CMD: $Ndk_R16_CMD

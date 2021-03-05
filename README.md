@@ -1,5 +1,11 @@
 # Overview
 
+![](https://img.shields.io/badge/license-MIT-brightgreen.svg?style=flat)
+![](https://img.shields.io/badge/support-UnrealEngine4%20%7C%20UnityEngine-brightgreen.svg?style=flat)
+![](https://img.shields.io/badge/release-1.1.0-red.svg?style=flat)
+![](https://img.shields.io/badge/android-5.0%20--%2010-blue.svg?style=flat)
+![](https://img.shields.io/badge/arch-armeabi%20%7C%20armeabi--v7a%20%7C%20arm64--v8a-blue.svg?style=flat)
+
 **LoliProfiler** is a **C/C++ memory profiling** tool for **Android** games and applications.
 
 LoliProfiler supports profiling debuggable applications out of box. And offers engine specific (UnrealEngine4/Unity) modifications to enable profiling complex or production level games. 
@@ -20,10 +26,22 @@ LoliProfiler supports profiling debuggable applications out of box. And offers e
 # Documents
 
 * [Quick Start Guide](docs/QUICK_START.md)
-* [Working With Game Engines](GAME_ENGINE.md)
+* [Working With Game Engines](docs/GAME_ENGINE.md)
 * [Trouble Shooting](docs/TROUBLE_SHOOTING.md)
 * [Build Project](docs/BUILD.md)
 * [How Does It Work](docs/PRINCIPLE.md) [(Chinese)](docs/PRINCIPLE_CN.md)
+
+# Special Thanks
+
+* [QT framework](https://www.qt.io/)
+* [Perfetto](https://perfetto.dev/)
+* [LZ4](https://github.com/lz4/lz4)
+* [Chromium](https://chromium.googlesource.com/chromium/src/base/+/master/debug/stack_trace.cc)
+* [JDWP injector](https://koz.io/library-injection-for-debuggable-android-apps/)
+* [XHook](https://github.com/iqiyi/xHook)
+* [Android native memory leak solution](https://developer.aliyun.com/article/708672)
+* [YMTreeMap](https://github.com/yahoo/YMTreeMap)
+* Icons [smashicons](https://www.flaticon.com/authors/smashicons), [freepik](https://www.flaticon.com/authors/freepik)
 
 # License
 

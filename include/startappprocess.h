@@ -32,6 +32,7 @@ protected:
 private:
     bool interceptMode_ = false;
     bool startResult_ = false;
+    bool isRootDevice_ = false;
     QString errorStr_;
     QString pythonPath_;
 };

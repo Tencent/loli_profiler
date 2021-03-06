@@ -19,25 +19,9 @@ void StartAppProcess::StartApp(const QString& appName, const QString& subProcess
     errorStr_ = QString();
     auto execPath = GetExecutablePath();
     QStringList arguments;
-    { // restart adb server
-        // dialog->setLabelText("Restarting adb server.");
-        // arguments << "kill-server";
-        // QProcess process;
-        // process.setWorkingDirectory(QCoreApplication::applicationDirPath());
-        // process.setProgram(execPath);
-        // AdbProcess::SetArguments(&process, arguments);
-        // if (!StartProcess(&process, "adb kill-server")) {
-        //     return;
-        // }
-        // arguments.clear();
-        // arguments << "start-server";
-        // AdbProcess::SetArguments(&process, arguments);
-        // if (!StartProcess(&process, "adb start-server")) {
-        //     return;
-        // }
-    }
     { // push remote folder to /data/local/tmp
         dialog->setLabelText("Pushing libloli.so to device.");
+        arguments.clear();
         arguments << "push" << "remote/" + compiler + "/" + arch + "/libloli.so" << "/data/local/tmp";
         QProcess process;
         process.setWorkingDirectory(QCoreApplication::applicationDirPath());
@@ -47,6 +31,21 @@ void StartAppProcess::StartApp(const QString& appName, const QString& subProcess
             return;
         }
         dialog->setValue(dialog->value() + 1);
+    }
+    { // check if device is rooted or not.
+        isRootDevice_ = false;
+        arguments.clear();
+        arguments << "shell" << "su";
+        QProcess process;
+        process.setProgram(execPath);
+        AdbProcess::SetArguments(&process, arguments);
+        process.start();
+        if (process.waitForStarted()) {
+            if (!process.waitForFinished(3000)) {
+                isRootDevice_ = QString(process.readAll()).size() == 0;
+                process.close();
+            }
+        }
     }
     { // push remote folder to /data/local/tmp
         dialog->setLabelText("Pushing loli.conf to device.");
@@ -141,8 +140,13 @@ bool StartAppProcess::GetSMapsByRunAs(const QString& appName, const QString& app
     QStringList arguments;
     QProcess process;
     process.setProgram(execPath);
-    arguments << "shell" << "run-as" << appName << "cat" << "/proc/" + appPid + 
-        "/smaps" << ">" << "/data/local/tmp/smaps.txt";
+    if (isRootDevice_) {
+        arguments << "shell" << "su" << "-c" << "\"cat" << "/proc/" + appPid + 
+            "/smaps" << ">" << "/data/local/tmp/smaps.txt\"";
+    } else {
+        arguments << "shell" << "run-as" << appName << "cat" << "/proc/" + appPid + 
+            "/smaps" << ">" << "/data/local/tmp/smaps.txt";
+    }
     AdbProcess::SetArguments(&process, arguments);
     process.start();
     if (!process.waitForStarted()) {

@@ -94,9 +94,9 @@ Threshold is configured together with **Mode** option. It means different in dif
 
 Indicates the configured library list is used as white or black list.
 
-You should start from using white list. For example, if you're using unity engine, add libunity.so to the list.
+You should start from using white list. For example, if you're using unity engine, add libunity to the list.
 
-Add libUE4.so if you're using UnrealEngine. 
+Add libUE4 if you're using UnrealEngine. 
 
 **Note: Heavy game needs to re-compile. See [Game Engine](GAME_ENGINE.md).**
 

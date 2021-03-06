@@ -2,24 +2,24 @@
 
 # Unreal Engine 4
 
-## Frame Pointer Optimization
+## Frame Pointer 优化
 
-**This method requires newer versions of NDK, and only supports arm64-v8a architecture.**
+**此优化需要使用高版本的NDK，并且只支持 arm64-v8a 架构**
 
-**Use mobile phone with CPU like snapdragon 855 or newer to profile real heavy games.**
+**建议使用骁龙855或更强的CPU来调试大型手游项目**
 
-**Use test build and FMallocBinned mods to get the best performance.**
+**虚幻引擎建议打Test包，去修改FMallocBinned来达到最佳性能**
 
-Test environment:
+测试环境:
 
 1. Unreal Engine 4.25 / 4.26，Android NDK r21c
 2. Unreal Engine 4.24.3，Android NDK r14b
 
-### Modify MallocBinned2
+### 修改MallocBinned2
 
-Unreal Engine 4.25 use FMallocBinned2 as the default memory allocator on Android platform.
+Unreal Engine 4.25 使用 FMallocBinned2 作为安卓平台默认的内存分配器。
 
-Modifying this allocator instead of using FMallocAnis will increase the performance of your game.
+建议修改此分配器，而不是直接切换到使用系统malloc的FMallocAnsi，此分配器性能远超系统malloc。
 
 ```c++
 --- a/Engine/Source/Runtime/Core/Public/HAL/MallocBinned2.h
@@ -113,9 +113,9 @@ Modifying this allocator instead of using FMallocAnis will increase the performa
  PRAGMA_DISABLE_UNSAFE_TYPECAST_WARNINGS
 ```
 
-### Modify MallocBinned
+### 修改 MallocBinned
 
-Unreal Engine 4.24 use FMallocBinned as the default memory allocator on Android platform.
+Unreal Engine 4.24 使用 FMallocBinned 作为安卓平台默认内存分配器。
 
 ```c++
 #ifdef __cplusplus
@@ -143,9 +143,9 @@ __attribute__((visibility("default"), noinline, optnone)) void loli_set_allocand
 #endif // __cplusplus
 ```
 
-**loli_alloc_ptr** is used when allocating memory, **loli_free_ptr** is used when freeing allocated memory.
+**loli_alloc_ptr** 是分配内存时的记录接口，**loli_free_ptr** 则是释放内存时的接口。
 
-If your application or custom game engine uses memory pool like Unreal Engine, you can add these wrapper function calls too.
+如果你们的引擎、框架使用类似虚幻的这种内存池结构，也建议使用这些记录接口来记录数据。这种模式获取的数据更有参考价值也更精准。
 
 ```c++
 void* FMallocBinned::Malloc(SIZE_T Size, uint32 Alignment) {
@@ -175,11 +175,11 @@ void FMallocBinned::Free(void* Ptr) {
 }
 ```
 
-### Modify FMallocAnsi
+### 使用 FMallocAnsi
 
-Unless you're using MallocAnsi by default, we don't recommend you to switch to FMallocAnsi allocator.
+除非你的 Unreal Engine 版本较低，否则不建议使用 FMallocAnsi。
 
-FMallocAnsi uses system malloc() directly, which is way slower than Unreal Engine's memory pool.
+它直接使用系统的malloc()，有性能上的问题。
 
 ```c++
 --- a/Engine/Source/Runtime/Core/Private/Android/AndroidPlatformMemory.cpp
@@ -197,13 +197,11 @@ FMallocAnsi uses system malloc() directly, which is way slower than Unreal Engin
  	return new FMallocBinned2();
 ```
 
-### Add Compiler Options
+### 添加编译器选项
 
-We need to add [this](http://www.keil.com/support/man/docs/armclang_ref/armclang_ref_vvi1466179578564.htm) compiler option: **-fno-omit-frame-pointer**
+我们需要添加[这个](http://www.keil.com/support/man/docs/armclang_ref/armclang_ref_vvi1466179578564.htm)编译器选项： **-fno-omit-frame-pointer**
 
-This option will tell the application runtime to store stack function pointer to a register.
-
-This is by far the fastest stack unwinding technique, use this if you can.
+此选项会将堆栈函数指针存储到一个寄存器中，从而大大提升堆栈回溯性能，此方案是目前性能最优的方案。
 
 ```c++
 --- a/Engine/Source/Programs/UnrealBuildTool/Configuration/TargetRules.cs
@@ -243,9 +241,9 @@ This is by far the fastest stack unwinding technique, use this if you can.
 +			}
 ```
 
-After these mods, you can indicate your build system to build a Loli-Profiler exclusive apk.
+当你合入这些修改后，可打开构建系统的开关来构建一个LoliProfiler专用版APK。
 
-Enable useLoliProfiler option in [BuildConfiguration.xml](https://docs.unrealengine.com/en-US/Programming/BuildTools/UnrealBuildTool/BuildConfiguration/index.html) file:
+打开[BuildConfiguration.xml](https://docs.unrealengine.com/en-US/Programming/BuildTools/UnrealBuildTool/BuildConfiguration/index.html)中的bUseLoliProfiler选项：
 
 ```xml
 <?xml version="1.0" encoding="utf-8" ?>
@@ -256,7 +254,7 @@ Enable useLoliProfiler option in [BuildConfiguration.xml](https://docs.unrealeng
 </Configuration>
 ```
 
-This file exists in these folders:
+此配置可放置在以下任意文件夹中：
 
 ```bash
 # create if not exist
@@ -265,7 +263,7 @@ User Folder/AppData/Roaming/Unreal Engine/UnrealBuildTool/BuildConfiguration.xml
 My Documents/Unreal Engine/UnrealBuildTool/BuildConfiguration.xml 
 ```
 
-You can use readelf tool to check if your libUE4.so is packed correctly.
+可使用 readelf 工具检测你打的包是否正确：
 
 ```bash
 $ readelf -S file.so | grep "gnu_debugdata\|eh_frame\|debug_frame"
@@ -274,7 +272,7 @@ $ readelf -S file.so | grep "gnu_debugdata\|eh_frame\|debug_frame"
   [24] .gnu_debugdata    PROGBITS         0000000000000000  000f7292
 ```
 
-if the commands includes these sections, then you're good to go :D
+如果包含如下section，证明此编译选项已生效：
 
 ```
 .gnu_debugdata
@@ -282,17 +280,17 @@ if the commands includes these sections, then you're good to go :D
 .debug_frame.
 ```
 
-## Instrument Functions Optimization
+## Instrument Functions 优化
 
-If you can't use frame pointer optimization, try this instead.
+当你的编译器比较老，或使用32位架构时，可使用此函数插桩优化方案。
 
-This option will imply the compiler to add a function call to every functions in libUE4.so, then we can implement our homemade stack unwinding function. It's very fast compared to libunwind.so.
+此编译器选项会在编译期为所有函数的头和尾插入一个函数调用，因此我们可以利用此接口实现自己的堆栈回溯方案，此方案比默认的 libunwind.so 要快很多。
 
-First modify FMallocBinned like previous chapter.
+第一步与上一章一样，先修改 FMallocBinned：
 
-### Add Compiler Options
+### 添加编译器选项
 
-Then we enable clang compiler option **-finstrument-functions-after-inlining**. This way the compiler will insert a function call to every functions(after in-line optimization).
+打开编译器选项  **-finstrument-functions-after-inlining**。编译器会在 inline 优化后，为所有函数插入我们自定义的函数调用。
 
 ```c++
 --- a/Engine/Source/Programs/UnrealBuildTool/Configuration/TargetRules.cs
@@ -332,11 +330,13 @@ Then we enable clang compiler option **-finstrument-functions-after-inlining**. 
 +			}
 ```
 
-If your clang is older than 7.0.0, or you're using gcc, try **-finstrument-functions** instead.
+当你使用的clang是7.0.0以下版本，或你使用的是gcc时，可尝试 **-finstrument-functions**选项。
 
-Then you need to implement a custom stack unwind function: 
+*此选项会导致比 after-inline 模式高很多的代码膨胀的副作用*
 
-Create  AndroidFunctionStub.cpp under Engine\Source\Runtime\Core\Private\Android
+接下来我们实现自己的堆栈回溯函数：
+
+新建 AndroidFunctionStub.cpp 在 Engine\Source\Runtime\Core\Private\Android 文件夹中：
 
 ```c++
 #include <pthread.h>
@@ -445,11 +445,11 @@ extern "C" {
 
 # Unity Engine
 
-Tested version: Unity5.6.6f2、Unity2017.4.35f1、Unity2018.4.5f1
+测试版本: Unity5.6.6f2、Unity2017.4.35f1、Unity2018.4.5f1
 
-## Force unity to use system malloc
+## 强制Unity使用系统malloc
 
-Add a launch parameter to UnityPlayerActivity.java:
+需要在UnityPlayerActivity.java中添加一个启动参数:
 
 ```java
 protected String updateUnityCommandLineArguments(String cmdLine) {
@@ -459,7 +459,7 @@ protected String updateUnityCommandLineArguments(String cmdLine) {
 
 ## Unity 2018
 
-This version of unity uses new Bee compiling system, if you're targeting arm64-v8a, you need to modify this file:
+此版本的Unity使用新的Bee构建系统，当你的目标架构是arm64-v8a时，可尝试按下面的代码修改：
 
 ```c#
 // Tools/Bee/Bee.Toolchain.Android/AndroidNdkCompiler.cs
@@ -473,17 +473,15 @@ This version of unity uses new Bee compiling system, if you're targeting arm64-v
 yield return "-fno-omit-frame-pointer"; // <- 打开Framepointer选项
 ```
 
-For armeabi-v7a targets, you can only use **-finstrument-functions** mode.
+对于 armeabi-v7a 架构，你只能使用 **-finstrument-functions** 模式。
 
 ## Unity 2017 & 5
 
-You can use **-finstrument-functions** to speed up stack unwinding.
+可使用 **-finstrument-functions** 模式来加速堆栈回溯。
 
-This is 10x faster in single thread than libunwind.
+此方案单线程下比 libunwind 快 10倍，多线程下快 50倍。
 
-And 50x faster in multi thread test case.
-
-The downside is that this option increases both APK size and compile time.
+缺点是其会导致包体膨胀，并增加编译时间。
 
 ### Android_NDK.jam.cs
 
@@ -509,19 +507,19 @@ Android.CFLAGS.release = ... -finstrument-functions ;
 Android.CFLAGS.debug = ... -finstrument-functions ;
 ```
 
-Unity 2017 is using NDK r13b, which don't support **-finstrument-functions-after-inline**, you can swith to the after-inline version if your NDK is using clang 7.0.0 or newer.
+Unity 2017 使用 NDK r13b，不支持 **-finstrument-functions-after-inline**。如果你的NDK是clang 7.0.0及以上则可使用 after-inline 优化。此选项比不inline更快，包体膨胀也小很多。
 
-### Define instrument function
+### 定义桩函数
 
-We need to place the definition of instrument function so that every other file can include it automatically.
+我们需要把桩函数的定义放到一个所有代码都能看到的地方。
 
-This is not a problem in Unreal Engine because it's Unity Build system. 
+这对于虚幻引擎来说不是问题，因为它使用了Unity Build系统。
 
-Select the correct architecture in this folder: 
+在此文件夹下选择正确的架构：
 
 ![](images/ndk_jni.png)
 
-Then add these codes to ndk's jni.h file, under arch folder's /usr/include folder: 
+然后把这些代码放到架构文件夹下的 /usr/include 目录下的 jni.h 文件中：
 
 ```c++
 #ifndef JNI_H_
@@ -534,7 +532,7 @@ extern void __attribute__((no_instrument_function)) __cyg_profile_func_enter(voi
 extern void __attribute__((no_instrument_function)) __cyg_profile_func_exit(void* this_func, void* call_site);
 ```
 
-And now you can implement the defined functions:
+接下来我们就可以实现此函数：
 
 ```c++
 #include <pthread.h>
@@ -641,28 +639,28 @@ extern "C" {
 #endif // __cplusplus
 ```
 
-Rename this file to AndroidLoli.cpp and put it to these folders:
+将函数实现代码重命名并放在下面的文件夹中：
 
 ```bash
 PlatformDependent/AndroidPlayer/Source/main/AndroidLoli.cpp
 PlatformDependent/AndroidPlayer/Source/AndroidLoli.cpp
 ```
 
-And now you've implemented custom unwinding function in both libunity&libmain file. 
+至此你的 libunity&libmain 代码库就会包含我们的插桩优化了。 
 
-### Packaging
+### 打包
 
-Use perl build.pl to build the correct libunity.so.
+使用 perl build.pl  打出正确的 libunity.so。
 
-Make sure to disable Engine code stripping: 
+记得把Engine code stripping选项关掉： 
 
 ![](images/unity_config.png)
 
-Use ida or ndk tools to check if our function is exported correctly.
+可使用 IDA 或 NDK中的工具来检查我们的函数是否正确导出：
 
 ![](images/loli_func.png)
 
-Use **adb logcat -s Loli** to check runtime logs to see if it's working:
+使用 **adb logcat -s Loli** 在运行时检查桩函数是否被正确使用：
 
 ```
 set_loli_ignore_func found at 0xc4c8a368

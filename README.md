@@ -21,12 +21,13 @@ LoliProfiler supports profiling debuggable applications out of box. And offers e
 * Support attaching to running application.
 * Support multiple back-trace implementations.
 * Support profiling complex games by doing some mods with your game engine.
+* Support profiling release build applications on rooted devices.
 * Multiple data view modes: tree map/call tree/memory fragmentation.
 
 # Documents
 
-* [Quick Start Guide](docs/QUICK_START.md)
-* [Working With Game Engines](docs/GAME_ENGINE.md)
+* [Quick Start Guide](docs/QUICK_START.md) [(Chinese)](docs/QUICK_START_CN.md)
+* [Working With Game Engines](docs/GAME_ENGINE.md) [(Chinese)](docs/GAME_ENGINE_CN.md)
 * [Trouble Shooting](docs/TROUBLE_SHOOTING.md)
 * [Build Project](docs/BUILD.md)
 * [How Does It Work](docs/PRINCIPLE.md) [(Chinese)](docs/PRINCIPLE_CN.md)

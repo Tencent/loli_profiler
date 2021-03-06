@@ -32,7 +32,7 @@
 
 |                         | Time     | APK    | libUE4.so |
 | ----------------------- | -------- | ------ | --------- |
-| default                 | 00:14.34 | 217MiB | 1.68G     |
+| 基准                    | 00:14.34 | 217MiB | 1.68G     |
 | framepointer            | 00:14.34 | 217MiB | 1.68G     |
 | instruemnt after-inline | 00:18.38 | 226MiB | 1.72G     |
 | instruemnt              | 00:49.88 | 330MiB | 2.45G     |
@@ -40,17 +40,21 @@
 
 *UE4第三人称Demo使用不同方案的性能测试数据*
 
+*对比了从打开APK开始到进入游戏场景所花费的时间*
+
 ### 真机性能表现
 
-性能测试： CPU：骁龙865 APP：UE4.25自研大型FPS项目 打包类型：[Test](https://docs.unrealengine.com/en-US/Programming/Development/BuildConfigurations/index.html) 模式：本地模式自动测试流程（固定点站立10s后，自动切换位置） 采集时长：122s 平均FPS：57.88/26.64  平均GameThread：15.06ms/39.95ms（增加1.65x耗时）  平均RenderThread：4.25ms/13.60ms（增加2.2x耗时） 卡顿帧数：13/36
+使用骁龙865CPU的手机对一款在研大型UE4 FPS项目进行测试。
+
+打的是Test包，采集了122秒的数据，平均FPS从57下降到26，仍可较流畅体验游戏。
+
+游戏线程平均增加1.65倍负载，渲染线程平均增加2.2倍负载。
 
 ![](images/frametime.png)
 
 ![](images/gametime.png)
 
 ![](images/rendertime.png)
-
-稳定性测试： 相同设置，在骁龙845设备采集16min战斗数据，共采集3200w条内存分配记录，筛选出200w条常驻内存记录。PC端Cache文件占用约7G，保存后的.loli数据文件约1G大小。
 
 **建议使用骁龙855，麒麟990或更强的CPU进行大型项目的数据采集**
 

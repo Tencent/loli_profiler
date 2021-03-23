@@ -77,14 +77,18 @@ void PathUtils::SetSDKPath(const QString& path) {
 
 QString PathUtils::GetEnvVar(const char* var) {
 #ifdef Q_OS_WIN
-    QString result;
-    char* nameBuffer = nullptr;
-    size_t nameSize = 0;
-    if (_dupenv_s(&nameBuffer, &nameSize, var) == 0 && nameBuffer != nullptr) {
-        result = QString(nameBuffer);
-        free(nameBuffer);
-    }
-    return result;
+    #if defined (__MINGW32__) || defined (__MINGW64__)
+        return getenv(var);
+    #else
+        QString result;
+        char* nameBuffer = nullptr;
+        size_t nameSize = 0;
+        if (_dupenv_s(&nameBuffer, &nameSize, var) == 0 && nameBuffer != nullptr) {
+            result = QString(nameBuffer);
+            free(nameBuffer);
+        }
+        return result;
+    #endif
 #else
     return getenv(var);
 #endif

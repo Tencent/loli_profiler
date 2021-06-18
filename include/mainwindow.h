@@ -57,10 +57,14 @@ private:
     QString TryAddNewAddress(const QString& lib, quint64 addr);
     void ShowCallStack(const QModelIndex& index);
     void ShowSummary();
+    void ShowMergedCallstacks(QList<QTreeWidgetItem*>& topLevelItems, std::function<void(class QTreeWidget*)> widgetCallback = nullptr);
+    void ShowMergedCallstacksInTreeMap(QList<QTreeWidgetItem*>& topLevelItems);
+    StackTraceModel* GetCurrentModelChecked();
     void FilterStackTraceModel();
+    void FilterStackTraceModel(StackTraceModel* filteredModel, double minTime, double maxTime);
     void SwitchStackTraceModel(StackTraceProxyModel* model);
     void ReadSMapsFile(QFile* file);
-    void GetMergedCallstacks(QList<QTreeWidgetItem*>& topLevelItems);
+    QHash<uint, class CustomTreeWidgetItem*> GetMergedCallstacks(StackTraceModel* model, QList<QTreeWidgetItem*>& topLevelItems);
     void ResetFilters();
     void PushEmptySMapsFile();
 
@@ -106,7 +110,7 @@ private slots:
     void on_actionStat_SMaps_triggered();
     void on_actionVisualize_SMaps_triggered();
     void on_actionShow_Merged_Callstacks_triggered();
-    void on_actionShow_Callstacks_In_TreeMap_triggered();
+    void on_actionShow_Leaks_triggered();
     void on_actionAbout_triggered();
     void on_launchPushButton_clicked();
     void on_chartScaleHSlider_valueChanged(int value);

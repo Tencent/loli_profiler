@@ -665,18 +665,115 @@ void MainWindow::ShowSummary() {
     ui->recordCountLineEdit->setText(QString("%1 / %2").arg(rowCount).arg(sizeToString(size)));
 }
 
+void MainWindow::ShowMergedCallstacks(QList<QTreeWidgetItem*>& topLevelItems, std::function<void(QTreeWidget*)> widgetCallback) {
+    QDialog fragDialog(this, Qt::WindowTitleHint | Qt::WindowCloseButtonHint);
+    auto layout = new QVBoxLayout(&fragDialog);
+    layout->setSpacing(2);
+    fragDialog.setLayout(layout);
+    auto treeWidget = new QTreeWidget(&fragDialog);
+    treeWidget->setHeaderLabels(QStringList() << "Function" << "Size" << "Count");
+    treeWidget->addTopLevelItems(topLevelItems);
+    treeWidget->resizeColumnToContents(0);
+    treeWidget->header()->resizeSections(QHeaderView::ResizeMode::ResizeToContents);
+    treeWidget->setSortingEnabled(true);
+    treeWidget->sortByColumn(1, Qt::SortOrder::DescendingOrder);
+    if (widgetCallback)
+        widgetCallback(treeWidget);
+    auto searchLineEdit = new QLineEdit(&fragDialog);
+    searchLineEdit->setPlaceholderText("Type keyword to do fuzzy search, then press enter to review one by one.");
+    searchLineEdit->setClearButtonEnabled(true);
+    QString prevKeyword;
+    int matchIndex = 0;
+    QList<QTreeWidgetItem*> matches;
+    connect(searchLineEdit, &QLineEdit::editingFinished, [&](){
+        auto keyword = searchLineEdit->text();
+        if (prevKeyword == keyword)
+            return;
+        treeWidget->clearSelection();
+        matches.clear();
+        matchIndex = 0;
+        prevKeyword = keyword;
+        if (keyword.size() == 0)
+            return;
+        auto startTime = sclock::now();
+        matches = treeWidget->findItems(keyword, Qt::MatchContains | Qt::MatchRecursive, 0);
+        auto ms = std::chrono::duration<double, std::milli>(sclock::now() - startTime).count();
+        ui->statusBar->showMessage(QString("Found %1 matches in %2 ms, press enter to review one by one")
+            .arg(matches.size()).arg(ms), 10000);
+    });
+    connect(searchLineEdit, &QLineEdit::returnPressed, [&](){
+        if (matches.size() <= 0) {
+            return;
+        }
+        auto item = matches[matchIndex];
+        item->setSelected(true);
+        auto rowCount = 1;
+        auto curItem = item->parent();
+        while (curItem) {
+            rowCount++;
+            if (!curItem->isExpanded())
+                curItem->setExpanded(true);
+            curItem = curItem->parent();
+        }
+        // scroll to item
+        treeWidget->scrollToItem(item, QAbstractItemView::ScrollHint::PositionAtCenter);
+        auto itemRect = treeWidget->visualItemRect(item);
+        auto hscrollbar = treeWidget->horizontalScrollBar();
+        hscrollbar->setValue(hscrollbar->value() + itemRect.x());
+        matchIndex++;
+        if (matchIndex > matches.size() - 1) {
+            matchIndex = 0;
+        }
+    });
+    layout->addWidget(treeWidget);
+    layout->addWidget(searchLineEdit);
+    layout->setMargin(0);
+    fragDialog.setWindowTitle("Merged Callstacks");
+    fragDialog.resize(900, 400);
+    fragDialog.setMinimumSize(900, 400);
+    fragDialog.exec();
+}
+
+void MainWindow::ShowMergedCallstacksInTreeMap(QList<QTreeWidgetItem*>& topLevelItems) {
+    QDialog fragDialog(this, Qt::WindowTitleHint | Qt::WindowCloseButtonHint);
+    auto layout = new QVBoxLayout(&fragDialog);
+    layout->setSpacing(2);
+    fragDialog.setLayout(layout);
+    auto treeMap = new TreeMapGraphicsView(topLevelItems);
+    treeMap->Generate(nullptr, QRectF(0, 0, 1024, 512), 10);
+    layout->addWidget(treeMap);
+    layout->setMargin(0);
+    fragDialog.setWindowTitle("Show Callstacks TreeMap");
+    fragDialog.resize(1024, 512);
+    fragDialog.setMinimumSize(1024, 512);
+    fragDialog.exec();
+}
+
+StackTraceModel* MainWindow::GetCurrentModelChecked() {
+    if (stacktraceModel_->rowCount() == 0) {
+        QMessageBox::information(this, "Merging Callstakcs", "No callstack record, open or capture some records first!");
+        return nullptr;
+    }
+    return filteredStacktraceModel_->rowCount() > 0 ? filteredStacktraceModel_ : stacktraceModel_;
+}
+
 void MainWindow::FilterStackTraceModel() {
+    FilterStackTraceModel(filteredStacktraceModel_, minTime_, maxTime_);
+    SwitchStackTraceModel(filteredStacktraceProxyModel_);
+}
+
+void MainWindow::FilterStackTraceModel(StackTraceModel* filteredModel, double minTime, double maxTime) {
     auto sizeFilter = ui->memSizeComboBox->currentIndex();
     auto libraryFilter = ui->libraryComboBox->currentIndex() == 0 ? QString() : ui->libraryComboBox->currentText();
     auto persistentFilter = ui->allocComboBox->currentIndex() == 1;
 //    TimerProfiler profler("FilterStackTraceModel");
-    filteredStacktraceModel_->clear();
+    filteredModel->clear();
     QVector<StackRecord> filteredRecords;
     int recordCount = stacktraceModel_->rowCount();
     for (int i = 0; i < recordCount; i++) {
         const auto& record = stacktraceModel_->recordAt(i);
         auto timeInSecond = record.time_ / 1000;
-        if (timeInSecond < minTime_ || timeInSecond > maxTime_)
+        if (timeInSecond < minTime || timeInSecond > maxTime)
             continue;
         if (sizeFilter > 0) {
             auto size = record.size_;
@@ -709,8 +806,7 @@ void MainWindow::FilterStackTraceModel() {
         }
         filteredRecords.push_back(record);
     }
-    filteredStacktraceModel_->append(filteredRecords);
-    SwitchStackTraceModel(filteredStacktraceProxyModel_);
+    filteredModel->append(filteredRecords);
 }
 
 void MainWindow::SwitchStackTraceModel(StackTraceProxyModel* model) {
@@ -788,55 +884,46 @@ void MainWindow::ReadSMapsFile(QFile* file) {
     }
 }
 
-void MainWindow::GetMergedCallstacks(QList<QTreeWidgetItem*>& topLevelItems) {
-    auto model = filteredStacktraceModel_;
-    auto count = model->rowCount();
-    if (count == 0) {
-        count = stacktraceModel_->rowCount();
-        if (count == 0) {
-            QMessageBox::information(this, "Show Merged Callstakcs", "No callstack record, open or capture some records first!");
-            return;
+// CustomTreeWidgetItem
+class CustomTreeWidgetItem : public QTreeWidgetItem {
+public:
+    CustomTreeWidgetItem(QString funcName, quint64 size, QTreeWidget* parent = nullptr)
+        : QTreeWidgetItem(parent), funcName_(funcName), size_(size) {
+        setData(0, Qt::DisplayRole, funcName_);
+        setData(1, Qt::DisplayRole, sizeToString(size_));
+        setData(1, Qt::UserRole, size_);
+        setData(2, Qt::DisplayRole, count_);
+    }
+    void setSize(quint64 size) {
+        size_ = size;
+        setData(1, Qt::DisplayRole, sizeToString(size_));
+        setData(1, Qt::UserRole, size_);
+    }
+    void setCount(quint64 count) {
+        count_ = count;
+        setData(2, Qt::DisplayRole, count_);
+    }
+    quint64 size() const { return size_; }
+    quint64 count() const { return count_; }
+    bool operator<(const QTreeWidgetItem &other) const {
+        auto casted = static_cast<const CustomTreeWidgetItem&>(other);
+        int column = treeWidget()->sortColumn();
+        if (column == 0) {
+            return funcName_ < casted.funcName_;
+        } else if (column == 1) {
+            return size_ < casted.size_;
         } else {
-            model = stacktraceModel_;
+            return count_ < casted.count_;
         }
     }
-    // CustomTreeWidhgetItem
-    class CustomTreeWidgetItem : public QTreeWidgetItem {
-    public:
-        CustomTreeWidgetItem(QString funcName, quint64 size, QTreeWidget* parent = nullptr)
-            : QTreeWidgetItem(parent), funcName_(funcName), size_(size) {
-            setData(0, Qt::DisplayRole, funcName_);
-            setData(1, Qt::DisplayRole, sizeToString(size_));
-            setData(1, Qt::UserRole, size_);
-            setData(2, Qt::DisplayRole, count_);
-        }
-        void setSize(quint64 size) {
-            size_ = size;
-            setData(1, Qt::DisplayRole, sizeToString(size_));
-            setData(1, Qt::UserRole, size_);
-        }
-        void setCount(quint64 count) {
-            count_ = count;
-            setData(2, Qt::DisplayRole, count_);
-        }
-        quint64 size() const { return size_; }
-        quint64 count() const { return count_; }
-        bool operator<(const QTreeWidgetItem &other) const {
-            auto casted = static_cast<const CustomTreeWidgetItem&>(other);
-            int column = treeWidget()->sortColumn();
-            if (column == 0) {
-                return funcName_ < casted.funcName_;
-            } else if (column == 1) {
-                return size_ < casted.size_;
-            } else {
-                return count_ < casted.count_;
-            }
-        }
-    private:
-        QString funcName_;
-        quint64 size_;
-        quint64 count_ = 1;
-    };
+private:
+    QString funcName_;
+    quint64 size_;
+    quint64 count_ = 1;
+};
+
+QHash<uint, CustomTreeWidgetItem*> MainWindow::GetMergedCallstacks(StackTraceModel* model, QList<QTreeWidgetItem*>& topLevelItems) {
+    auto count = model->rowCount();
     QHash<uint, CustomTreeWidgetItem*> itemMap;
     for (int i = 0; i < count; i++) {
         const auto& record = model->recordAt(i);
@@ -874,6 +961,7 @@ void MainWindow::GetMergedCallstacks(QList<QTreeWidgetItem*>& topLevelItems) {
         if (child != nullptr && child->parent() == nullptr)
             topLevelItems.push_back(child);
     }
+    return itemMap;
 }
 
 void MainWindow::ResetFilters() {
@@ -1539,95 +1627,118 @@ void MainWindow::on_actionVisualize_SMaps_triggered() {
 
 void MainWindow::on_actionShow_Merged_Callstacks_triggered() {
     QList<QTreeWidgetItem*> topLevelItems;
-    GetMergedCallstacks(topLevelItems);
-    if (topLevelItems.size() == 0)
+    if (auto currentModel = GetCurrentModelChecked()) {
+        GetMergedCallstacks(currentModel, topLevelItems);
+        if (topLevelItems.size() == 0)
+            return;
+    } else {
         return;
-    QDialog fragDialog(this, Qt::WindowTitleHint | Qt::WindowCloseButtonHint);
-    auto layout = new QVBoxLayout(&fragDialog);
-    layout->setSpacing(2);
-    fragDialog.setLayout(layout);
-    auto treeWidget = new QTreeWidget(&fragDialog);
-    treeWidget->setHeaderLabels(QStringList() << "Function" << "Size" << "Count");
-    treeWidget->addTopLevelItems(topLevelItems);
-    treeWidget->resizeColumnToContents(0);
-    treeWidget->header()->resizeSections(QHeaderView::ResizeMode::ResizeToContents);
-    treeWidget->setSortingEnabled(true);
-    auto searchLineEdit = new QLineEdit(&fragDialog);
-    searchLineEdit->setPlaceholderText("Type keyword to do fuzzy search, then press enter to review one by one.");
-    searchLineEdit->setClearButtonEnabled(true);
-    QString prevKeyword;
-    int matchIndex = 0;
-    QList<QTreeWidgetItem*> matches;
-    connect(searchLineEdit, &QLineEdit::editingFinished, [&](){
-        auto keyword = searchLineEdit->text();
-        if (prevKeyword == keyword)
-            return;
-        treeWidget->clearSelection();
-        matches.clear();
-        matchIndex = 0;
-        prevKeyword = keyword;
-        if (keyword.size() == 0)
-            return;
-        auto startTime = sclock::now();
-        matches = treeWidget->findItems(keyword, Qt::MatchContains | Qt::MatchRecursive, 0);
-        auto ms = std::chrono::duration<double, std::milli>(sclock::now() - startTime).count();
-        ui->statusBar->showMessage(QString("Found %1 matches in %2 ms, press enter to review one by one")
-            .arg(matches.size()).arg(ms), 10000);
-    });
-    connect(searchLineEdit, &QLineEdit::returnPressed, [&](){
-        if (matches.size() <= 0) {
-            return;
-        }
-        auto item = matches[matchIndex];
-        item->setSelected(true);
-        auto rowCount = 1;
-        auto curItem = item->parent();
-        while (curItem) {
-            rowCount++;
-            if (!curItem->isExpanded())
-                curItem->setExpanded(true);
-            curItem = curItem->parent();
-        }
-        // scroll to item
-        treeWidget->scrollToItem(item, QAbstractItemView::ScrollHint::PositionAtCenter);
-        auto itemRect = treeWidget->visualItemRect(item);
-        auto hscrollbar = treeWidget->horizontalScrollBar();
-        hscrollbar->setValue(hscrollbar->value() + itemRect.x());
-        matchIndex++;
-        if (matchIndex > matches.size() - 1) {
-            matchIndex = 0;
-        }
-    });
-    layout->addWidget(treeWidget);
-    layout->addWidget(searchLineEdit);
-    layout->setMargin(0);
-    fragDialog.setWindowTitle("Show Merged Callstacks");
-    fragDialog.resize(900, 400);
-    fragDialog.setMinimumSize(900, 400);
-    fragDialog.exec();
+    }
+
+    auto choice = QMessageBox::question(this, "Select View Mode", "Please select prefered view mode.", "TreeView", "TreeMap");
+    if (choice == 0) {
+        ShowMergedCallstacks(topLevelItems);
+    } else {
+        ShowMergedCallstacksInTreeMap(topLevelItems);
+    }
 }
 
-void MainWindow::on_actionShow_Callstacks_In_TreeMap_triggered() {
-    QList<QTreeWidgetItem*> topLevelItems;
-    GetMergedCallstacks(topLevelItems);
-    if (topLevelItems.size() == 0)
+void MainWindow::on_actionShow_Leaks_triggered() {
+    if (stacktraceModel_->rowCount() == 0) {
+        QMessageBox::information(this, "Merging Callstakcs", "No callstack record, open or capture some records first!");
         return;
-    QDialog fragDialog(this, Qt::WindowTitleHint | Qt::WindowCloseButtonHint);
-    auto layout = new QVBoxLayout(&fragDialog);
-    layout->setSpacing(2);
-    fragDialog.setLayout(layout);
-    auto treeMap = new TreeMapGraphicsView(topLevelItems);
-    treeMap->Generate(nullptr, QRectF(0, 0, 1024, 512), 10);
-    layout->addWidget(treeMap);
-    layout->setMargin(0);
-    fragDialog.setWindowTitle("Show Callstacks TreeMap");
-    fragDialog.resize(1024, 512);
-    fragDialog.setMinimumSize(1024, 512);
-    fragDialog.exec();
+    }
+    if (maxTime_ == std::numeric_limits<double>::max()) {
+        QMessageBox::warning(this, "Invalide duration.", "Please mark the time range you want to check for leaks first.");
+        return;
+    }
+
+    auto firstModel = new StackTraceModel(this);
+    auto secondModel = new StackTraceModel(this);
+    FilterStackTraceModel(firstModel, 0, minTime_);
+    FilterStackTraceModel(secondModel, 0, maxTime_);
+
+    QList<QTreeWidgetItem*> firstTopLevelItems, secondTopLevelItems;
+    auto firstHashmap = GetMergedCallstacks(firstModel, firstTopLevelItems);
+    auto secondHashmap = GetMergedCallstacks(secondModel, secondTopLevelItems);
+
+    quint64 sizeLimiter = 1024; // 1 KiB
+    QList<CustomTreeWidgetItem*> leafItems;
+    for (auto it = secondHashmap.begin(); it != secondHashmap.end(); ++it) {
+        auto key = it.key();
+        auto widgetItem = it.value();
+        auto firstIt = firstHashmap.find(key);
+
+        // diff leaf nodes only.
+        if (widgetItem->childCount() != 0 || firstIt == firstHashmap.end()) {
+            widgetItem->setSize(0);
+            widgetItem->setCount(0);
+            continue;
+        }
+
+        leafItems.append(widgetItem);
+
+        auto firstWidgetItem = firstIt.value();
+        auto newSize = widgetItem->size() - firstWidgetItem->size();
+        auto newCount = widgetItem->count() - firstWidgetItem->count();
+
+        if (newSize < sizeLimiter || newCount < firstWidgetItem->count()) {
+            widgetItem->setSize(0);
+            widgetItem->setCount(0);
+        } else {
+            widgetItem->setSize(newSize);
+            widgetItem->setCount(newCount);
+        }
+    }
+
+    // release unused memories.
+    for (auto& item : firstTopLevelItems)
+        delete item;
+    firstTopLevelItems.clear();
+    firstHashmap.clear();
+
+    // recalculate parent size & count data by leaf nodes.
+    for (auto leaf : leafItems) {
+        auto parent = static_cast<CustomTreeWidgetItem*>(leaf->parent());
+        while (parent != nullptr) {
+            parent->setSize(parent->size() + leaf->size());
+            parent->setCount(parent->count() + leaf->count());
+            parent = static_cast<CustomTreeWidgetItem*>(parent->parent());
+        }
+    }
+    leafItems.clear();
+
+    // remove redundant records.
+    QList<CustomTreeWidgetItem*> valideItems;
+    for (auto item : secondHashmap) {
+        if (item->count() > 0) {
+            valideItems.append(item);
+            continue;
+        }
+        if (item->parent()) {
+            item->parent()->removeChild(item);
+        } else {
+            secondTopLevelItems.removeOne(item);
+        }
+    }
+    secondHashmap.clear();
+
+    auto choice = QMessageBox::question(this, "Select View Mode", "Please select prefered view mode.", "TreeView", "TreeMap");
+    if (choice == 0) {
+        ShowMergedCallstacks(secondTopLevelItems, [&valideItems](QTreeWidget* widget) {
+            widget->expandAll();
+            quint64 expandLimiter = 10 * 1024 * 1024; // expand leaks greater than 10 MiBs only.
+            for (auto item : valideItems) {
+                item->setExpanded(item->size() >= expandLimiter);
+            }
+        });
+    } else {
+        ShowMergedCallstacksInTreeMap(secondTopLevelItems);
+    }
 }
 
 void MainWindow::on_actionAbout_triggered() {
-    QMessageBox::about(this, "About Loli Profiler", "Copyright 2020 Tencent.");
+    QMessageBox::about(this, "About Loli Profiler", "Copyright 2021 Tencent.");
 }
 
 void MainWindow::on_launchPushButton_clicked() {

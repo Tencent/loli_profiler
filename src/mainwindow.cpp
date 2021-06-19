@@ -1682,7 +1682,7 @@ void MainWindow::on_actionShow_Leaks_triggered() {
         auto newSize = widgetItem->size() - firstWidgetItem->size();
         auto newCount = widgetItem->count() - firstWidgetItem->count();
 
-        if (newSize < sizeLimiter || newCount < firstWidgetItem->count()) {
+        if (newSize < sizeLimiter || newCount <= 0) {
             widgetItem->setSize(0);
             widgetItem->setCount(0);
         } else {

@@ -213,13 +213,25 @@ Profiler支持多种数据查看过滤器，可以通过申请记录大小、是
 
 Windows 上使用鼠标同时按住 Shift 按键，可选择时间区间。
 
-点击 **Tools->Show Merged Callstacks** 则会展示出聚合后的堆栈，与Mac OS Instrument 工具包中的 Allocation 工具相同。
+点击 **Tools->Show Merged Callstacks** 则会展示出聚合后的堆栈：
+
+我们提供两种数据展示模式：
+
+TreeView模式：与Mac OS Instrument 工具包中的 Allocation 工具相同
+
+同时支持模糊搜索，可根据函数名称进行搜索
 
 ![](images/calltree.png)
 
-点击 **Tools->Show Callstacks in TreeMap** 使用TreeMap模式检查数据：
+TreeMap模式：此模式比TreeView模式更直观，适合检查筛选问题最大的地方
 
 ![](images/treemap.png)
+
+我们也支持内存泄漏检测模式：
+
+通过 **Tools->Show Leaks** 菜单进入
+
+同样可通过Tree View或者Tree Map模式查看可能存在内存泄漏的调用堆栈。
 
 也可查看进程的 proc/pid/smaps 数据：
 

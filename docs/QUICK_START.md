@@ -211,13 +211,23 @@ On Mac OS with track pad, you press somewhere with one finger, then use another 
 
 On Windows platforms, press shift and use mouse to drag your filter range.
 
-Click **Tools->Show Merged Callstacks** will print combined view of all call stacks, just like Instrument Allocations on Mac OS:
+Click **Tools->Show Merged Callstacks** will print combined view of all call stacks.
+
+There's two type of view mode available:
+
+Tree View Mode: Inspect data just like Instrument Allocations on Mac OS:
 
 ![](images/calltree.png)
 
-Click **Tools->Show Callstacks in TreeMap** to see the same data in tree map view: 
+Tree Map Mode: Inspect the same data in tree map view: 
 
 ![](images/treemap.png)
+
+There's also a memory leak detect mode available:
+
+**Tools->Show Leaks**
+
+You can use Tree view or Tree map to inspect those possibly leaked call stacks.  
 
 You can also view your application's proc/pid/smaps data:
 

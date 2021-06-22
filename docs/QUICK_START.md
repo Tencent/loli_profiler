@@ -229,6 +229,20 @@ There's also a memory leak detect mode available:
 
 You can use Tree view or Tree map to inspect those possibly leaked call stacks.  
 
+![](images/game2rounds.png)
+
+First run several rounds of your game.
+
+![](images/selectdiff.png)
+
+Then select the area ranging from round start to round end.
+
+The Profiler will diff persistent allocation records [0s-250s] with [0s-450s].
+
+And printing out those possible leaked callstacks for you:
+
+![](images/possibleleaks.png)
+
 You can also view your application's proc/pid/smaps data:
 
 ![](images/smaps.png)

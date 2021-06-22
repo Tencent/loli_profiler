@@ -233,6 +233,20 @@ TreeMap模式：此模式比TreeView模式更直观，适合检查筛选问题�
 
 同样可通过Tree View或者Tree Map模式查看可能存在内存泄漏的调用堆栈。
 
+![](images/game2rounds.png)
+
+首先跑几次游戏单局，如图中跑了两次单局，波谷处为游戏大厅
+
+![](images/selectdiff.png)
+
+然后选择一段时间范围，从第二个单局的起始位置到结束位置
+
+Profiler就会去Diff 时间范围在[0s-250s]与[0s-450s]的常驻内存数据
+
+最终将有增长的堆栈输出出来：
+
+![](images/possibleleaks.png)
+
 也可查看进程的 proc/pid/smaps 数据：
 
 ![](images/smaps.png)

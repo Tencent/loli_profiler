@@ -2,7 +2,7 @@
 
 ![](https://img.shields.io/badge/license-MIT-brightgreen.svg?style=flat)
 ![](https://img.shields.io/badge/support-UnrealEngine4%20%7C%20UnityEngine-brightgreen.svg?style=flat)
-![](https://img.shields.io/badge/release-1.1.0-red.svg?style=flat)
+![](https://img.shields.io/badge/release-1.1.1-red.svg?style=flat)
 ![](https://img.shields.io/badge/android-5.0%20--%2010-blue.svg?style=flat)
 ![](https://img.shields.io/badge/arch-armeabi%20%7C%20armeabi--v7a%20%7C%20arm64--v8a-blue.svg?style=flat)
 
@@ -21,6 +21,7 @@ LoliProfiler supports profiling debuggable applications out of box. And offers e
 * Support attaching to running application.
 * Support multiple back-trace implementations.
 * Support profiling complex games by doing some mods with your game engine.
+* Support detecting c++ code memory leaks(Tested with Unreal Engine 4.26).
 * Support profiling release build applications on rooted devices.
 * Multiple data view modes: tree map/call tree/memory fragmentation.
 

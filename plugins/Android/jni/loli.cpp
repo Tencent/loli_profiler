@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <sys/mman.h>
 
 #include <inttypes.h>
 #include <jni.h>
@@ -46,11 +47,17 @@ enum class loliDataMode : std::uint8_t {
     NOSTACK, 
 };
 
+enum class loliHookMode : std::uint8_t {
+    MALLOC = 0, 
+    MMAP, 
+};
+
 std::chrono::system_clock::time_point startTime_;
 int minRecSize_ = 0;
 std::atomic<std::uint32_t> callSeq_;
 
 loliDataMode mode_ = loliDataMode::STRICT;
+loliHookMode hookMode_ = loliHookMode::MALLOC;
 bool isBlacklist_ = false;
 bool isFramePointer_ = false;
 bool isInstrumented_ = false;
@@ -132,6 +139,25 @@ inline void loli_maybe_record_alloc(size_t size, void* addr, loliFlags flag, int
 extern "C" {
 #endif // __cplusplus
 
+void loli_custom_free(void* ptr) {
+    if (ptr == nullptr) 
+        return;
+    static thread_local io::buffer obuffer(128);
+    obuffer.clear();
+    obuffer << static_cast<uint8_t>(FREE_) << static_cast<uint32_t>(++callSeq_) << reinterpret_cast<uint64_t>(ptr);
+    loli_server_send(obuffer.data(), obuffer.size());
+}
+
+void loli_free(void* ptr) {
+    if (ptr == nullptr) 
+        return;
+    static thread_local io::buffer obuffer(128);
+    obuffer.clear();
+    obuffer << static_cast<uint8_t>(FREE_) << static_cast<uint32_t>(++callSeq_) << reinterpret_cast<uint64_t>(ptr);
+    loli_server_send(obuffer.data(), obuffer.size());
+    free(ptr);
+}
+
 void loli_index_custom_alloc(void* addr, size_t size, int index) {
     loli_maybe_record_alloc(size, addr, loliFlags::MALLOC_, index);
 }
@@ -176,30 +202,52 @@ void *loli_index_realloc(void *ptr, size_t new_size, int index) {
     return addr;
 }
 
+void *loli_index_mmap(void *ptr, size_t length, int prot, int flags, int fd, off_t offset, int index) {
+    auto addr = mmap(ptr, length, prot, flags, fd, offset);
+    if (addr == MAP_FAILED) {
+        return addr;
+    }
+
+    // Count for regions with MAP_ANONYMOUS or MAP_PRIVATE flag set.
+    if (!(flags & MAP_ANON) && !(flags & MAP_PRIVATE)) {
+        return addr;
+    }
+
+    size_t pagesize = 4096;
+    size_t numpages = std::max((size_t)1, (length + pagesize - 1) / pagesize);
+
+    // Since mmaped memory can be munmapped partially, 
+    // we convert mmap length to page count to support this behaviour.
+    uint64_t curaddr = reinterpret_cast<uint64_t>(addr);
+    for (size_t i = 0; i < numpages; i++) {
+        loli_index_custom_alloc(reinterpret_cast<void*>(curaddr), pagesize, index);
+        curaddr += pagesize;
+    }
+
+    return addr;
+}
+
+int loli_munmap(void *ptr, size_t length) {
+    auto result = munmap(ptr, length);
+    if (result != 0) {
+        return result;
+    }
+
+    size_t pagesize = 4096;
+    size_t numpages = std::max((size_t)1, (length + pagesize - 1) / pagesize);
+
+    uint64_t curaddr = reinterpret_cast<uint64_t>(ptr);
+    for (size_t i = 0; i < numpages; i++) {
+        loli_custom_free(reinterpret_cast<void*>(curaddr));
+        curaddr += pagesize;
+    }
+
+    return result;
+}
+
 #ifdef __cplusplus
 }
 #endif // __cplusplus
-
-void loli_free(void* ptr) {
-    if (ptr == nullptr) 
-        return;
-    // std::ostringstream oss;
-    static thread_local io::buffer obuffer(128);
-    obuffer.clear();
-    obuffer << static_cast<uint8_t>(FREE_) << static_cast<uint32_t>(++callSeq_) << reinterpret_cast<uint64_t>(ptr);
-    // oss << FREE_ << '\\' << ++callSeq_ << '\\' << ptr;
-    loli_server_send(obuffer.data(), obuffer.size());
-    free(ptr);
-}
-
-void loli_custom_free(void* ptr) {
-    if (ptr == nullptr) 
-        return;
-    static thread_local io::buffer obuffer(128);
-    obuffer.clear();
-    obuffer << static_cast<uint8_t>(FREE_) << static_cast<uint32_t>(++callSeq_) << reinterpret_cast<uint64_t>(ptr);
-    loli_server_send(obuffer.data(), obuffer.size());
-}
 
 BACKTRACE_FPTR loli_get_backtrace(const char* path) {
     BACKTRACE_FPTR backtrace = nullptr;
@@ -253,13 +301,18 @@ bool loli_hook_library(const char* library, so_info_map& infoMap) {
             set_allocandfree(info->custom_alloc, loli_custom_free);
         }
         auto regex = std::string(".*/") + library + "\\.so$";
-        xhook_register(regex.c_str(), "malloc", (void*)info->malloc, nullptr);
-        xhook_register(regex.c_str(), "free", (void*)loli_free, nullptr);
-        xhook_register(regex.c_str(), "calloc", (void*)info->calloc, nullptr);
-        xhook_register(regex.c_str(), "memalign", (void*)info->memalign, nullptr);
-        xhook_register(regex.c_str(), "aligned_alloc", (void*)info->memalign, nullptr);
-        xhook_register(regex.c_str(), "posix_memalign", (void*)info->posix_memalign, nullptr);
-        xhook_register(regex.c_str(), "realloc", (void*)info->realloc, nullptr);
+        if (hookMode_ == loliHookMode::MMAP) {
+            xhook_register(regex.c_str(), "mmap", (void*)info->mmap, nullptr);
+            xhook_register(regex.c_str(), "munmap", (void*)loli_munmap, nullptr);
+        } else {
+            xhook_register(regex.c_str(), "malloc", (void*)info->malloc, nullptr);
+            xhook_register(regex.c_str(), "free", (void*)loli_free, nullptr);
+            xhook_register(regex.c_str(), "calloc", (void*)info->calloc, nullptr);
+            xhook_register(regex.c_str(), "memalign", (void*)info->memalign, nullptr);
+            xhook_register(regex.c_str(), "aligned_alloc", (void*)info->memalign, nullptr);
+            xhook_register(regex.c_str(), "posix_memalign", (void*)info->posix_memalign, nullptr);
+            xhook_register(regex.c_str(), "realloc", (void*)info->realloc, nullptr);
+        }
         return true;
     } else {
         LOLILOGE("Out of wrappers!");
@@ -398,7 +451,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
     std::string whitelist, blacklist, buildtype;
     mode_ = loliDataMode::STRICT;
 
-    std::ifstream infile("/data/local/tmp/loli2.conf");
+    std::ifstream infile("/data/local/tmp/loli3.conf");
     std::string line;
     std::vector<std::string> words;
     while (std::getline(infile, line)) {
@@ -422,6 +475,12 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
                 mode_ = loliDataMode::STRICT;
             } else {
                 mode_ = loliDataMode::NOSTACK;
+            }
+        } else if (words[0] == "hook") {
+            if (words[1] == "mmap") {
+                hookMode_ = loliHookMode::MMAP;
+            } else {
+                hookMode_ = loliHookMode::MALLOC;
             }
         } else if (words[0] == "type") {
             isBlacklist_ = words[1] == "blacklist";

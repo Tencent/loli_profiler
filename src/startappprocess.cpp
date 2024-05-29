@@ -50,12 +50,12 @@ void StartAppProcess::StartApp(const QString& appName, const QString& subProcess
     { // push remote folder to /data/local/tmp
         dialog->setLabelText("Pushing loli.conf to device.");
         arguments.clear();
-        arguments << "push" << "loli2.conf" << "/data/local/tmp";
+        arguments << "push" << "loli3.conf" << "/data/local/tmp";
         QProcess process;
         process.setWorkingDirectory(QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).first());
         process.setProgram(execPath);
         AdbProcess::SetArguments(&process, arguments);
-        if (!StartProcess(&process, "adb push loli2.conf /data/local/tmp")) {
+        if (!StartProcess(&process, "adb push loli3.conf /data/local/tmp")) {
             return;
         }
         dialog->setValue(dialog->value() + 1);

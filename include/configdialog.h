@@ -25,6 +25,7 @@ public:
         QString type_ = "white list";
         QString arch_ = "armeabi-v7a";
         QString compiler_ = "gcc";
+        QString hook_ = "malloc";
         QStringList whitelist_;
         QStringList blacklist_;
         Settings() = default;

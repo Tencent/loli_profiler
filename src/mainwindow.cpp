@@ -547,6 +547,7 @@ int MainWindow::LoadFromFile(QFile *file) {
     }
     ShowSummary();
     OnTimelineRubberBandHide();
+    setWindowTitle(QFileInfo(*file).fileName());
     return static_cast<qint32>(IOErrorCode::NONE);
 }
 
@@ -1588,6 +1589,7 @@ void MainWindow::on_actionSave_triggered() {
         return;
     }
     tempFile.setAutoRemove(false);
+    setWindowTitle(QFileInfo(fileName).fileName());
 }
 
 void MainWindow::on_actionExit_triggered() {
@@ -1846,6 +1848,8 @@ void MainWindow::on_launchPushButton_clicked() {
 
     isCapturing_ = true;
     Print("Starting application ...");
+
+    setWindowTitle("New session");
 }
 
 void MainWindow::on_chartScaleHSlider_valueChanged(int value) {

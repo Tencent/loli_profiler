@@ -26,7 +26,7 @@ HOOK_INFO::~_hook_info() {
     }
 }
 
-#define SLOT_NUM 512
+#define SLOT_NUM 2048
 
 #define _LOLI_ALLOC_WRAPPER(INDEX)\
 void _LOLI_ALLOC##INDEX(void *ptr, size_t size)\
@@ -64,19 +64,26 @@ void *_REALLOC##INDEX(void *ptr, size_t new_size)\
     return loli_index_realloc(ptr, new_size, INDEX);\
 }
 
+#define _MMAP_WRAPPER(INDEX)\
+void *_MMAP##INDEX(void *addr, size_t length, int prot, int flags, int fd, off_t offset)\
+{\
+    return loli_index_mmap(addr, length, prot, flags, fd, offset, INDEX);\
+}
+
 #define NSLOT_MACRO(NUM)\
 _##NUM##_MACRO(_LOLI_ALLOC_WRAPPER, 0)\
 _##NUM##_MACRO(_MALLOC_WRAPPER, 0)\
 _##NUM##_MACRO(_CALLOC_WRAPPER, 0)\
 _##NUM##_MACRO(_MEMALIGN_WRAPPER, 0)\
 _##NUM##_MACRO(_POSIX_MEMALIGN_WRAPPER, 0)\
-_##NUM##_MACRO(_REALLOC_WRAPPER, 0)
+_##NUM##_MACRO(_REALLOC_WRAPPER, 0)\
+_##NUM##_MACRO(_MMAP_WRAPPER, 0)
 
-NSLOT_MACRO(512)
+NSLOT_MACRO(2048)
 
 #define _REG_HOOK_INFO(INDEX)\
 Reg_Hook_Info(INDEX, &_LOLI_ALLOC##INDEX, &_MALLOC##INDEX, &_CALLOC##INDEX,\
-&_MEMALIGN##INDEX, &_POSIX_MEMALIGN##INDEX, &_REALLOC##INDEX);
+&_MEMALIGN##INDEX, &_POSIX_MEMALIGN##INDEX, &_REALLOC##INDEX, &_MMAP##INDEX);
 
 #define TEST_1_FUNC(INDEX, FUNC,...)\
 (_##FUNC##INDEX(__VA_ARGS__));
@@ -86,7 +93,7 @@ static HOOK_INFO hk_infos[SLOT_NUM];
 static int hk_info_index = -1;
 
 inline void Reg_Hook_Info(int index, LOLI_ALLOC_FPTR p0, MALLOC_FPTR p1, CALLOC_FPTR p3, 
-    MEMALIGN_FPTR p4, POSIX_MEMALIGN_FPTR p5, REALLOC_FPTR p6) {
+    MEMALIGN_FPTR p4, POSIX_MEMALIGN_FPTR p5, REALLOC_FPTR p6, MMAP_FPTR p7) {
     // __android_log_print(ANDROID_LOG_INFO, "Loli", "Reg hook info %d", index);
     hk_infos[index].so_name = nullptr;
     hk_infos[index].custom_alloc = p0;
@@ -95,10 +102,11 @@ inline void Reg_Hook_Info(int index, LOLI_ALLOC_FPTR p0, MALLOC_FPTR p1, CALLOC_
     hk_infos[index].memalign = p4;
     hk_infos[index].posix_memalign = p5;
     hk_infos[index].realloc = p6;
+    hk_infos[index].mmap = p7;
 }
 
 bool wrapper_init() {
-    _512_MACRO(_REG_HOOK_INFO, 0)
+    _2048_MACRO(_REG_HOOK_INFO, 0)
     hk_info_index = -1;
     return true;
 }

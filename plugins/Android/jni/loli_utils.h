@@ -55,11 +55,14 @@ _64_MACRO(MACRO, INDEX##5,##__VA_ARGS__)\
 _64_MACRO(MACRO, INDEX##6,##__VA_ARGS__)\
 _64_MACRO(MACRO, INDEX##7,##__VA_ARGS__)
 
+#define _2048_MACRO(MACRO, INDEX, ...)\
+_512_MACRO(MACRO, INDEX##0,##__VA_ARGS__)\
+_512_MACRO(MACRO, INDEX##1,##__VA_ARGS__)\
+_512_MACRO(MACRO, INDEX##2,##__VA_ARGS__)\
+_512_MACRO(MACRO, INDEX##3,##__VA_ARGS__)
+
 void loli_trim(std::string &str);
 
-// str: 要分割的字符串
-// result: 保存分割结果的字符串数组
-// delim: 分隔字符串
 void loli_split(const std::string& str, std::vector<std::string>& tokens, const std::string delim = " ");
 
 void loli_demangle(const std::string& name, std::string& demangled);

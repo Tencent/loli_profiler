@@ -42,6 +42,7 @@ void ConfigDialog::ReadCurrentSettings() {
     ui->modeComboBox->setCurrentText(currentSettings_.mode_);
     ui->buildComboBox->setCurrentText(currentSettings_.build_);
     ui->archComboBox->setCurrentText(currentSettings_.arch_);
+    ui->hookComboBox->setCurrentText(currentSettings_.hook_);
     ui->blacklistWidget->clear();
     ui->blacklistWidget->addItems(currentSettings_.blacklist_);
     ui->whitelistWidget->clear();
@@ -66,6 +67,7 @@ void ConfigDialog::WriteCurrentSettings() {
     currentSettings_.threshold_ = ui->thresholdSpinBox->value();
     currentSettings_.arch_ = ui->archComboBox->currentText();
     currentSettings_.compiler_ = ui->compilerComboBox->currentText();
+    currentSettings_.hook_ = ui->hookComboBox->currentText();
     auto numLibs = ui->whitelistWidget->count();
     currentSettings_.whitelist_.clear();
     for (int i = 0; i < numLibs; i++) {
@@ -101,7 +103,8 @@ void ConfigDialog::SaveConfigFile() {
     auto cfgPaths = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation);
     auto cfgPath = cfgPaths.first();
     WriteCurrentSettings();
-    QFile file(cfgPath + "/loli2.conf");
+    QFile file(cfgPath + "/loli3.conf");
+    file.remove();
     file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
     if (file.open(QIODevice::ReadWrite | QIODevice::Truncate | QIODevice::Text)) {
         QTextStream stream(&file);
@@ -126,6 +129,7 @@ void ConfigDialog::SaveConfigFile() {
             stream << "type:" << settings.type_ << Qt::endl;
             stream << "arch:" << settings.arch_ << Qt::endl;
             stream << "compiler:" << settings.compiler_ << Qt::endl;
+            stream << "hook:" << settings.hook_ << Qt::endl;
         };
         saveSettings(stream, currentSettings_);
         for (auto it = savedSettings_.begin(); it != savedSettings_.end(); ++it) {
@@ -143,7 +147,7 @@ ConfigDialog::Settings ConfigDialog::ParseConfigFile() {
     }
     auto cfgPaths = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation);
     auto cfgPath = cfgPaths.first();
-    QFile file(cfgPath + "/loli2.conf");
+    QFile file(cfgPath + "/loli3.conf");
     file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
     Settings* settings = &currentSettings_;
     savedSettings_.clear();
@@ -170,6 +174,8 @@ ConfigDialog::Settings ConfigDialog::ParseConfigFile() {
                 settings->arch_ = words[1];
             } else if (words[0] == "compiler") {
                 settings->compiler_ = words[1];
+            } else if (words[0] == "hook") {
+                settings->hook_ = words[1];
             } else if (words[0] == "saved") {
                 settings = &savedSettings_[words[1]];
             }
@@ -193,7 +199,7 @@ bool ConfigDialog::IsNoStackMode() {
 
 bool ConfigDialog::CreateIfNoConfigFile(QWidget *parent) {
     auto cfgPath = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).first();
-    QFile file(cfgPath + "/loli2.conf");
+    QFile file(cfgPath + "/loli3.conf");
     if (!file.exists()) {
         if (!QDir(cfgPath).mkpath(cfgPath)) {
             QMessageBox::warning(parent, "Warning", "Can't create application data path: " + cfgPath);

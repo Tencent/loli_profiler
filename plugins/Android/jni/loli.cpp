@@ -227,6 +227,31 @@ void *loli_index_mmap(void *ptr, size_t length, int prot, int flags, int fd, off
     return addr;
 }
 
+void *loli_index_mmap64(void *ptr, size_t length, int prot, int flags, int fd, off64_t offset, int index) {
+    auto addr = mmap64(ptr, length, prot, flags, fd, offset);
+    if (addr == MAP_FAILED) {
+        return addr;
+    }
+
+    // Count for regions with MAP_ANONYMOUS or MAP_PRIVATE flag set.
+    if (!(flags & MAP_ANON) && !(flags & MAP_PRIVATE)) {
+        return addr;
+    }
+
+    size_t pagesize = 4096;
+    size_t numpages = std::max((size_t)1, (length + pagesize - 1) / pagesize);
+
+    // Since mmaped memory can be munmapped partially, 
+    // we convert mmap length to page count to support this behaviour.
+    uint64_t curaddr = reinterpret_cast<uint64_t>(addr);
+    for (size_t i = 0; i < numpages; i++) {
+        loli_index_custom_alloc(reinterpret_cast<void*>(curaddr), pagesize, index);
+        curaddr += pagesize;
+    }
+
+    return addr;
+}
+
 int loli_munmap(void *ptr, size_t length) {
     auto result = munmap(ptr, length);
     if (result != 0) {
@@ -303,6 +328,7 @@ bool loli_hook_library(const char* library, so_info_map& infoMap) {
         auto regex = std::string(".*/") + library + "\\.so$";
         if (hookMode_ == loliHookMode::MMAP) {
             xhook_register(regex.c_str(), "mmap", (void*)info->mmap, nullptr);
+            xhook_register(regex.c_str(), "mmap64", (void*)info->mmap, nullptr);
             xhook_register(regex.c_str(), "munmap", (void*)loli_munmap, nullptr);
         } else {
             xhook_register(regex.c_str(), "malloc", (void*)info->malloc, nullptr);

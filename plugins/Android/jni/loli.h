@@ -13,6 +13,7 @@ void *loli_index_memalign(size_t alignment, size_t size, int index);
 int loli_index_posix_memalign(void** ptr, size_t alignment, size_t size, int index);
 void *loli_index_realloc(void *ptr, size_t new_size, int index);
 void *loli_index_mmap(void *ptr, size_t length, int prot, int flags, int fd, off_t offset, int index);
+void *loli_index_mmap64(void *ptr, size_t length, int prot, int flags, int fd, off64_t offset, int index);
 
 #ifdef __cplusplus
 }

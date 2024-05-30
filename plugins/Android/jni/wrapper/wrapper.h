@@ -24,6 +24,7 @@ typedef int (*POSIX_MEMALIGN_FPTR)(void**, size_t, size_t);
 typedef void* (*REALLOC_FPTR)(void*, size_t);
 typedef int (*BACKTRACE_FPTR)(void** buffer, size_t max);
 typedef void* (*MMAP_FPTR)(void*, size_t, int, int, int, off_t);
+typedef void* (*MMAP64_FPTR)(void*, size_t, int, int, int, off64_t);
 typedef int (*MUNMAP_FPTR)(void*, size_t);
 
 typedef struct _hook_info {
@@ -38,6 +39,7 @@ typedef struct _hook_info {
     REALLOC_FPTR realloc;
     BACKTRACE_FPTR backtrace = nullptr;
     MMAP_FPTR mmap;
+    MMAP64_FPTR mmap64;
     MUNMAP_FPTR munmap;
     ~_hook_info();
 } HOOK_INFO;

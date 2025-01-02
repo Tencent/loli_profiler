@@ -63,6 +63,20 @@ using namespace QtCharts;
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::MainWindow) {
+
+#ifdef Q_OS_WIN
+    QFile f(":qdarkstyle/dark/darkstyle.qss");
+
+    if (!f.exists()) {
+        printf("Unable to set stylesheet, file not found\n");
+    }
+    else {
+        f.open(QFile::ReadOnly | QFile::Text);
+        QTextStream ts(&f);
+        qApp->setStyleSheet(ts.readAll());
+    }
+#endif
+
     ui->setupUi(this);
 
     maxTime_ = std::numeric_limits<double>::max();

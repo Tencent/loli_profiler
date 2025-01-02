@@ -96,6 +96,10 @@ set(LOLIPROFILER_RESES
     res/devices.icns
 )
 
+if(MSVC)
+    list(APPEND LOLIPROFILER_RESES qdarkstyle/dark/darkstyle.qrc)
+endif()
+
 if (APPLE)
     set(ICON_FILE res/icon.icns)
     set_source_files_properties(${ICON_FILE} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)

@@ -68,7 +68,7 @@ void ConfigListWidget::OnContextMenuRequested(const QPoint &pos) {
 }
 
 void ConfigListWidget::ParseString(const QString& textData) {
-    auto parts = textData.split(',', Qt::SkipEmptyParts);
+    auto parts = textData.split(',', QString::SkipEmptyParts);
     for (auto& part : parts) {
         if (part.size() > 0) {
             addItem(part);

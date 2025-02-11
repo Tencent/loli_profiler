@@ -26,3 +26,13 @@ set Ndk_R20_CMD="/android-ndk-r20b/ndk-build.cmd"
 build.bat
 ```
 
+Linux:
+
+```bash
+build_linux_with_docker.sh
+# or 
+# export QT5Path=/Users/yourname/Qt5.14.1
+# export Ndk_R16_CMD=/android-ndk-r16b/ndk-build
+# export Ndk_R20_CMD=/android-ndk-r20b/ndk-build
+# bash build_linux.sh
+```

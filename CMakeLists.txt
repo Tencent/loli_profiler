@@ -3,15 +3,18 @@ cmake_minimum_required(VERSION 3.2)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
 if (APPLE)
     set(OS_BUNDLE MACOSX_BUNDLE)
     set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13" CACHE STRING "Minimum OS X deployment version")
     set(COMPANY "Tencent")
     set(COPYRIGHT "Copyright (c) Tencent. All rights reserved.")
     set(IDENTIFIER "com.tencent.LoliProfiler")
-   set(CMAKE_XCODE_ATTRIBUTE_DEBUG_INFORMATION_FORMAT "")
+    set(CMAKE_XCODE_ATTRIBUTE_DEBUG_INFORMATION_FORMAT "")
 elseif (WIN32)
     set(OS_BUNDLE WIN32)
+elseif(UNIX AND NOT APPLE)
+    set(OS_BUNDLE "") 
 endif()
 
 if(CMAKE_VERSION VERSION_LESS "3.7.0")
@@ -113,8 +116,15 @@ if (APPLE)
     set(MACOSX_BUNDLE_ICON_FILE devices.icns)
 endif()
 
+if(WIN32)
+    set(OS_RC_FILE windows.rc)
+else()
+    set(OS_RC_FILE "")
+endif()
+
 add_executable(${PROJECT_NAME} ${OS_BUNDLE} 
-    ${LOLIPROFILER_SRCS} ${LOLIPROFILER_INCS} ${LOLIPROFILER_UIS} ${META_FILES_TO_INCLUDE} ${LOLIPROFILER_RESES} windows.rc)
+    ${LOLIPROFILER_SRCS} ${LOLIPROFILER_INCS} ${LOLIPROFILER_UIS} ${META_FILES_TO_INCLUDE} ${LOLIPROFILER_RESES} ${OS_RC_FILE}
+)
 
 if (APPLE)
     set_target_properties(${PROJECT_NAME} PROPERTIES MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_LIST_DIR}/cmake/macosx_bundle_info.plist.in)
@@ -124,7 +134,7 @@ if(MSVC)
     target_compile_options(${PROJECT_NAME} PRIVATE "/W3" "/EHsc" "/WX" "/MP")
     target_compile_definitions(${PROJECT_NAME} PRIVATE "_CRT_SECURE_NO_WARNINGS=1" "NOGDI" "NOMINMAX") 
 else()
-    target_compile_options(${PROJECT_NAME} PRIVATE "-Wall" "-Wextra" "-fno-rtti" "-Werror" "-Wno-invalid-offsetof" "-Wno-missing-braces")
+    target_compile_options(${PROJECT_NAME} PRIVATE "-Wall" "-Wextra" "-Werror" $<$<COMPILE_LANGUAGE:CXX>:-Wno-invalid-offsetof;-fno-rtti> "-Wno-missing-braces")
 endif()
 
 target_compile_definitions(${PROJECT_NAME} 
@@ -160,4 +170,4 @@ if(APPLE AND NOT XCODE_VERSION)
         $<TARGET_FILE:${PROJECT_NAME}>)
 endif()
 
-install(TARGETS ${PROJECT_NAME}  DESTINATION ${CMAKE_BINARY_DIR}/bin/release)
+install(TARGETS ${PROJECT_NAME} DESTINATION ${CMAKE_BINARY_DIR}/bin/release)

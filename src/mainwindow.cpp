@@ -680,6 +680,44 @@ void MainWindow::ShowSummary() {
     ui->recordCountLineEdit->setText(QString("%1 / %2").arg(rowCount).arg(sizeToString(size)));
 }
 
+// CustomTreeWidgetItem
+class CustomTreeWidgetItem : public QTreeWidgetItem {
+public:
+    CustomTreeWidgetItem(QString funcName, quint64 size, QTreeWidget* parent = nullptr)
+        : QTreeWidgetItem(parent), funcName_(funcName), size_(size) {
+        setData(0, Qt::DisplayRole, funcName_);
+        setData(1, Qt::DisplayRole, sizeToString(size_));
+        setData(1, Qt::UserRole, size_);
+        setData(2, Qt::DisplayRole, count_);
+    }
+    void setSize(quint64 size) {
+        size_ = size;
+        setData(1, Qt::DisplayRole, sizeToString(size_));
+        setData(1, Qt::UserRole, size_);
+    }
+    void setCount(quint64 count) {
+        count_ = count;
+        setData(2, Qt::DisplayRole, count_);
+    }
+    quint64 size() const { return size_; }
+    quint64 count() const { return count_; }
+    bool operator<(const QTreeWidgetItem &other) const {
+        auto casted = static_cast<const CustomTreeWidgetItem&>(other);
+        int column = treeWidget()->sortColumn();
+        if (column == 0) {
+            return funcName_ < casted.funcName_;
+        } else if (column == 1) {
+            return size_ < casted.size_;
+        } else {
+            return count_ < casted.count_;
+        }
+    }
+private:
+    QString funcName_;
+    quint64 size_;
+    quint64 count_ = 1;
+};
+
 void MainWindow::ShowMergedCallstacks(QList<QTreeWidgetItem*>& topLevelItems, std::function<void(QTreeWidget*)> widgetCallback) {
     QDialog fragDialog(this, Qt::WindowTitleHint | Qt::WindowCloseButtonHint);
     auto layout = new QVBoxLayout(&fragDialog);
@@ -687,6 +725,35 @@ void MainWindow::ShowMergedCallstacks(QList<QTreeWidgetItem*>& topLevelItems, st
     fragDialog.setLayout(layout);
     auto treeWidget = new QTreeWidget(&fragDialog);
     treeWidget->setHeaderLabels(QStringList() << "Function" << "Size" << "Count");
+    treeWidget->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(treeWidget, &QTreeWidget::customContextMenuRequested, this, [this, treeWidget](const QPoint &pos) {
+        QMenu menu;
+        auto actionDeepCopy = new QAction("DeepCopy", treeWidget);
+        connect(actionDeepCopy, &QAction::triggered, [treeWidget, pos]() {
+            auto item = treeWidget->itemAt(pos);
+            if (!item) return;
+
+            QStringList result;
+            std::function<void(QTreeWidgetItem*, int)> collectItems = [&](QTreeWidgetItem* node, int depth) {
+                QString indent(depth, '\t');
+                auto customItem = static_cast<CustomTreeWidgetItem*>(node);
+                QString line = QString("%1%2, %3, %4").arg(indent)
+                    .arg(customItem->data(0, Qt::DisplayRole).toString())
+                    .arg(sizeToString(customItem->size()))
+                    .arg(customItem->count());
+                result << line;
+
+                for (int i = 0; i < node->childCount(); ++i) {
+                    collectItems(node->child(i), depth + 1);
+                }
+            };
+
+            collectItems(item, 0);
+            QApplication::clipboard()->setText(result.join("\n"));
+        });
+        menu.addAction(actionDeepCopy);
+        menu.exec(treeWidget->viewport()->mapToGlobal(pos));
+    });
     treeWidget->addTopLevelItems(topLevelItems);
     treeWidget->resizeColumnToContents(0);
     treeWidget->header()->resizeSections(QHeaderView::ResizeMode::ResizeToContents);
@@ -898,44 +965,6 @@ void MainWindow::ReadSMapsFile(QFile* file) {
         }
     }
 }
-
-// CustomTreeWidgetItem
-class CustomTreeWidgetItem : public QTreeWidgetItem {
-public:
-    CustomTreeWidgetItem(QString funcName, quint64 size, QTreeWidget* parent = nullptr)
-        : QTreeWidgetItem(parent), funcName_(funcName), size_(size) {
-        setData(0, Qt::DisplayRole, funcName_);
-        setData(1, Qt::DisplayRole, sizeToString(size_));
-        setData(1, Qt::UserRole, size_);
-        setData(2, Qt::DisplayRole, count_);
-    }
-    void setSize(quint64 size) {
-        size_ = size;
-        setData(1, Qt::DisplayRole, sizeToString(size_));
-        setData(1, Qt::UserRole, size_);
-    }
-    void setCount(quint64 count) {
-        count_ = count;
-        setData(2, Qt::DisplayRole, count_);
-    }
-    quint64 size() const { return size_; }
-    quint64 count() const { return count_; }
-    bool operator<(const QTreeWidgetItem &other) const {
-        auto casted = static_cast<const CustomTreeWidgetItem&>(other);
-        int column = treeWidget()->sortColumn();
-        if (column == 0) {
-            return funcName_ < casted.funcName_;
-        } else if (column == 1) {
-            return size_ < casted.size_;
-        } else {
-            return count_ < casted.count_;
-        }
-    }
-private:
-    QString funcName_;
-    quint64 size_;
-    quint64 count_ = 1;
-};
 
 QHash<uint, CustomTreeWidgetItem*> MainWindow::GetMergedCallstacks(StackTraceModel* model, QList<QTreeWidgetItem*>& topLevelItems) {
     auto count = model->rowCount();

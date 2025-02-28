@@ -296,11 +296,11 @@ void MainWindow::Print(const QString& str) {
 void MainWindow::ExportToText(QFile* file, bool optimal) {
     QTextStream stream(file);
     qint32 count = stacktraceModel_->rowCount();
-    stream << "[seq,time,size,addr,library,funcaddr]" << Qt::endl;
+    stream << "[seq,time,size,addr,library,funcaddr]" << endl;
     for (int i = 0; i < count; i++) {
         auto& record = stacktraceModel_->recordAt(i);
         stream << record.seq_ << ',' << record.time_ << ',' << record.size_ << ','
-               << record.addr_ << ',' << record.library_.Get() << ',' << record.funcAddr_ << Qt::endl;
+               << record.addr_ << ',' << record.library_.Get() << ',' << record.funcAddr_ << endl;
         auto it = callStackMap_.find(record.uuid_);
         if (it != callStackMap_.end()) {
             auto stackCount = it.value().size();
@@ -315,21 +315,21 @@ void MainWindow::ExportToText(QFile* file, bool optimal) {
                 }
             }
             if (it.value().size() > 0) {
-                stream << Qt::endl;
+                stream << endl;
             }
         }
-        stream << Qt::endl;
+        stream << endl;
     }
     if (optimal) {
-        stream << "[stackAddrMap]" << Qt::endl;
+        stream << "[stackAddrMap]" << endl;
         for (auto libIt = symbloMap_.begin(); libIt != symbloMap_.end(); ++libIt) {
-            stream << libIt.key() << ":" << Qt::endl;
+            stream << libIt.key() << ":" << endl;
             auto& addrs = libIt.value();
             for (auto addrIt = addrs.begin(); addrIt != addrs.end(); ++addrIt) {
-                stream << QString("0x%1").arg(addrIt.key(), 0, 16) << ", " << addrIt.value() << Qt::endl;
+                stream << QString("0x%1").arg(addrIt.key(), 0, 16) << ", " << addrIt.value() << endl;
             }
         }
-        stream << Qt::endl;
+        stream << endl;
     }
 }
 
@@ -918,7 +918,7 @@ void MainWindow::ReadSMapsFile(QFile* file) {
         auto line = stream.readLine();
         if (line.isEmpty())
             continue;
-        auto strList = line.split(' ', Qt::SkipEmptyParts);
+        auto strList = line.split(' ', QString::SkipEmptyParts);
         if (sectionTitleRx.indexIn(line) != -1) {
             int matchedLength = sectionTitleRx.matchedLength();
             if (matchedLength == -1)
@@ -1322,7 +1322,7 @@ void MainWindow::OnStackTableViewContextMenu(const QPoint & pos) {
             const auto& libName = callStack[i].first.Get();
             const auto& funcAddr = callStack[i].second;
             const auto& funcName = TryAddNewAddress(libName, funcAddr);
-            stream << libName << ", " << funcName << Qt::endl;
+            stream << libName << ", " << funcName << endl;
         }
         stream.flush();
         QApplication::clipboard()->setText(output);
@@ -1429,9 +1429,9 @@ void MainWindow::OnDumpingLineNumbers() {
         const auto& funcName = TryAddNewAddress(libName, funcAddr);
         auto addrKey = libName + QString::number(funcAddr, 16);
         if (addressInfos.contains(addrKey)) {
-            stream << libName << ", " << addressInfos[addrKey] << Qt::endl;
+            stream << libName << ", " << addressInfos[addrKey] << endl;
         } else {
-            stream << libName << ", " << funcName << Qt::endl;
+            stream << libName << ", " << funcName << endl;
         }
     }
     stream.flush();
@@ -2049,7 +2049,7 @@ void MainWindow::on_selectAppToolButton_clicked() {
         return;
     }
     auto pkgStrs = QString(process.readAll());
-    auto lines = pkgStrs.split('\n', Qt::SkipEmptyParts);
+    auto lines = pkgStrs.split('\n', QString::SkipEmptyParts);
     if (lines.count() == 0) {
         QMessageBox::warning(this, "Warning", "No device is connected!");
         return;

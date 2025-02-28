@@ -21,10 +21,12 @@ QString PathUtils::GetADBExecutablePath() {
 QString PathUtils::GetPythonExecutablePath() {
     if (!ndkPath_.isEmpty() && QFile::exists(ndkPath_)) {
         QString pythonPath;
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN)
         pythonPath = ndkPath_ + "/prebuilt/windows-x86_64/bin/python.exe";
-#else
+#elif defined(Q_OS_MACOS)
         pythonPath = ndkPath_ + "/prebuilt/darwin-x86_64/bin/python";
+#elif defined(Q_OS_LINUX)
+        pythonPath = ndkPath_ + "/prebuilt/linux-x86_64/bin/python";
 #endif
         if (QFile::exists(pythonPath))
             return pythonPath;
@@ -38,26 +40,36 @@ QString PathUtils::GetNDKToolPath(const QString& name, bool armv7) {
     }
     QString toolPath;
     if (armv7) {
-#ifdef Q_OS_WIN
-        toolPath = ndkPath_ + "/toolchains/arm-linux-androideabi-4.9" +
-            QString("/prebuilt/windows-x86_64/bin/arm-linux-androideabi-%1.exe").arg(name);
+#if defined(Q_OS_WIN)
+    toolPath = ndkPath_ + "/toolchains/arm-linux-androideabi-4.9" +
+        QString("/prebuilt/windows-x86_64/bin/arm-linux-androideabi-%1.exe").arg(name);
+#elif defined(Q_OS_MACOS)
+    toolPath = ndkPath_ + "/toolchains/arm-linux-androideabi-4.9" +
+        QString("/prebuilt/darwin-x86_64/bin/arm-linux-androideabi-%1").arg(name);
+#elif defined(Q_OS_LINUX)
+    toolPath = ndkPath_ + "/toolchains/arm-linux-androideabi-4.9" +
+        QString("/prebuilt/linux-x86_64/bin/arm-linux-androideabi-%1").arg(name);
 #else
-        toolPath = ndkPath_ + "/toolchains/arm-linux-androideabi-4.9" +
-            QString("/prebuilt/darwin-x86_64/bin/arm-linux-androideabi-%1").arg(name);
+    #error "Unsupported OS"
 #endif
-        if (QFile::exists(toolPath))
-            return toolPath;
-    } else {
-#ifdef Q_OS_WIN
-        toolPath = ndkPath_ + "/toolchains/aarch64-linux-android-4.9" +
-            QString("/prebuilt/windows-x86_64/bin/aarch64-linux-android-%1.exe").arg(name);
+    if (QFile::exists(toolPath))
+        return toolPath;
+} else {
+#if defined(Q_OS_WIN)
+    toolPath = ndkPath_ + "/toolchains/aarch64-linux-android-4.9" +
+        QString("/prebuilt/windows-x86_64/bin/aarch64-linux-android-%1.exe").arg(name);
+#elif defined(Q_OS_MACOS)
+    toolPath = ndkPath_ + "/toolchains/aarch64-linux-android-4.9" +
+        QString("/prebuilt/darwin-x86_64/bin/aarch64-linux-android-%1").arg(name);
+#elif defined(Q_OS_LINUX)
+    toolPath = ndkPath_ + "/toolchains/aarch64-linux-android-4.9" +
+        QString("/prebuilt/linux-x86_64/bin/aarch64-linux-android-%1").arg(name);
 #else
-        toolPath = ndkPath_ + "/toolchains/aarch64-linux-android-4.9" +
-            QString("/prebuilt/darwin-x86_64/bin/aarch64-linux-android-%1").arg(name);
+    #error "Unsupported OS"
 #endif
-        if (QFile::exists(toolPath))
-            return toolPath;
-    }
+    if (QFile::exists(toolPath))
+        return toolPath;
+}
     return QString();
 }
 

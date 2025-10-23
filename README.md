@@ -24,6 +24,7 @@ LoliProfiler supports profiling debuggable applications out of box. And offers e
 * Support detecting c++ code memory leaks(Tested with Unreal Engine 4.26).
 * Support profiling release build applications on rooted devices.
 * Multiple data view modes: tree map/call tree/memory fragmentation.
+* Builtin adb console to be able to exec command.
 
 # Documents
 
@@ -43,6 +44,7 @@ LoliProfiler supports profiling debuggable applications out of box. And offers e
 * [XHook](https://github.com/iqiyi/xHook)
 * [Android native memory leak solution](https://developer.aliyun.com/article/708672)
 * [YMTreeMap](https://github.com/yahoo/YMTreeMap)
+* [qconsolewidget](https://github.com/gapost/qconsolewidget)
 * Icons [smashicons](https://www.flaticon.com/authors/smashicons), [freepik](https://www.flaticon.com/authors/freepik)
 
 # License

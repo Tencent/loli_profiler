@@ -1,9 +1,16 @@
 #include "pathutils.h"
 
 #include <QFile>
+#include <QFileDialog>
+#include <QMessageBox>
+#include <QSettings>
 
 QString PathUtils::ndkPath_ = QString();
 QString PathUtils::sdkPath_ = QString();
+QString PathUtils::pythonPath_ = QString();
+
+const QString SETTINGS_PYTHON_PATH = "PythonPath";
+
 
 QString PathUtils::GetADBExecutablePath() {
     if (!sdkPath_.isEmpty() && QFile::exists(sdkPath_)) {
@@ -19,6 +26,7 @@ QString PathUtils::GetADBExecutablePath() {
 }
 
 QString PathUtils::GetPythonExecutablePath() {
+    // Try to find Python in NDK first
     if (!ndkPath_.isEmpty() && QFile::exists(ndkPath_)) {
         QString pythonPath;
 #if defined(Q_OS_WIN)
@@ -31,45 +39,82 @@ QString PathUtils::GetPythonExecutablePath() {
         if (QFile::exists(pythonPath))
             return pythonPath;
     }
+    
+    // Fallback to user-specified Python path
+    if (!pythonPath_.isEmpty() && QFile::exists(pythonPath_)) {
+        return pythonPath_;
+    }
+    
+    // If fallback path doesn't exist or is not set, prompt user to select Python 2.x
+    QMessageBox msgBox;
+    msgBox.setIcon(QMessageBox::Warning);
+    msgBox.setWindowTitle("Python Not Found");
+    msgBox.setText("Python executable not found in NDK.");
+    msgBox.setInformativeText("Please select a Python 2.x (e.g., Python 2.7) executable for the application to use.");
+    msgBox.setStandardButtons(QMessageBox::Ok | QMessageBox::Cancel);
+    msgBox.setDefaultButton(QMessageBox::Ok);
+    
+    if (msgBox.exec() == QMessageBox::Ok) {
+        QString selectedPath = QFileDialog::getOpenFileName(
+            nullptr,
+            "Select Python 2.x Executable",
+            QString(),
+#if defined(Q_OS_WIN)
+            "Executable Files (*.exe);;All Files (*.*)"
+#else
+            "All Files (*)"
+#endif
+        );
+        
+        if (!selectedPath.isEmpty() && QFile::exists(selectedPath)) {
+            pythonPath_ = selectedPath;
+            SavePythonPathSettings();
+            return pythonPath_;
+        }
+    }
+    
     return QString();
+}
+
+
+namespace {
+    #if defined(Q_OS_WIN)
+        constexpr const char* NDK_PREBUILT_HOST = "windows-x86_64";
+        constexpr const char* NDK_TOOL_EXT = ".exe";
+    #elif defined(Q_OS_MACOS)
+        constexpr const char* NDK_PREBUILT_HOST = "darwin-x86_64";
+        constexpr const char* NDK_TOOL_EXT = "";
+    #elif defined(Q_OS_LINUX)
+        constexpr const char* NDK_PREBUILT_HOST = "linux-x86_64";
+        constexpr const char* NDK_TOOL_EXT = "";
+    #else
+        #error "Unsupported OS"
+    #endif
+
+    inline QString MakeNDKToolPath(const QString& ndkPath, const char* toolchain, const char* prefix, const QString& name) {
+        return ndkPath + toolchain + "/prebuilt/" + NDK_PREBUILT_HOST + "/bin/" + prefix + name + NDK_TOOL_EXT;
+    }
 }
 
 QString PathUtils::GetNDKToolPath(const QString& name, bool armv7) {
     if (ndkPath_.isEmpty() || !QFile::exists(ndkPath_)) {
         return QString();
     }
+    
     QString toolPath;
     if (armv7) {
-#if defined(Q_OS_WIN)
-    toolPath = ndkPath_ + "/toolchains/arm-linux-androideabi-4.9" +
-        QString("/prebuilt/windows-x86_64/bin/arm-linux-androideabi-%1.exe").arg(name);
-#elif defined(Q_OS_MACOS)
-    toolPath = ndkPath_ + "/toolchains/arm-linux-androideabi-4.9" +
-        QString("/prebuilt/darwin-x86_64/bin/arm-linux-androideabi-%1").arg(name);
-#elif defined(Q_OS_LINUX)
-    toolPath = ndkPath_ + "/toolchains/arm-linux-androideabi-4.9" +
-        QString("/prebuilt/linux-x86_64/bin/arm-linux-androideabi-%1").arg(name);
-#else
-    #error "Unsupported OS"
-#endif
-    if (QFile::exists(toolPath))
-        return toolPath;
-} else {
-#if defined(Q_OS_WIN)
-    toolPath = ndkPath_ + "/toolchains/aarch64-linux-android-4.9" +
-        QString("/prebuilt/windows-x86_64/bin/aarch64-linux-android-%1.exe").arg(name);
-#elif defined(Q_OS_MACOS)
-    toolPath = ndkPath_ + "/toolchains/aarch64-linux-android-4.9" +
-        QString("/prebuilt/darwin-x86_64/bin/aarch64-linux-android-%1").arg(name);
-#elif defined(Q_OS_LINUX)
-    toolPath = ndkPath_ + "/toolchains/aarch64-linux-android-4.9" +
-        QString("/prebuilt/linux-x86_64/bin/aarch64-linux-android-%1").arg(name);
-#else
-    #error "Unsupported OS"
-#endif
-    if (QFile::exists(toolPath))
-        return toolPath;
-}
+        toolPath = MakeNDKToolPath(ndkPath_, "/toolchains/arm-linux-androideabi-4.9", "arm-linux-androideabi-", name);
+        if (QFile::exists(toolPath))
+            return toolPath;
+    } else {
+        toolPath = MakeNDKToolPath(ndkPath_, "/toolchains/aarch64-linux-android-4.9", "aarch64-linux-android-",  name);
+        if (QFile::exists(toolPath))
+            return toolPath;
+
+        toolPath = MakeNDKToolPath(ndkPath_, "/toolchains/llvm", "llvm-", name);
+        if (QFile::exists(toolPath))
+            return toolPath;
+    }
     return QString();
 }
 
@@ -86,6 +131,22 @@ void PathUtils::SetSDKPath(const QString& path) {
     else
         sdkPath_ = path;
 }
+
+void PathUtils::LoadPythonPathSettings() {
+    QSettings settings("MoreFun", "LoliProfiler");
+    QString savedPath = settings.value(SETTINGS_PYTHON_PATH).toString();
+    if (!savedPath.isEmpty() && QFile::exists(savedPath)) {
+        pythonPath_ = savedPath;
+    }
+}
+
+void PathUtils::SavePythonPathSettings() {
+    QSettings settings("MoreFun", "LoliProfiler");
+    if (!pythonPath_.isEmpty() && QFile::exists(pythonPath_)) {
+        settings.setValue(SETTINGS_PYTHON_PATH, pythonPath_);
+    }
+}
+
 
 QString PathUtils::GetEnvVar(const char* var) {
 #ifdef Q_OS_WIN

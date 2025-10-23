@@ -282,9 +282,12 @@
           </widget>
          </item>
          <item>
-          <widget class="QPlainTextEdit" name="consolePlainTextEdit">
-           <property name="undoRedoEnabled">
-            <bool>false</bool>
+          <widget class="QConsoleWidget" name="consoleWidget">
+           <property name="font">
+            <font>
+             <family>Consolas</family>
+             <pointsize>9</pointsize>
+            </font>
            </property>
           </widget>
          </item>
@@ -734,6 +737,11 @@
    <class>CustomGraphicsView</class>
    <extends>QGraphicsView</extends>
    <header>customgraphicsview.h</header>
+  </customwidget>
+  <customwidget>
+   <class>QConsoleWidget</class>
+   <extends>QPlainTextEdit</extends>
+   <header>QConsoleWidget.h</header>
   </customwidget>
  </customwidgets>
  <resources>

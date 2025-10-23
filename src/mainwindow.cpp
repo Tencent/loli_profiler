@@ -258,9 +258,11 @@ void MainWindow::LoadSettings() {
         lastSymbolDir_ = lastSymbolDir;
     PathUtils::SetSDKPath(settings.value(SETTINGS_ANDROIDSDK).toString());
     PathUtils::SetNDKPath(settings.value(SETTINGS_ANDROIDNDK).toString());
+    PathUtils::LoadPythonPathSettings();
     // initialize appName by previous settings
     appName_ = ui->appNameLineEdit->text();
 }
+
 
 void MainWindow::SaveSettings() {
     QSettings settings("MoreFun", "LoliProfiler");
@@ -277,7 +279,9 @@ void MainWindow::SaveSettings() {
         settings.setValue(SETTINGS_LASTSYMBOLDIR, lastSymbolDir_);
     settings.setValue(SETTINGS_ANDROIDSDK, PathUtils::GetSDKPath());
     settings.setValue(SETTINGS_ANDROIDNDK, PathUtils::GetNDKPath());
+    PathUtils::SavePythonPathSettings();
 }
+
 
 void MainWindow::closeEvent(QCloseEvent* event) {
     SaveSettings();

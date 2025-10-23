@@ -20,10 +20,14 @@ public:
     static QString GetEnvVar(const char* var);
     static QString SearchAndroidSDK();
     static QString SearchAndroidNDK();
+    static void LoadPythonPathSettings();
+    static void SavePythonPathSettings();
 
 private:
     static QString ndkPath_;
     static QString sdkPath_;
+    static QString pythonPath_;
 };
+
 
 #endif // PATHUTILS_H

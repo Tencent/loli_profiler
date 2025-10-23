@@ -201,6 +201,9 @@ MainWindow::MainWindow(QWidget *parent) :
 
     LoadSettings();
 
+    // Setup console functionality
+    SetupConsole();
+
     filteredStacktraceModel_ = new StackTraceModel(this);
     filteredStacktraceProxyModel_ = new StackTraceProxyModel(filteredStacktraceModel_, this);
     stacktraceModel_ = new StackTraceModel(this);
@@ -294,7 +297,7 @@ void MainWindow::resizeEvent(QResizeEvent* event) {
 }
 
 void MainWindow::Print(const QString& str) {
-    ui->consolePlainTextEdit->appendPlainText(str);
+    ui->consoleWidget->writeStdOut(str);
 }
 
 void MainWindow::ExportToText(QFile* file, bool optimal) {
@@ -2108,3 +2111,194 @@ void MainWindow::on_actionExport_To_Text_triggered() {
     }
     tempFile.setAutoRemove(false);
 }
+
+// Console ADB Process class for executing user commands
+class MainWindow::ConsoleAdbProcess : public AdbProcess {
+    Q_OBJECT
+public:
+    explicit ConsoleAdbProcess(MainWindow* parent) : AdbProcess(parent), mainWindow_(parent) {
+        SetExecutablePath(PathUtils::GetADBExecutablePath());
+        
+        // Setup timeout timer
+        timeoutTimer_ = new QTimer(this);
+        timeoutTimer_->setSingleShot(true);
+        timeoutTimer_->setInterval(10000); // 10 seconds timeout
+        connect(timeoutTimer_, &QTimer::timeout, this, &ConsoleAdbProcess::OnTimeout);
+    }
+
+    void ExecuteCommand(const QString& command) {
+        command_ = command;
+        QStringList args = command.split(' ', QString::SkipEmptyParts);
+        if (!args.isEmpty()) {
+            timeoutTimer_->start();
+            ExecuteAsync(args);
+        }
+    }
+    
+
+    
+private slots:
+    void OnTimeout() {
+        process_->kill();
+        process_->waitForFinished(1000);
+		AdbProcessErrorOccurred(QProcess::ProcessError());
+    }
+
+protected:
+    void OnProcessFinihed() override {
+        timeoutTimer_->stop();
+        QString output = process_->readAll();
+        QString errorOutput = process_->readAllStandardError();
+        process_->close();
+        
+        if (!output.isEmpty()) {
+            mainWindow_->ui->consoleWidget->writeStdOut(output + "\n");
+        }
+        if (!errorOutput.isEmpty()) {
+            mainWindow_->ui->consoleWidget->writeStdErr(errorOutput + "\n");
+        }
+        if (output.isEmpty() && errorOutput.isEmpty()) {
+            mainWindow_->ui->consoleWidget->writeStdOut("(no output)\n");
+        }
+        
+        // Show prompt for next command
+        mainWindow_->ui->consoleWidget->writeStdOut("$ ");
+        mainWindow_->ui->consoleWidget->setMode(QConsoleWidget::Input);
+        
+        emit ProcessFinished(this);
+    }
+
+    void OnProcessErrorOccurred() override {
+        timeoutTimer_->stop();
+        QString errorOutput = process_->readAllStandardError();
+        QString standardOutput = process_->readAll();
+        process_->close();
+        
+        if (!standardOutput.isEmpty()) {
+            mainWindow_->ui->consoleWidget->writeStdOut(standardOutput + "\n");
+        }
+        if (!errorOutput.isEmpty()) {
+            mainWindow_->ui->consoleWidget->writeStdErr(errorOutput + "\n");
+        }
+        
+        // Show prompt for next command
+        mainWindow_->ui->consoleWidget->writeStdOut("$ ");
+        mainWindow_->ui->consoleWidget->setMode(QConsoleWidget::Input);
+        
+        emit ProcessErrorOccurred();
+    }
+
+private:
+    MainWindow* mainWindow_;
+    QString command_;
+    QTimer* timeoutTimer_;
+};
+
+void MainWindow::SetupConsole() {
+    // Initialize console components
+    consoleAdbProcess_ = new ConsoleAdbProcess(this);
+    
+    // Setup console widget
+    ui->consoleWidget->setMode(QConsoleWidget::Input);
+    
+    // Set colors for dark theme compatibility
+    QPalette palette = ui->consoleWidget->palette();
+    palette.setColor(QPalette::Text, Qt::white);
+    palette.setColor(QPalette::Base, QColor(45, 45, 45));
+    ui->consoleWidget->setPalette(palette);
+    
+    // Set stylesheet for better dark theme support
+    ui->consoleWidget->setStyleSheet(
+        "QConsoleWidget { "
+        "    color: white; "
+        "    background-color: rgb(45, 45, 45); "
+        "    selection-color: black; "
+        "    selection-background-color: rgb(100, 150, 200); "
+        "}"
+    );
+    
+    // Override channel colors for dark theme
+    QTextCharFormat stdOutFormat;
+    stdOutFormat.setForeground(Qt::white);
+    ui->consoleWidget->setChannelCharFormat(QConsoleWidget::StandardOutput, stdOutFormat);
+    
+    QTextCharFormat stdErrFormat;
+    stdErrFormat.setForeground(QColor(255, 100, 100)); // Light red for errors
+    ui->consoleWidget->setChannelCharFormat(QConsoleWidget::StandardError, stdErrFormat);
+    
+    QTextCharFormat stdInFormat;
+    stdInFormat.setForeground(Qt::white);
+    ui->consoleWidget->setChannelCharFormat(QConsoleWidget::StandardInput, stdInFormat);
+    
+    // Ensure IODevice is closed so signals work
+    if (ui->consoleWidget->device()->isOpen()) {
+        ui->consoleWidget->device()->close();
+    }
+    
+    // Connect console command signal
+    connect(ui->consoleWidget, &QConsoleWidget::consoleCommand,
+            this, &MainWindow::onConsoleCommand);
+    
+    // Show welcome message
+	ui->consoleWidget->setMode(QConsoleWidget::Output);
+	ui->consoleWidget->writeStdOut("LoliProfiler Console - Enter ADB commands\n");
+	ui->consoleWidget->writeStdOut("Type 'help' for available commands\n");
+    ui->consoleWidget->writeStdOut("$ ");
+    
+    // Ensure we're in Input mode after writing output
+    ui->consoleWidget->setMode(QConsoleWidget::Input);
+}
+
+void MainWindow::onConsoleCommand(const QString& command) {
+    QString cmd = command.trimmed();
+    if (cmd.isEmpty()) {
+        ui->consoleWidget->writeStdOut("\n$ ");
+        ui->consoleWidget->setMode(QConsoleWidget::Input);
+        return;
+    }
+    
+    // Handle special commands
+    if (cmd == "clear") {
+        ui->consoleWidget->clear();
+        ui->consoleWidget->writeStdOut("LoliProfiler Console - Enter ADB commands\n");
+        ui->consoleWidget->writeStdOut("$ ");
+        ui->consoleWidget->setMode(QConsoleWidget::Input);
+        return;
+    }
+    if (cmd == "help") {
+        ui->consoleWidget->writeStdOut("Available commands:\n");
+        ui->consoleWidget->writeStdOut("  Built-in: clear, help\n");
+		ui->consoleWidget->writeStdOut("  ADB commands: devices, logcat, shell ps, etc.\n");
+		ui->consoleWidget->writeStdOut("    shell dumpsys meminfo\n");
+		ui->consoleWidget->writeStdOut("    shell cat /proc/meminfo\n");
+		ui->consoleWidget->writeStdOut("    shell \"am broadcast -a android.intent.action.RUN -e cmd ''\"\n");
+        ui->consoleWidget->writeStdOut("$ ");
+        ui->consoleWidget->setMode(QConsoleWidget::Input);
+        return;
+    }
+    
+    // Execute command
+    ExecuteConsoleCommand(cmd);
+}
+
+void MainWindow::ExecuteConsoleCommand(const QString& command) {
+    if (consoleAdbProcess_->IsRunning()) {
+        ui->consoleWidget->writeStdErr("Previous ADB command is still running. Please wait...");
+        ui->consoleWidget->writeStdOut("$ ");
+        ui->consoleWidget->setMode(QConsoleWidget::Input);
+        return;
+    }
+    
+    QString adbPath = PathUtils::GetADBExecutablePath();
+    if (adbPath.isEmpty()) {
+        ui->consoleWidget->writeStdErr("ADB executable not found. Please configure Android SDK path.");
+        ui->consoleWidget->writeStdOut("$ ");
+        ui->consoleWidget->setMode(QConsoleWidget::Input);
+        return;
+    }
+    
+    // Execute the command
+    consoleAdbProcess_->ExecuteCommand(command);
+}
+
+#include "mainwindow.moc"

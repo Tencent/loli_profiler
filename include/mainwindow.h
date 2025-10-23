@@ -19,6 +19,7 @@
 #include "fixedscrollarea.h"
 #include "interactivechartview.h"
 #include "smaps/smapssection.h"
+#include "QConsoleWidget.h"
 
 namespace Ui {
 class MainWindow;
@@ -82,6 +83,10 @@ private:
     void InterpretRecordLibrary(StackRecord& record, StacktraceData& data);
     void InterpretStacktraceData();
 
+    // Console functionality
+    void ExecuteConsoleCommand(const QString& command);
+    void SetupConsole();
+
 private slots:
     void FixedUpdate();
 
@@ -121,6 +126,7 @@ private slots:
     void on_libraryComboBox_currentIndexChanged(int index);
     void on_allocComboBox_currentIndexChanged(int index);
     void on_actionExport_To_Text_triggered();
+    void onConsoleCommand(const QString& command);
 
 private:
     Ui::MainWindow *ui;
@@ -183,6 +189,10 @@ private:
 
     bool isCapturing_ = false;
     bool isConnected_ = false;
+    
+    // Console ADB process for user commands
+    class ConsoleAdbProcess;
+    ConsoleAdbProcess* consoleAdbProcess_;
 };
 
 #endif // MAINWINDOW_H

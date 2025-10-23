@@ -60,6 +60,8 @@ set(LOLIPROFILER_INCS
     include/timeprofiler.h
     include/treemapgraphicsview.h
     include/hashstring.h
+    thirdparty/qconsolewidget-master/src/QConsoleWidget.h
+    thirdparty/qconsolewidget-master/src/QConsoleIODevice.h
 )
 
 set(LOLIPROFILER_SRCS 
@@ -87,6 +89,8 @@ set(LOLIPROFILER_SRCS
     src/startappprocess.cpp
     src/treemapgraphicsview.cpp
     src/hashstring.cpp
+    thirdparty/qconsolewidget-master/src/QConsoleWidget.cpp
+    thirdparty/qconsolewidget-master/src/QConsoleIODevice.cpp
 )
 
 set(LOLIPROFILER_UIS
@@ -151,6 +155,7 @@ target_include_directories(${PROJECT_NAME}
     PRIVATE
         src/
         src/lz4/
+        thirdparty/qconsolewidget-master/src/
 )
 
 target_link_libraries(${PROJECT_NAME} 

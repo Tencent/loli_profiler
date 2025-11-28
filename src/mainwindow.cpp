@@ -1129,7 +1129,7 @@ void MainWindow::StopCaptureProcess() {
             ReadSMapsFile(&file);
             readSMaps = true;
         }
-        // file.remove();
+        file.remove();
     }
     progressDialog_->setValue(1);
     if (!readSMaps) {
@@ -1169,7 +1169,6 @@ void MainWindow::InterpretRecordLibrary(StackRecord& record, StacktraceData& dat
     for (int i = 0; i < callStack.size(); i++) {
         auto& libName = callStack[i].first;
         auto& funcAddr = callStack[i].second;
-        quint64 originalAddr = funcAddr;  // Save for debugging
         bool found = false;
         for (int i = 0; i < sMapsCache_.size(); i++) {
             const auto& cache = sMapsCache_[i];
@@ -1179,14 +1178,6 @@ void MainWindow::InterpretRecordLibrary(StackRecord& record, StacktraceData& dat
                 libName = cache.first;
                 data.records_.push_back(qMakePair(libName, funcAddr));
                 found = true;
-                // Debug: Log first few conversions for libUE4.so
-                static int debugCount = 0;
-                if (debugCount < 5 && cache.first.Get().contains("libUE4")) {
-                    qDebug() << "Address conversion:" << cache.first.Get() 
-                             << "Runtime:" << QString("0x%1").arg(originalAddr, 0, 16)
-                             << "-> File offset:" << QString("0x%1").arg(fileOffset, 0, 16);
-                    debugCount++;
-                }
                 break;
             }
         }
@@ -2031,28 +2022,14 @@ void MainWindow::on_symbloPushButton_clicked() {
         // TimerProfiler profile("Translate Symbol");
         auto& addrMap = it.value();
         auto addrMapIt = addrMap.begin();
-        
-        // Debug: Log first few addresses being looked up
-        int resolvedCount = 0;
-        int unresolvedCount = 0;
-        static int debugLookupCount = 0;
-        
         for (; addrMapIt != addrMap.end(); ++addrMapIt) {
             if (addrMapIt.value().size() != 0)
                 continue;
             auto addr = addrMapIt.key();
             
-            // Debug first few lookups
-            if (debugLookupCount < 5) {
-                qDebug() << "Looking up address:" << QString("0x%1").arg(addr, 0, 16)
-                         << "in symbol table with" << sortedRecords.size() << "symbols";
-                debugLookupCount++;
-            }
-            
             // Fixed binary search: correct loop condition and boundary updates
             int left = 0;
             int right = sortedRecords.size() - 1;
-            bool foundSymbol = false;
             while (left <= right) {
                 int mid = left + (right - left) / 2;
                 auto& midRecord = sortedRecords[mid];
@@ -2061,8 +2038,6 @@ void MainWindow::on_symbloPushButton_clicked() {
                 // Address range is [symbol_addr, symbol_addr + size)
                 if (addr >= midRecord.addr && addr < midRecord.addr + midRecord.size) {
                     addrMap[addrMapIt.key()] = midRecord.name;
-                    foundSymbol = true;
-                    resolvedCount++;
                     break;
                 } else if (addr < midRecord.addr) {
                     right = mid - 1;
@@ -2070,13 +2045,7 @@ void MainWindow::on_symbloPushButton_clicked() {
                     left = mid + 1;
                 }
             }
-            if (!foundSymbol) {
-                unresolvedCount++;
-            }
         }
-        
-        qDebug() << "Symbol resolution summary:" << resolvedCount << "resolved," << unresolvedCount << "unresolved";
-        
         auto selectedIndexes = ui->stackTableView->selectionModel()->selection().indexes();
         if (selectedIndexes.size() > 0)
             ShowCallStack(selectedIndexes.front());
@@ -2087,7 +2056,6 @@ void MainWindow::on_symbloPushButton_clicked() {
     progressDialog_->setValue(3);
     progressDialog_->hide();
     Print(QString("Symbols loaded in %1 seconds.").arg(timer.elapsed() / 1000));
-    Print(QString("Resolved %1 symbols, %2 unresolved").arg(resolvedCount).arg(unresolvedCount));
 }
 
 void MainWindow::on_configPushButton_clicked() {

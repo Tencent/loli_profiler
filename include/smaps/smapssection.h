@@ -19,11 +19,13 @@ struct SMapsSection {
     quint32 sharedDirty_ = 0;
     quint32 privateClean_ = 0;
     quint32 privateDirty_ = 0;
-    bool Contains(quint64 addr, qint32 size, quint64& baseAddr) const  {
+    bool Contains(quint64 addr, qint32 size, quint64& fileOffset) const  {
         (void)size;
         for (auto& sectionAddr : addrs_) {
             if (addr >= sectionAddr.start_ && addr < sectionAddr.end_) {
-                baseAddr = sectionAddr.start_ - sectionAddr.offset_;
+                // Convert runtime address to file offset directly
+                // file_offset = (runtime_addr - section_start) + section_offset
+                fileOffset = (addr - sectionAddr.start_) + sectionAddr.offset_;
                 return true;
             }
         }

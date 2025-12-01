@@ -1172,9 +1172,9 @@ void MainWindow::InterpretRecordLibrary(StackRecord& record, StacktraceData& dat
         bool found = false;
         for (int i = 0; i < sMapsCache_.size(); i++) {
             const auto& cache = sMapsCache_[i];
-            quint64 fileOffset;
-            if (cache.second->Contains(funcAddr, record.size_, fileOffset)) {
-                funcAddr = fileOffset;  // Use file offset directly
+            quint64 symbolVAddr;
+            if (cache.second->Contains(funcAddr, record.size_, symbolVAddr)) {
+                funcAddr = symbolVAddr;  // Convert runtime address to symbol virtual address
                 libName = cache.first;
                 data.records_.push_back(qMakePair(libName, funcAddr));
                 found = true;
@@ -1974,44 +1974,19 @@ void MainWindow::on_symbloPushButton_clicked() {
             QMessageBox::warning(this, "Warning", QString("ERROR reading file: %1").arg(symbolMapFilePath));
             return;
         }
-        // Fixed regex to handle both GNU nm and LLVM nm output formats:
-        // GNU nm:  <addr> <size> <type> <name>
-        // LLVM nm: <addr> <type> <name>  (size field may be missing)
-        // Also support uppercase hex (A-F) in addresses
-        QRegExp recordRx("([0-9a-fA-F]+)\\s+(?:([0-9a-fA-F]+)\\s+)?(\\S+)\\s+(.+)");
+        QRegExp recordRx("([0-9a-z]+)\\s([0-9a-z]+)\\s(\\w)\\s(.+)");
         QTextStream in(&symbolMapFile);
         while (!in.atEnd()) {
             QString line = in.readLine();
             if (recordRx.indexIn(line) < 0)
                 continue;
             SymbolRecord record;
-            record.addr = recordRx.cap(1).toULongLong(nullptr, 16);
-            
-            // Size field is optional (LLVM nm may not include it)
-            QString sizeStr = recordRx.cap(2);
-            if (sizeStr.isEmpty()) {
-                record.size = 0;  // Will calculate from next symbol later
-            } else {
-                record.size = sizeStr.toUInt(nullptr, 16);
-            }
-            
-            // cap(3) is type, cap(4) is name
             record.name = recordRx.cap(4);
+            record.size = recordRx.cap(2).toUInt(nullptr, 16);
+            record.addr = recordRx.cap(1).toULong(nullptr, 16);
             sortedRecords.push_back(record);
         }
         symbolMapFile.close();
-    }
-
-    // Calculate sizes for symbols where nm didn't provide size info
-    // Use the gap between consecutive symbols (already sorted by nm -n)
-    for (int i = 0; i < sortedRecords.size() - 1; i++) {
-        if (sortedRecords[i].size == 0) {
-            sortedRecords[i].size = sortedRecords[i + 1].addr - sortedRecords[i].addr;
-        }
-    }
-    // For the last symbol, use a minimal default size if still 0
-    if (sortedRecords.size() > 0 && sortedRecords.last().size == 0) {
-        sortedRecords.last().size = 4;  // Minimal instruction size
     }
 
     progressDialog_->setValue(2);
@@ -2026,23 +2001,18 @@ void MainWindow::on_symbloPushButton_clicked() {
             if (addrMapIt.value().size() != 0)
                 continue;
             auto addr = addrMapIt.key();
-            
-            // Fixed binary search: correct loop condition and boundary updates
             int left = 0;
             int right = sortedRecords.size() - 1;
-            while (left <= right) {
-                int mid = left + (right - left) / 2;
+            while (left != right) {
+                auto mid = static_cast<int>(std::ceil(static_cast<float>(left + right) / 2));
                 auto& midRecord = sortedRecords[mid];
-                
-                // Fixed: use < instead of <= for upper bound check
-                // Address range is [symbol_addr, symbol_addr + size)
-                if (addr >= midRecord.addr && addr < midRecord.addr + midRecord.size) {
+                if (addr >= midRecord.addr && addr <= midRecord.addr + midRecord.size) {
                     addrMap[addrMapIt.key()] = midRecord.name;
                     break;
-                } else if (addr < midRecord.addr) {
+                } else if (midRecord.addr + midRecord.size > addr) {
                     right = mid - 1;
                 } else {
-                    left = mid + 1;
+                    left = mid;
                 }
             }
         }

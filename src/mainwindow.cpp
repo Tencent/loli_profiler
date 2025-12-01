@@ -1172,9 +1172,9 @@ void MainWindow::InterpretRecordLibrary(StackRecord& record, StacktraceData& dat
         bool found = false;
         for (int i = 0; i < sMapsCache_.size(); i++) {
             const auto& cache = sMapsCache_[i];
-            quint64 baseAddr;
-            if (cache.second->Contains(funcAddr, record.size_, baseAddr)) {
-                funcAddr = funcAddr - baseAddr;
+            quint64 symbolVAddr;
+            if (cache.second->Contains(funcAddr, record.size_, symbolVAddr)) {
+                funcAddr = symbolVAddr;  // Convert runtime address to symbol virtual address
                 libName = cache.first;
                 data.records_.push_back(qMakePair(libName, funcAddr));
                 found = true;

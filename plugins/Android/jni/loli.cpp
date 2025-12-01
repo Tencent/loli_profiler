@@ -404,6 +404,7 @@ void loli_smaps_thread(std::unordered_set<std::string> libs) {
     std::unordered_set<std::string>             desired(libs);
     std::unordered_map<std::string, uintptr_t>  libBaseAddrMap;
     int                                         loadedDesiredCount = static_cast<int>(desired.size());
+    std::unordered_set<std::string>             matchedDesiredTokens;
     while (true) {
         if(NULL == (fp = fopen("/proc/self/maps", "r"))) {
             continue;
@@ -430,9 +431,15 @@ void loli_smaps_thread(std::unordered_set<std::string> libs) {
             if('[' == pathName[0]) continue;
             // check path
             auto pathnameStr = std::string(pathName);
-            if (loaded.find(pathnameStr) == loaded.end()) {
+            // Always keep the smallest base address observed for the same path (safer if maps order varies).
+            auto it = libBaseAddrMap.find(pathnameStr);
+            if (it == libBaseAddrMap.end()) {
                 libBaseAddrMap[pathnameStr] = baseAddr;
-                // path in loaded is full path to so library
+            } else {
+                it->second = std::min(it->second, baseAddr);
+            }
+            // path in loaded is full path to so library
+            if (loaded.find(pathnameStr) == loaded.end()) {
                 loaded.insert(pathnameStr);
                 if (isBlacklist_) {
                     shouldHook = true;
@@ -440,12 +447,19 @@ void loli_smaps_thread(std::unordered_set<std::string> libs) {
                     for (auto& token : desired) {
                         if (pathnameStr.find(token) != std::string::npos) {
                             shouldHook = true;
-                            loadedDesiredCount--;
-                            LOLILOGI("%s (%s) is loaded", token.c_str(), pathnameStr.c_str());
+                            // Only decrement once per token to avoid double counting when a token matches multiple paths.
+                            if (matchedDesiredTokens.find(token) == matchedDesiredTokens.end()) {
+                                matchedDesiredTokens.insert(token);
+                                if (loadedDesiredCount > 0) {
+                                    loadedDesiredCount--;
+                                }
+                                LOLILOGI("%s (%s) is loaded", token.c_str(), pathnameStr.c_str());
+                            } else {
+                                LOLILOGI("%s (%s) matched but token already accounted for", token.c_str(), pathnameStr.c_str());
+                            }
                         }
                     }
                 }
-
             }
         }
         fclose(fp);

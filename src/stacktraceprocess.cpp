@@ -31,6 +31,10 @@ StackTraceProcess::~StackTraceProcess(){
 void StackTraceProcess::ForwardPort(int port) {
     QProcess process;
     QStringList arguments;
+    // Inject device serial if set
+    if (!deviceSerial_.isEmpty()) {
+        arguments << "-s" << deviceSerial_;
+    }
     arguments << "forward" << "tcp:" + QString::number(port) << "tcp:7100";
     process.setProgram(execPath_);
     process.setArguments(arguments);

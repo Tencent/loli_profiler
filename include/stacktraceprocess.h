@@ -48,6 +48,9 @@ public:
     void SetExecutablePath(const QString& str) { execPath_ = str; }
     const QString& GetExecutablePath() const { return execPath_; }
 
+    void SetDeviceSerial(const QString& serial) { deviceSerial_ = serial; }
+    const QString& GetDeviceSerial() const { return deviceSerial_; }
+
 signals:
     void DataReceived();
     void ConnectionLost();
@@ -63,6 +66,7 @@ private:
 
 private:
     QString execPath_;
+    QString deviceSerial_;
     QVector<RawStackInfo> stackInfo_;
     QVector<QPair<quint32, quint64>> freeInfo_;
     QTcpSocket* socket_ = nullptr;

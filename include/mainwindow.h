@@ -190,6 +190,9 @@ private:
     bool isCapturing_ = false;
     bool isConnected_ = false;
     
+    // Selected device serial for ADB operations
+    QString selectedDeviceSerial_;
+    
     // Console ADB process for user commands
     class ConsoleAdbProcess;
     ConsoleAdbProcess* consoleAdbProcess_;

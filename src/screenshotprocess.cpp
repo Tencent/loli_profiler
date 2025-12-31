@@ -8,6 +8,10 @@ ScreenshotProcess::ScreenshotProcess(QObject* parent)
 
 void ScreenshotProcess::CaptureScreenshot() {
     QStringList arguments;
+    // Inject device serial if set
+    if (!deviceSerial_.isEmpty()) {
+        arguments << "-s" << deviceSerial_;
+    }
     arguments << "exec-out" << "screencap -p";
     ExecuteAsync(arguments);
 }

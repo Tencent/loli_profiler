@@ -17,6 +17,14 @@ public:
         return execPath_;
     }
 
+    void SetDeviceSerial(const QString& serial) {
+        deviceSerial_ = serial;
+    }
+
+    const QString& GetDeviceSerial() const {
+        return deviceSerial_;
+    }
+
     QProcess* Process() const {
         return process_;
     }
@@ -84,6 +92,7 @@ protected:
     bool hasErrors_ = false;
     QProcess *process_;
     QString execPath_;
+    QString deviceSerial_;
 };
 
 #endif // ADBPROCESS_H

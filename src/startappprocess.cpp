@@ -22,6 +22,10 @@ void StartAppProcess::StartApp(const QString& appName, const QString& subProcess
     { // push remote folder to /data/local/tmp
         dialog->setLabelText("Pushing libloli.so to device.");
         arguments.clear();
+        // Inject device serial if set
+        if (!deviceSerial_.isEmpty()) {
+            arguments << "-s" << deviceSerial_;
+        }
         arguments << "push" << "remote/" + compiler + "/" + arch + "/libloli.so" << "/data/local/tmp";
         QProcess process;
         process.setWorkingDirectory(QCoreApplication::applicationDirPath());
@@ -35,6 +39,10 @@ void StartAppProcess::StartApp(const QString& appName, const QString& subProcess
     { // check if device is rooted or not.
         isRootDevice_ = false;
         arguments.clear();
+        // Inject device serial if set
+        if (!deviceSerial_.isEmpty()) {
+            arguments << "-s" << deviceSerial_;
+        }
         arguments << "shell" << "su";
         QProcess process;
         process.setProgram(execPath);
@@ -50,6 +58,10 @@ void StartAppProcess::StartApp(const QString& appName, const QString& subProcess
     { // push remote folder to /data/local/tmp
         dialog->setLabelText("Pushing loli.conf to device.");
         arguments.clear();
+        // Inject device serial if set
+        if (!deviceSerial_.isEmpty()) {
+            arguments << "-s" << deviceSerial_;
+        }
         arguments << "push" << "loli3.conf" << "/data/local/tmp";
         QProcess process;
         process.setWorkingDirectory(QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).first());
@@ -63,6 +75,10 @@ void StartAppProcess::StartApp(const QString& appName, const QString& subProcess
     if (!interceptMode) { // set app as debugable for next launch
         dialog->setLabelText("Marking apk debugable for next launch.");
         arguments.clear();
+        // Inject device serial if set
+        if (!deviceSerial_.isEmpty()) {
+            arguments << "-s" << deviceSerial_;
+        }
         arguments << "shell" << "am" << "set-debug-app" << "-w" << appName;
         QProcess process;
         process.setProgram(execPath);
@@ -75,6 +91,10 @@ void StartAppProcess::StartApp(const QString& appName, const QString& subProcess
     if (!interceptMode) { // launch the app
         dialog->setLabelText("Launching apk.");
         arguments.clear();
+        // Inject device serial if set
+        if (!deviceSerial_.isEmpty()) {
+            arguments << "-s" << deviceSerial_;
+        }
         arguments << "shell" << "monkey -p" << appName << "-c android.intent.category.LAUNCHER 1";
         QProcess process;
         process.setProgram(execPath);
@@ -89,6 +109,10 @@ void StartAppProcess::StartApp(const QString& appName, const QString& subProcess
         QThread::sleep(2);
         dialog->setLabelText("Gettting pid.");
         arguments.clear();
+        // Inject device serial if set
+        if (!deviceSerial_.isEmpty()) {
+            arguments << "-s" << deviceSerial_;
+        }
         // if need attch subProcess
         // https://stackoverflow.com/questions/15608876/find-out-the-running-process-id-by-package-name
         if (subProcessName.isNull() || subProcessName.isEmpty()) {
@@ -112,6 +136,10 @@ void StartAppProcess::StartApp(const QString& appName, const QString& subProcess
     { // adb forward
         dialog->setLabelText("Forwadring tcp port.");
         arguments.clear();
+        // Inject device serial if set
+        if (!deviceSerial_.isEmpty()) {
+            arguments << "-s" << deviceSerial_;
+        }
         arguments << "forward" << "tcp:8700" << ("jdwp:" + QString::number(pid));
         QProcess process;
         process.setProgram(execPath);
@@ -140,6 +168,10 @@ bool StartAppProcess::GetSMapsByRunAs(const QString& appName, const QString& app
     QStringList arguments;
     QProcess process;
     process.setProgram(execPath);
+    // Inject device serial if set
+    if (!deviceSerial_.isEmpty()) {
+        arguments << "-s" << deviceSerial_;
+    }
     if (isRootDevice_) {
         arguments << "shell" << "su" << "-c" << "\"cat" << "/proc/" + appPid + 
             "/smaps" << ">" << "/data/local/tmp/smaps.txt\"";

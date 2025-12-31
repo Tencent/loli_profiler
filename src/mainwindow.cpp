@@ -6,6 +6,7 @@
 #include "treemapgraphicsview.h"
 #include "memgraphicsview.h"
 #include "selectappdialog.h"
+#include "deviceselectiondialog.h"
 #include "smaps/statsmapsdialog.h"
 #include "smaps/visualizesmapsdialog.h"
 #include "pathutils.h"
@@ -598,7 +599,13 @@ void MainWindow::ConnectionFailed() {
     // adb forward --remove-all
     QProcess process;
     process.setProgram(PathUtils::GetADBExecutablePath());
-    AdbProcess::SetArguments(&process, QStringList() << "forward" << "--remove-all");
+    QStringList forwardArgs;
+    // Inject device serial if set
+    if (!selectedDeviceSerial_.isEmpty()) {
+        forwardArgs << "-s" << selectedDeviceSerial_;
+    }
+    forwardArgs << "forward" << "--remove-all";
+    AdbProcess::SetArguments(&process, forwardArgs);
     process.start();
     if (process.waitForStarted()) {
         process.waitForFinished();
@@ -1028,7 +1035,13 @@ void MainWindow::PushEmptySMapsFile() {
     smapsFile.open();
     QProcess process;
     process.setProgram(PathUtils::GetADBExecutablePath());
-    AdbProcess::SetArguments(&process, QStringList() << "push" << smapsFile.fileName() << "/data/local/tmp/smaps.txt");
+    QStringList pushArgs;
+    // Inject device serial if set
+    if (!selectedDeviceSerial_.isEmpty()) {
+        pushArgs << "-s" << selectedDeviceSerial_;
+    }
+    pushArgs << "push" << smapsFile.fileName() << "/data/local/tmp/smaps.txt";
+    AdbProcess::SetArguments(&process, pushArgs);
     process.start();
     process.waitForStarted();
     process.waitForFinished();
@@ -1118,7 +1131,13 @@ void MainWindow::StopCaptureProcess() {
     auto smapsPath = QCoreApplication::applicationDirPath() + "/smaps.txt";
     QProcess process;
     process.setProgram(PathUtils::GetADBExecutablePath());
-    AdbProcess::SetArguments(&process, QStringList() << "pull" << "/data/local/tmp/smaps.txt" << smapsPath);
+    QStringList pullArgs;
+    // Inject device serial if set
+    if (!selectedDeviceSerial_.isEmpty()) {
+        pullArgs << "-s" << selectedDeviceSerial_;
+    }
+    pullArgs << "pull" << "/data/local/tmp/smaps.txt" << smapsPath;
+    AdbProcess::SetArguments(&process, pullArgs);
     process.start();
     process.waitForStarted();
     process.waitForFinished();
@@ -1150,7 +1169,13 @@ void MainWindow::StopCaptureProcess() {
     if (QMessageBox::question(this, "Question", "Do you need to kill the profiling app?") ==
             QMessageBox::StandardButton::Yes) {
         QProcess killApp;
-        AdbProcess::SetArguments(&killApp, QStringList() << "shell" << "am" << "force-stop" << appName_);
+        QStringList killArgs;
+        // Inject device serial if set
+        if (!selectedDeviceSerial_.isEmpty()) {
+            killArgs << "-s" << selectedDeviceSerial_;
+        }
+        killArgs << "shell" << "am" << "force-stop" << appName_;
+        AdbProcess::SetArguments(&killApp, killArgs);
         killApp.setProgram(PathUtils::GetADBExecutablePath());
         killApp.start();
         killApp.waitForStarted();
@@ -1822,6 +1847,77 @@ void MainWindow::on_launchPushButton_clicked() {
         return;
     }
 
+    // Check for connected devices
+    QString selectedDeviceSerial;
+    {
+        QProcess devicesProcess;
+        devicesProcess.setProgram(adbPath);
+        QStringList args;
+        args << "devices" << "-l";
+        AdbProcess::SetArguments(&devicesProcess, args);
+        devicesProcess.start();
+        devicesProcess.waitForFinished(5000);
+        
+        QString output = devicesProcess.readAllStandardOutput();
+        QStringList lines = output.split('\n', QString::SkipEmptyParts);
+        
+        // Parse device list (skip first line "List of devices attached")
+        QList<DeviceInfo> devices;
+        for (int i = 1; i < lines.size(); ++i) {
+            QString line = lines[i].trimmed();
+            if (line.isEmpty()) continue;
+            
+            DeviceInfo device;
+            QStringList parts = line.split(QRegExp("\\s+"), QString::SkipEmptyParts);
+            if (parts.size() >= 2) {
+                device.serial = parts[0];
+                device.state = parts[1];
+                
+                // Parse additional device info (model:XXX device:YYY)
+                for (int j = 2; j < parts.size(); ++j) {
+                    if (parts[j].startsWith("model:")) {
+                        device.model = parts[j].mid(6);
+                    } else if (parts[j].startsWith("device:")) {
+                        device.device = parts[j].mid(7);
+                    }
+                }
+                
+                // Only add devices that are online/device state
+                if (device.state == "device") {
+                    devices.append(device);
+                }
+            }
+        }
+        
+        if (devices.isEmpty()) {
+            QMessageBox::warning(this, "Warning", "No Android devices connected. Please connect a device and try again.");
+            return;
+        } else if (devices.size() == 1) {
+            // Single device, use it directly
+            selectedDeviceSerial = devices[0].serial;
+        } else {
+            // Multiple devices, show selection dialog
+            DeviceSelectionDialog dialog(this);
+            dialog.SetDevices(devices);
+            if (dialog.exec() == QDialog::Accepted) {
+                selectedDeviceSerial = dialog.GetSelectedDeviceSerial();
+            } else {
+                return; // User cancelled
+            }
+        }
+    }
+    
+    // Set the selected device serial to all ADB processes
+    selectedDeviceSerial_ = selectedDeviceSerial;
+    stacktraceProcess_->SetDeviceSerial(selectedDeviceSerial);
+    startAppProcess_->SetDeviceSerial(selectedDeviceSerial);
+    memInfoProcess_->SetDeviceSerial(selectedDeviceSerial);
+    screenshotProcess_->SetDeviceSerial(selectedDeviceSerial);
+    for (auto* addrProc : addrProcesses_) {
+        addrProc->SetDeviceSerial(selectedDeviceSerial);
+    }
+    // Note: consoleAdbProcess_ device serial will be set in SetupConsole() if needed
+
     auto launchModeInfo = QMessageBox::information(this, "Launch Mode",
         "Launch new instance or attach to running app?", "Launch", "Attach", "Cancel", 0, 2);
     bool enableInject = launchModeInfo == 1;
@@ -2045,7 +2141,13 @@ void MainWindow::on_selectAppToolButton_clicked() {
 
     QProcess process;
     process.setProgram(adbPath);
-    AdbProcess::SetArguments(&process, QStringList() << "shell" << "pm" << "list" << "packages");
+    QStringList pmArgs;
+    // Inject device serial if set
+    if (!selectedDeviceSerial_.isEmpty()) {
+        pmArgs << "-s" << selectedDeviceSerial_;
+    }
+    pmArgs << "shell" << "pm" << "list" << "packages";
+    AdbProcess::SetArguments(&process, pmArgs);
     process.start();
     if (!process.waitForStarted()) {
         Print("error start adb shell pm list packages, make sure your device is connected!");
@@ -2197,6 +2299,11 @@ private:
 void MainWindow::SetupConsole() {
     // Initialize console components
     consoleAdbProcess_ = new ConsoleAdbProcess(this);
+    
+    // Set device serial if already selected
+    if (!selectedDeviceSerial_.isEmpty()) {
+        consoleAdbProcess_->SetDeviceSerial(selectedDeviceSerial_);
+    }
     
     // Setup console widget
     ui->consoleWidget->setMode(QConsoleWidget::Input);

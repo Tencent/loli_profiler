@@ -41,6 +41,7 @@ set(LOLIPROFILER_INCS
     include/configdialog.h
     include/configlistwidget.h
     include/customgraphicsview.h
+    include/deviceselectiondialog.h
     include/fixedscrollarea.h
     include/interactivechartview.h
     include/pathutils.h
@@ -73,6 +74,7 @@ set(LOLIPROFILER_SRCS
     src/charttooltipitem.cpp
     src/configdialog.cpp
     src/customgraphicsview.cpp
+    src/deviceselectiondialog.cpp
     src/fixedscrollarea.cpp
     src/interactivechartview.cpp
     src/lz4/lz4.c
@@ -96,6 +98,7 @@ set(LOLIPROFILER_SRCS
 set(LOLIPROFILER_UIS
     src/mainwindow.ui
     src/configdialog.ui
+    src/deviceselectiondialog.ui
 )
 
 set(LOLIPROFILER_RESES 

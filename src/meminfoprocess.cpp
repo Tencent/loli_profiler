@@ -11,6 +11,10 @@ MemInfoProcess::MemInfoProcess(QObject* parent)
 void MemInfoProcess::DumpMemInfoAsync(const QString& appName, const QString& subProcessName) {
     appName_ = appName;
     QStringList arguments;
+    // Inject device serial if set
+    if (!deviceSerial_.isEmpty()) {
+        arguments << "-s" << deviceSerial_;
+    }
     if(subProcessName!=nullptr && !subProcessName.isEmpty()){
         appName_ = appName + ":" + subProcessName;
     }

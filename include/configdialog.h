@@ -1,6 +1,13 @@
 #ifndef CONFIGDIALOG_H
 #define CONFIGDIALOG_H
 
+#include <QString>
+#include <QStringList>
+
+// Forward declarations to avoid Qt Widgets dependency
+class QWidget;
+
+#ifndef NO_GUI_MODE
 #include <QDialog>
 
 namespace Ui {
@@ -17,6 +24,11 @@ public:
     void WriteCurrentSettings();
     void OnPasteClipboard();
     void SaveConfigFile();
+#else
+// CLI-only mode: ConfigDialog is just a namespace for settings
+class ConfigDialog {
+public:
+#endif
 
     struct Settings {
         int threshold_ = 128;
@@ -34,6 +46,8 @@ public:
     static Settings ParseConfigFile();
     static bool IsNoStackMode();
     static Settings GetCurrentSettings();
+    
+#ifndef NO_GUI_MODE
 private:
     static bool CreateIfNoConfigFile(QWidget *parent = nullptr);
 
@@ -48,6 +62,7 @@ private slots:
 
 private:
     Ui::ConfigDialog *ui;
+#endif
 };
 
 #endif // CONFIGDIALOG_H

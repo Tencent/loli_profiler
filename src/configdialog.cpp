@@ -1,26 +1,29 @@
 #include "configdialog.h"
+#ifndef NO_GUI_MODE
 #include "ui_configdialog.h"
-#include "pathutils.h"
 #include "selectappdialog.h"
-
 #include <QClipboard>
 #include <QMimeData>
-#include <QDir>
-#include <QFile>
 #include <QFileDialog>
-#include <QStandardPaths>
 #include <QMessageBox>
 #include <QMenu>
-#include <QTextStream>
-#include <QSettings>
 #include <QListWidget>
 #include <QLineEdit>
+#endif
+
+#include "pathutils.h"
+#include <QDir>
+#include <QFile>
+#include <QStandardPaths>
+#include <QTextStream>
+#include <QSettings>
 #include <QDebug>
 
 static ConfigDialog::Settings currentSettings_;
 static QMap<QString, ConfigDialog::Settings> savedSettings_;
 static bool settingsInitialized_ = false;
 
+#ifndef NO_GUI_MODE
 ConfigDialog::ConfigDialog(QWidget *parent) :
     QDialog(parent), ui(new Ui::ConfigDialog) {
     ui->setupUi(this);
@@ -140,14 +143,19 @@ void ConfigDialog::SaveConfigFile() {
     }
     file.close();
 }
+#endif // NO_GUI_MODE
 
 ConfigDialog::Settings ConfigDialog::ParseConfigFile() {
+#ifndef NO_GUI_MODE
     if (!CreateIfNoConfigFile(nullptr)) {
         return currentSettings_;
     }
-    auto cfgPaths = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation);
-    auto cfgPath = cfgPaths.first();
-    QFile file(cfgPath + "/loli3.conf");
+#endif
+    
+    // Read existing config file
+    auto cfgPathList = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation);
+    auto cfgPathStr = cfgPathList.first();
+    QFile file(cfgPathStr + "/loli3.conf");
     file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
     Settings* settings = &currentSettings_;
     savedSettings_.clear();
@@ -197,6 +205,7 @@ bool ConfigDialog::IsNoStackMode() {
     return GetCurrentSettings().mode_ == "nostack";
 }
 
+#ifndef NO_GUI_MODE
 bool ConfigDialog::CreateIfNoConfigFile(QWidget *parent) {
     auto cfgPath = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).first();
     QFile file(cfgPath + "/loli3.conf");
@@ -338,3 +347,4 @@ void ConfigDialog::on_btnSave_clicked() {
     dialog.setMinimumSize(300, 50);
     dialog.exec();
 }
+#endif // NO_GUI_MODE

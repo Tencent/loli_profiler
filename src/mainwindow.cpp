@@ -766,6 +766,39 @@ void MainWindow::ShowMergedCallstacks(QList<QTreeWidgetItem*>& topLevelItems, st
             QApplication::clipboard()->setText(result.join("\n"));
         });
         menu.addAction(actionDeepCopy);
+        
+        auto actionExpandAll = new QAction("Expand All", treeWidget);
+        connect(actionExpandAll, &QAction::triggered, [treeWidget, pos]() {
+            auto item = treeWidget->itemAt(pos);
+            if (!item) return;
+            
+            std::function<void(QTreeWidgetItem*)> expandRecursive = [&](QTreeWidgetItem* node) {
+                node->setExpanded(true);
+                for (int i = 0; i < node->childCount(); ++i) {
+                    expandRecursive(node->child(i));
+                }
+            };
+            
+            expandRecursive(item);
+        });
+        menu.addAction(actionExpandAll);
+        
+        auto actionCollapseAll = new QAction("Collapse All", treeWidget);
+        connect(actionCollapseAll, &QAction::triggered, [treeWidget, pos]() {
+            auto item = treeWidget->itemAt(pos);
+            if (!item) return;
+            
+            std::function<void(QTreeWidgetItem*)> collapseRecursive = [&](QTreeWidgetItem* node) {
+                for (int i = 0; i < node->childCount(); ++i) {
+                    collapseRecursive(node->child(i));
+                }
+                node->setExpanded(false);
+            };
+            
+            collapseRecursive(item);
+        });
+        menu.addAction(actionCollapseAll);
+        
         menu.exec(treeWidget->viewport()->mapToGlobal(pos));
     });
     treeWidget->addTopLevelItems(topLevelItems);

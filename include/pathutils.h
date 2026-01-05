@@ -1,7 +1,6 @@
 #ifndef PATHUTILS_H
 #define PATHUTILS_H
 
-#include <QWidget>
 #include <QString>
 
 class PathUtils {

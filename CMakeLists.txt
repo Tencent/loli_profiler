@@ -38,6 +38,8 @@ set(LOLIPROFILER_INCS
     include/adbprocess.h
     include/addressprocess.h
     include/charttooltipitem.h
+    include/clilogger.h
+    include/cliprofiler.h
     include/configdialog.h
     include/configlistwidget.h
     include/customgraphicsview.h
@@ -72,6 +74,8 @@ set(LOLIPROFILER_SRCS
     src/adbprocess.cpp
     src/addressprocess.cpp
     src/charttooltipitem.cpp
+    src/clilogger.cpp
+    src/cliprofiler.cpp
     src/configdialog.cpp
     src/customgraphicsview.cpp
     src/deviceselectiondialog.cpp
@@ -179,3 +183,90 @@ if(APPLE AND NOT XCODE_VERSION)
 endif()
 
 install(TARGETS ${PROJECT_NAME} DESTINATION ${CMAKE_BINARY_DIR}/bin/release)
+
+# ============================================================================
+# CLI-only executable (LoliProfilerCLI)
+# ============================================================================
+
+# Core files needed for CLI (no GUI dependencies)
+set(CLI_CORE_INCS
+    include/adbprocess.h
+    include/addressprocess.h
+    include/clilogger.h
+    include/cliprofiler.h
+    include/configdialog.h
+    include/pathutils.h
+    include/smaps/smapssection.h
+    src/lz4/lz4.h
+    include/meminfoprocess.h
+    include/screenshotprocess.h
+    include/stacktracemodel.h
+    include/stacktraceprocess.h
+    include/stacktraceproxymodel.h
+    include/startappprocess.h
+    include/hashstring.h
+)
+
+set(CLI_CORE_SRCS
+    src/adbprocess.cpp
+    src/addressprocess.cpp
+    src/clilogger.cpp
+    src/cliprofiler.cpp
+    src/configdialog.cpp
+    src/lz4/lz4.c
+    src/main_cli.cpp
+    src/meminfoprocess.cpp
+    src/pathutils.cpp
+    src/screenshotprocess.cpp
+    src/stacktracemodel.cpp
+    src/stacktraceprocess.cpp
+    src/stacktraceproxymodel.cpp
+    src/startappprocess.cpp
+    src/hashstring.cpp
+)
+
+# Add CLI executable without WIN32/MACOSX_BUNDLE flags (console application)
+add_executable(LoliProfilerCLI
+    ${CLI_CORE_SRCS}
+    ${CLI_CORE_INCS}
+)
+
+# Set compile options for CLI
+if(MSVC)
+    target_compile_options(LoliProfilerCLI PRIVATE "/W3" "/EHsc" "/WX" "/MP")
+    target_compile_definitions(LoliProfilerCLI PRIVATE "_CRT_SECURE_NO_WARNINGS=1" "NOGDI" "NOMINMAX" "NO_GUI_MODE")
+else()
+    target_compile_options(LoliProfilerCLI PRIVATE "-Wall" "-Wextra" "-Werror" $<$<COMPILE_LANGUAGE:CXX>:-Wno-invalid-offsetof;-fno-rtti> "-Wno-missing-braces")
+endif()
+
+target_compile_definitions(LoliProfilerCLI
+    PUBLIC
+        QT_DEPRECATED_WARNINGS
+        NO_GUI_MODE
+    PRIVATE
+)
+
+target_include_directories(LoliProfilerCLI
+    PUBLIC
+        $<INSTALL_INTERFACE:include>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    PRIVATE
+        src/
+        src/lz4/
+)
+
+# CLI only needs Core, Network, and Concurrent (no Widgets, Charts, OpenGL, Gui)
+target_link_libraries(LoliProfilerCLI
+    Qt5::Core
+    Qt5::Network
+    Qt5::Concurrent
+)
+
+if(APPLE AND NOT XCODE_VERSION)
+    add_custom_command(TARGET LoliProfilerCLI
+        POST_BUILD COMMAND
+        ${CMAKE_INSTALL_NAME_TOOL} -add_rpath "@executable_path/../Frameworks/"
+        $<TARGET_FILE:LoliProfilerCLI>)
+endif()
+
+install(TARGETS LoliProfilerCLI DESTINATION ${CMAKE_BINARY_DIR}/bin/release)

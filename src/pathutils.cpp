@@ -1,9 +1,11 @@
 #include "pathutils.h"
 
 #include <QFile>
+#include <QSettings>
+#ifndef NO_GUI_MODE
 #include <QFileDialog>
 #include <QMessageBox>
-#include <QSettings>
+#endif
 
 QString PathUtils::ndkPath_ = QString();
 QString PathUtils::sdkPath_ = QString();
@@ -45,6 +47,7 @@ QString PathUtils::GetPythonExecutablePath() {
         return pythonPath_;
     }
     
+#ifndef NO_GUI_MODE
     // If fallback path doesn't exist or is not set, prompt user to select Python 2.x
     QMessageBox msgBox;
     msgBox.setIcon(QMessageBox::Warning);
@@ -72,6 +75,7 @@ QString PathUtils::GetPythonExecutablePath() {
             return pythonPath_;
         }
     }
+#endif
     
     return QString();
 }

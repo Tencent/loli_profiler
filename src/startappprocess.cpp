@@ -2,7 +2,9 @@
 #include <QCoreApplication>
 #include <QTextStream>
 #include <QRegularExpression>
+#ifndef NO_GUI_MODE
 #include <QProgressDialog>
+#endif
 #include <QStandardPaths>
 #include <QThread>
 #include <QDebug>
@@ -20,7 +22,9 @@ void StartAppProcess::StartApp(const QString& appName, const QString& subProcess
     auto execPath = GetExecutablePath();
     QStringList arguments;
     { // push remote folder to /data/local/tmp
-        dialog->setLabelText("Pushing libloli.so to device.");
+#ifndef NO_GUI_MODE
+        if (dialog) dialog->setLabelText("Pushing libloli.so to device.");
+#endif
         arguments.clear();
         // Inject device serial if set
         if (!deviceSerial_.isEmpty()) {
@@ -34,7 +38,9 @@ void StartAppProcess::StartApp(const QString& appName, const QString& subProcess
         if (!StartProcess(&process, "adb push remote/libloli.so /data/local/tmp")) {
             return;
         }
-        dialog->setValue(dialog->value() + 1);
+#ifndef NO_GUI_MODE
+        if (dialog) dialog->setValue(dialog->value() + 1);
+#endif
     }
     { // check if device is rooted or not.
         isRootDevice_ = false;
@@ -56,7 +62,9 @@ void StartAppProcess::StartApp(const QString& appName, const QString& subProcess
         }
     }
     { // push remote folder to /data/local/tmp
-        dialog->setLabelText("Pushing loli.conf to device.");
+#ifndef NO_GUI_MODE
+        if (dialog) dialog->setLabelText("Pushing loli.conf to device.");
+#endif
         arguments.clear();
         // Inject device serial if set
         if (!deviceSerial_.isEmpty()) {
@@ -70,10 +78,14 @@ void StartAppProcess::StartApp(const QString& appName, const QString& subProcess
         if (!StartProcess(&process, "adb push loli3.conf /data/local/tmp")) {
             return;
         }
-        dialog->setValue(dialog->value() + 1);
+#ifndef NO_GUI_MODE
+        if (dialog) dialog->setValue(dialog->value() + 1);
+#endif
     }
     if (!interceptMode) { // set app as debugable for next launch
-        dialog->setLabelText("Marking apk debugable for next launch.");
+#ifndef NO_GUI_MODE
+        if (dialog) dialog->setLabelText("Marking apk debugable for next launch.");
+#endif
         arguments.clear();
         // Inject device serial if set
         if (!deviceSerial_.isEmpty()) {
@@ -86,10 +98,14 @@ void StartAppProcess::StartApp(const QString& appName, const QString& subProcess
         if (!StartProcess(&process, "adb shell am set-debug-app -w com.company.app")) {
             return;
         }
-        dialog->setValue(dialog->value() + 1);
+#ifndef NO_GUI_MODE
+        if (dialog) dialog->setValue(dialog->value() + 1);
+#endif
     }
     if (!interceptMode) { // launch the app
-        dialog->setLabelText("Launching apk.");
+#ifndef NO_GUI_MODE
+        if (dialog) dialog->setLabelText("Launching apk.");
+#endif
         arguments.clear();
         // Inject device serial if set
         if (!deviceSerial_.isEmpty()) {
@@ -102,12 +118,16 @@ void StartAppProcess::StartApp(const QString& appName, const QString& subProcess
         if (!StartProcess(&process, "adb shell monkey -p com.company.app -c android.intent.category.LAUNCHER 1")) {
             return;
         }
-        dialog->setValue(dialog->value() + 1);
+#ifndef NO_GUI_MODE
+        if (dialog) dialog->setValue(dialog->value() + 1);
+#endif
     }
     unsigned int pid = 0;
     { // pid of
         QThread::sleep(2);
-        dialog->setLabelText("Gettting pid.");
+#ifndef NO_GUI_MODE
+        if (dialog) dialog->setLabelText("Gettting pid.");
+#endif
         arguments.clear();
         // Inject device serial if set
         if (!deviceSerial_.isEmpty()) {
@@ -131,10 +151,14 @@ void StartAppProcess::StartApp(const QString& appName, const QString& subProcess
         }
         pid = process.readAll().trimmed().toUInt();
 //        qDebug() << pid;
-        dialog->setValue(dialog->value() + 1);
+#ifndef NO_GUI_MODE
+        if (dialog) dialog->setValue(dialog->value() + 1);
+#endif
     }
     { // adb forward
-        dialog->setLabelText("Forwadring tcp port.");
+#ifndef NO_GUI_MODE
+        if (dialog) dialog->setLabelText("Forwadring tcp port.");
+#endif
         arguments.clear();
         // Inject device serial if set
         if (!deviceSerial_.isEmpty()) {
@@ -147,13 +171,19 @@ void StartAppProcess::StartApp(const QString& appName, const QString& subProcess
         if (!StartProcess(&process, "adb forward tcp:8700 jdwp:xxxx")) {
             return;
         }
-        dialog->setValue(dialog->value() + 1);
+#ifndef NO_GUI_MODE
+        if (dialog) dialog->setValue(dialog->value() + 1);
+#endif
     }
     // python jdwp-shellifier.py
     errorStr_ = "python jdwp-shellifier.py";
-    dialog->setLabelText("Injecting libloli.so to target application.");
-    dialog->setCancelButtonText("Cancel");
-    dialog->raise();
+#ifndef NO_GUI_MODE
+    if (dialog) {
+        dialog->setLabelText("Injecting libloli.so to target application.");
+        dialog->setCancelButtonText("Cancel");
+        dialog->raise();
+    }
+#endif
     arguments.clear();
     arguments << "jdwp-shellifier.py" << "--target" << "127.0.0.1" << "--port" << "8700" << 
         "--break-on" << "android.app.Activity.onResume" << "--loadlib" << "libloli.so";

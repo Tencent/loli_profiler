@@ -151,7 +151,7 @@ void CliProfiler::Start() {
     if (options_.duration > 0) {
         Print(QString("Duration: %1 seconds").arg(options_.duration));
     } else {
-        Print("Duration: Until process exits");
+        Print("Duration: Press Ctrl+C to stop");
     }
     Print(QString("Launch mode: %1").arg(options_.attachMode ? "Attach" : "Launch"));
     Print("Data optimization: Enabled");
@@ -202,6 +202,25 @@ void CliProfiler::Start() {
     
     isCapturing_ = true;
     CLI_LOG("[Start] Start() method completed, waiting for app to start...");
+}
+
+void CliProfiler::RequestStop() {
+    CLI_LOG("[RequestStop] Stop requested by user signal");
+    
+    if (!isCapturing_) {
+        CLI_LOG("[RequestStop] Not currently capturing, ignoring");
+        return;
+    }
+    
+    if (!isConnected_) {
+        CLI_LOG("[RequestStop] Not connected, cleaning up immediately");
+        Print("Stop requested, but not connected. Exiting...");
+        Cleanup(1);
+        return;
+    }
+    
+    Print("Stop requested, stopping capture...");
+    OnDurationTimeout();  // Reuse the normal stop logic
 }
 
 void CliProfiler::Print(const QString& str) {
@@ -285,10 +304,8 @@ void CliProfiler::OnStartAppProcessFinished(AdbProcess* process) {
         durationTimer_->start(options_.duration * 1000);
         Print(QString("Profiling for %1 seconds...").arg(options_.duration));
     } else {
-        CLI_LOG("[OnStartAppProcessFinished] Starting process exit check timer...");
-        // Start process exit check timer
-        processExitCheckTimer_->start(2000);
-        Print("Profiling until process exits...");
+        CLI_LOG("[OnStartAppProcessFinished] No duration set, profiling until user stops (Ctrl+C)");
+        Print("Profiling... Press Ctrl+C to stop.");
     }
     
     CLI_LOG("[OnStartAppProcessFinished] Dumping initial meminfo...");
@@ -385,7 +402,16 @@ void CliProfiler::OnStacktraceDataReceived() {
 void CliProfiler::OnStacktraceConnectionLost() {
     if (!isCapturing_)
         return;
-    PrintError("Connection lost");
+    
+    // Connection lost is always an error now, since user should stop via Ctrl+C
+    CLI_LOG("[OnStacktraceConnectionLost] Unexpected connection loss");
+    PrintError("ERROR: Connection lost unexpectedly");
+    PrintError("This may be due to:");
+    PrintError("  - App crashed or was force-killed externally");
+    PrintError("  - USB cable disconnected");
+    PrintError("  - ADB connection lost");
+    PrintError("Data may be incomplete. Use Ctrl+C to stop profiling gracefully next time.");
+    
     ConnectionFailed();
     Cleanup(1);
 }

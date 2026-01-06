@@ -38,6 +38,9 @@ public:
 signals:
     void Finished(int exitCode);
 
+public slots:
+    void RequestStop();  // Request graceful stop (thread-safe, can be called from signal handler)
+
 private slots:
     void OnFixedUpdate();
     void OnStartAppProcessFinished(AdbProcess* process);

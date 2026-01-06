@@ -3,7 +3,36 @@
 #include <QCoreApplication>
 #include <QCommandLineParser>
 #include <QDir>
+#include <QMetaObject>
+#include <csignal>
+#include <cstring>
 #include <iostream>
+
+#ifdef _WIN32
+    #include <io.h>
+    #define write _write
+    #define STDOUT_FILENO 1
+#else
+    #include <unistd.h>
+#endif
+
+// Global pointer to profiler for signal handler
+static CliProfiler* g_profiler = nullptr;
+
+void signalHandler(int signal) {
+    if (signal == SIGINT || signal == SIGTERM) {
+        // Signal handlers must be async-signal-safe
+        // We can only call async-signal-safe functions here
+        // Use write() to output message (async-signal-safe)
+        const char* msg = "\nReceived stop signal, stopping profiling gracefully...\n";
+        write(STDOUT_FILENO, msg, static_cast<unsigned int>(strlen(msg)));
+        
+        if (g_profiler) {
+            // Use Qt's thread-safe mechanism to invoke method in main thread
+            QMetaObject::invokeMethod(g_profiler, "RequestStop", Qt::QueuedConnection);
+        }
+    }
+}
 
 void printUsage() {
     std::cout << "LoliProfiler CLI - Android Memory Profiling Tool\n\n";
@@ -16,20 +45,21 @@ void printUsage() {
     std::cout << "  --symbol <path>        Symbol file (.so/.sym) for address translation\n";
     std::cout << "  --subprocess <name>    Target subprocess name\n";
     std::cout << "  --device <serial>      Device serial number (required if multiple devices)\n";
-    std::cout << "  --duration <seconds>   Profiling duration in seconds (0 = until exit)\n";
+    std::cout << "  --duration <seconds>   Profiling duration in seconds (omit for manual stop with Ctrl+C)\n";
     std::cout << "  --attach               Attach to running app instead of launching\n";
-    std::cout << "  --verbose, -v          Verbose output\n";
-    std::cout << "  --help, -h             Show this help message\n\n";
+    std::cout << "  --verbose              Verbose output\n";
+    std::cout << "  --help, -h             Show this help message\n";
+    std::cout << "  --version, -v          Show version information\n\n";
     std::cout << "Examples:\n";
     std::cout << "  # Profile for 60 seconds\n";
     std::cout << "  LoliProfilerCLI --app com.example.game --out profile.loli --duration 60\n\n";
-    std::cout << "  # Profile until process exits with symbol translation\n";
+    std::cout << "  # Profile until manually stopped (Ctrl+C) with symbol translation\n";
     std::cout << "  LoliProfilerCLI --app com.example.game --out profile.loli \\\n";
-    std::cout << "    --symbol /path/to/libgame.so --duration 0\n\n";
+    std::cout << "    --symbol /path/to/libgame.so\n\n";
     std::cout << "  # Profile with specific device (multiple devices connected)\n";
     std::cout << "  LoliProfilerCLI --app com.example.game --out profile.loli \\\n";
     std::cout << "    --device ABC123456 --duration 60\n\n";
-    std::cout << "  # Attach to running app\n";
+    std::cout << "  # Attach to running app and stop with Ctrl+C\n";
     std::cout << "  LoliProfilerCLI --app com.example.game --out profile.loli --attach\n";
 }
 
@@ -77,14 +107,14 @@ int main(int argc, char *argv[]) {
     parser.addOption(deviceOption);
     
     QCommandLineOption durationOption(QStringList() << "duration", 
-        "Profiling duration in seconds (0 = until process exits)", "seconds");
+        "Profiling duration in seconds (omit for manual stop with Ctrl+C)", "seconds");
     parser.addOption(durationOption);
     
     QCommandLineOption attachOption(QStringList() << "attach", 
         "Attach to running app instead of launching");
     parser.addOption(attachOption);
     
-    QCommandLineOption verboseOption(QStringList() << "v" << "verbose", 
+    QCommandLineOption verboseOption(QStringList() << "verbose", 
         "Verbose output");
     parser.addOption(verboseOption);
     
@@ -130,9 +160,18 @@ int main(int argc, char *argv[]) {
     CLI_LOG("Creating CLI profiler...");
     CliProfiler profiler;
     
+    // Set global pointer for signal handler
+    g_profiler = &profiler;
+    
+    // Register signal handlers for graceful shutdown
+    std::signal(SIGINT, signalHandler);   // Ctrl+C
+    std::signal(SIGTERM, signalHandler);  // Termination request
+    CLI_LOG("Signal handlers registered (SIGINT, SIGTERM)");
+    
     // Connect finished signal to quit application
     QObject::connect(&profiler, &CliProfiler::Finished, [&app](int exitCode) {
         CLI_LOG(QString("Profiler finished with exit code: %1").arg(exitCode));
+        g_profiler = nullptr;  // Clear global pointer
         CliLogger::Instance().Close();
         QCoreApplication::exit(exitCode);
     });

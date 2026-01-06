@@ -15,7 +15,8 @@ LoliProfiler now includes a dedicated CLI executable (`LoliProfilerCLI.exe`) des
 - **Automatic Launch & Injection**: Automatically starts and injects profiling hooks
 - **Flexible Capture Modes**: 
   - Timed profiling (fixed duration)
-  - Process-exit detection (profile until app terminates)
+  - Manual stop with Ctrl+C (profile until you're ready to stop)
+- **Graceful Shutdown**: Ctrl+C triggers proper data collection and file save
 - **Symbol Translation**: Automatic address-to-symbol translation with symbol files
 - **Data Optimization**: Streaming mode enabled by default for large datasets
 - **Device Selection**: Support for multiple connected Android devices
@@ -34,9 +35,9 @@ All options use Qt's standard format: `--option value` (double dash with space-s
 - `--symbol <symbol_path>` - Path to symbol file (`.so` or `.sym`) for address translation
 - `--subprocess <name>` - Target subprocess name (if app uses multiple processes)
 - `--device <serial>` - Device serial number (required when multiple devices connected)
-- `--duration <seconds>` - Profiling duration in seconds (default: 0 = until process exits)
+- `--duration <seconds>` - Profiling duration in seconds (omit for manual stop with Ctrl+C)
 - `--attach` - Attach to running app instead of launching new instance
-- `--verbose` or `-v` - Enable verbose output for debugging
+- `--verbose` - Enable verbose output for debugging
 - `--help` or `-h` - Display help message
 
 > All other options will use what you set in gui mode.
@@ -61,18 +62,34 @@ LoliProfilerCLI.exe --app com.example.game --out profile.loli \
   --symbol /path/to/libgame.so --duration 120
 ```
 
-### Until Process Exits
+### Manual Stop with Ctrl+C
 
-Profile until the app terminates naturally:
+Profile until you manually stop (press Ctrl+C when ready):
 
 ```bash
-LoliProfilerCLI.exe --app com.example.game --out profile.loli \
-  --duration 0 --verbose
+LoliProfilerCLI.exe --app com.example.game --out profile.loli --verbose
 ```
+
+When you press Ctrl+C:
+- The profiler sends a SMAPS_DUMP command to the Android agent
+- Memory mapping data is collected
+- All data is saved to the `.loli` file
+- The profiler exits cleanly with proper cleanup
+
+This is useful for:
+- Interactive profiling sessions where you control when to stop
+- Capturing specific gameplay scenarios
+- Ensuring complete memory mapping data is collected before shutdown
 
 ### Attach to Running App
 
-Attach to an already-running application:
+Attach to an already-running application (use Ctrl+C to stop when done):
+
+```bash
+LoliProfilerCLI.exe --app com.example.game --out profile.loli --attach
+```
+
+Or with a fixed duration:
 
 ```bash
 LoliProfilerCLI.exe --app com.example.game --out profile.loli \
@@ -109,10 +126,10 @@ The CLI mode produces standard `.loli` files identical to those created by the G
 
 ## Verbose Mode
 
-Use `-v` flag to see detailed progress information:
+Use `--verbose` flag to see detailed progress information:
 
 ```bash
-loliprofiler.exe -cli -app=com.example.game -out=profile.loli -v
+LoliProfilerCLI.exe --app com.example.game --out profile.loli --verbose
 ```
 
 This will show:
@@ -128,11 +145,63 @@ This will show:
 |---------|----------|----------|
 | User Interface | Full GUI | Console only |
 | Device Selection | Interactive dialog | `-device` flag |
-| Duration | Manual stop | Timed or process-exit |
+| Duration | Manual stop button | Timed or Ctrl+C |
 | Progress | Visual progress bar | Console messages |
 | Symbol Loading | File dialog | `-symbol` flag |
 | Data Optimization | User prompt | Always enabled |
 | Launch Mode | User prompt | `-attach` flag |
+
+## Stopping Profiling
+
+### With Duration (Automatic Stop)
+
+When you specify `--duration <seconds>`, the profiler will automatically:
+1. Profile for exactly the specified duration
+2. Send SMAPS_DUMP command to collect memory mapping data
+3. Save all captured data to the output file
+4. Exit with code 0 on success
+
+### Without Duration (Manual Stop with Ctrl+C)
+
+When you omit `--duration`, the profiler runs indefinitely until you press **Ctrl+C**:
+
+```bash
+LoliProfilerCLI.exe --app com.example.game --out profile.loli
+# Output: "Profiling... Press Ctrl+C to stop."
+# ... profile as long as you want ...
+# Press Ctrl+C when ready
+# Output: "Received stop signal, stopping profiling gracefully..."
+```
+
+**What happens on Ctrl+C:**
+1. Signal handler catches SIGINT (Ctrl+C) or SIGTERM
+2. Queues stop request to main thread (thread-safe)
+3. Sends SMAPS_DUMP command to Android agent
+4. Collects memory mapping information
+5. Processes and saves all data to `.loli` file
+6. Exits cleanly with code 0
+
+**Important Notes:**
+- Always use Ctrl+C to stop gracefully - this ensures complete data collection
+- Killing the CLI process forcefully (Task Manager, `kill -9`) will result in incomplete data
+- If the app crashes or connection is lost unexpectedly, you'll see an error and data may be incomplete
+- The profiler is independent of the app lifecycle - the app can crash/restart and profiling continues
+
+### Process Exit vs. Profiler Exit
+
+**Important:** The CLI profiler does NOT automatically stop when the target app exits. This is intentional and matches behavior of professional profiling tools like `perf` and Android Studio Profiler.
+
+**Why?**
+- Allows profiling across app restarts
+- Lets you capture multiple runs in a single session
+- Gives you control over exactly when to stop
+- Ensures proper data collection with SMAPS_DUMP before shutdown
+
+If the app exits or crashes:
+- The profiler will detect connection loss and show an error
+- Data captured up to that point is preserved (in cache files)
+- You can restart the app and continue profiling
+- Use Ctrl+C when you're done to save all data properly
 
 ## Limitations
 

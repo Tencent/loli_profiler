@@ -1,5 +1,6 @@
 #include "cliprofiler.h"
 #include "clilogger.h"
+#include "profilecomparator.h"
 #include <QCoreApplication>
 #include <QCommandLineParser>
 #include <QDir>
@@ -37,17 +38,26 @@ void signalHandler(int signal) {
 void printUsage() {
     std::cout << "LoliProfiler CLI - Android Memory Profiling Tool\n\n";
     std::cout << "Usage:\n";
-    std::cout << "  LoliProfilerCLI --app <package_name> --out <output.loli> [options]\n\n";
-    std::cout << "Required Options:\n";
+    std::cout << "  LoliProfilerCLI --app <package_name> --out <output.loli> [options]\n";
+    std::cout << "  LoliProfilerCLI --compare <baseline.loli> <comparison.loli> --out <output> [options]\n\n";
+    std::cout << "Profiling Mode - Required Options:\n";
     std::cout << "  --app <name>           Target application package name\n";
     std::cout << "  --out <path>           Output .loli file path\n\n";
-    std::cout << "Optional Options:\n";
+    std::cout << "Profiling Mode - Optional Options:\n";
     std::cout << "  --symbol <path>        Symbol file (.so/.sym) for address translation\n";
     std::cout << "  --subprocess <name>    Target subprocess name\n";
     std::cout << "  --device <serial>      Device serial number (required if multiple devices)\n";
     std::cout << "  --duration <seconds>   Profiling duration in seconds (omit for manual stop with Ctrl+C)\n";
     std::cout << "  --attach               Attach to running app instead of launching\n";
-    std::cout << "  --verbose              Verbose output\n";
+    std::cout << "  --verbose              Verbose output\n\n";
+    std::cout << "Compare Mode - Usage:\n";
+    std::cout << "  --compare              Enable compare mode (requires 2 positional file arguments)\n";
+    std::cout << "  <baseline.loli>        First .loli file (baseline)\n";
+    std::cout << "  <comparison.loli>      Second .loli file (comparison)\n";
+    std::cout << "  --out <path>           Output diff file path (.txt)\n\n";
+    std::cout << "Compare Mode - Optional Options:\n";
+    std::cout << "  --skip-root-levels <N> Skip N root call stack frames (useful for system libs without symbols)\n\n";
+    std::cout << "General Options:\n";
     std::cout << "  --help, -h             Show this help message\n";
     std::cout << "  --version, -v          Show version information\n\n";
     std::cout << "Examples:\n";
@@ -56,11 +66,10 @@ void printUsage() {
     std::cout << "  # Profile until manually stopped (Ctrl+C) with symbol translation\n";
     std::cout << "  LoliProfilerCLI --app com.example.game --out profile.loli \\\n";
     std::cout << "    --symbol /path/to/libgame.so\n\n";
-    std::cout << "  # Profile with specific device (multiple devices connected)\n";
-    std::cout << "  LoliProfilerCLI --app com.example.game --out profile.loli \\\n";
-    std::cout << "    --device ABC123456 --duration 60\n\n";
-    std::cout << "  # Attach to running app and stop with Ctrl+C\n";
-    std::cout << "  LoliProfilerCLI --app com.example.game --out profile.loli --attach\n";
+    std::cout << "  # Compare two profiles and export diff as text\n";
+    std::cout << "  LoliProfilerCLI --compare baseline.loli comparison.loli --out diff.txt\n\n";
+    std::cout << "  # Compare and skip 2 root call stack levels (e.g., system library frames)\n";
+    std::cout << "  LoliProfilerCLI --compare baseline.loli comparison.loli --out diff.txt --skip-root-levels 2\n";
 }
 
 int main(int argc, char *argv[]) {
@@ -118,13 +127,127 @@ int main(int argc, char *argv[]) {
         "Verbose output");
     parser.addOption(verboseOption);
     
+    // Compare mode options
+    QCommandLineOption compareOption(QStringList() << "compare",
+        "Compare two .loli files (baseline vs comparison)");
+    parser.addOption(compareOption);
+    
+    parser.addPositionalArgument("files", "Input .loli files for comparison (baseline comparison)", "[file1] [file2]");
+    
+    
+    QCommandLineOption skipRootLevelsOption(QStringList() << "skip-root-levels",
+        "Number of root call stack frames to skip in comparison (default: 0)", "levels");
+    parser.addOption(skipRootLevelsOption);
+    
     // Parse arguments
     CLI_LOG("Parsing command line arguments...");
     parser.process(app);
     
     CLI_LOG("Arguments parsed successfully");
     
-    // Validate required options
+    // Check if this is compare mode
+    if (parser.isSet(compareOption)) {
+        // Compare mode
+        CLI_LOG("Running in COMPARE mode");
+        
+        QStringList compareFiles = parser.positionalArguments();
+        if (compareFiles.size() != 2) {
+            CLI_ERROR("--compare requires exactly two file arguments");
+            std::cerr << "Error: --compare requires exactly two .loli files\n";
+            std::cerr << "Usage: LoliProfilerCLI --compare <baseline.loli> <comparison.loli> --out <output>\n";
+            std::cerr << "Example: LoliProfilerCLI --compare file1.loli file2.loli --out diff.txt\n";
+            printUsage();
+            CliLogger::Instance().Close();
+            return 1;
+        }
+        
+        if (!parser.isSet(outOption)) {
+            CLI_ERROR("--out is required in compare mode");
+            std::cerr << "Error: --out is required to specify output file\n";
+            printUsage();
+            CliLogger::Instance().Close();
+            return 1;
+        }
+        
+        QString baselineFile = compareFiles[0];
+        QString comparisonFile = compareFiles[1];
+        QString outputFile = parser.value(outOption);
+        int skipRootLevels = parser.value(skipRootLevelsOption).toInt();
+        
+        CLI_LOG(QString("Baseline file: %1").arg(baselineFile));
+        CLI_LOG(QString("Comparison file: %1").arg(comparisonFile));
+        CLI_LOG(QString("Output file: %1").arg(outputFile));
+        CLI_LOG(QString("Skip root levels: %1").arg(skipRootLevels));
+        
+        std::cout << "Loading baseline profile: " << baselineFile.toStdString() << "...\n";
+        
+        ProfileComparator comparator;
+        
+        // Load baseline
+        if (!comparator.LoadProfile(baselineFile, true)) {
+            CLI_ERROR(QString("Failed to load baseline: %1").arg(comparator.GetErrorMessage()));
+            std::cerr << "Error: " << comparator.GetErrorMessage().toStdString() << "\n";
+            CliLogger::Instance().Close();
+            return 1;
+        }
+        
+        std::cout << "Loading comparison profile: " << comparisonFile.toStdString() << "...\n";
+        
+        // Load comparison
+        if (!comparator.LoadProfile(comparisonFile, false)) {
+            CLI_ERROR(QString("Failed to load comparison: %1").arg(comparator.GetErrorMessage()));
+            std::cerr << "Error: " << comparator.GetErrorMessage().toStdString() << "\n";
+            CliLogger::Instance().Close();
+            return 1;
+        }
+        
+        std::cout << "Comparing profiles";
+        if (skipRootLevels > 0) {
+            std::cout << " (skipping " << skipRootLevels << " root levels)";
+        }
+        std::cout << "...\n";
+        
+        // Perform comparison
+        if (!comparator.Compare(skipRootLevels)) {
+            CLI_ERROR(QString("Failed to compare: %1").arg(comparator.GetErrorMessage()));
+            std::cerr << "Error: " << comparator.GetErrorMessage().toStdString() << "\n";
+            CliLogger::Instance().Close();
+            return 1;
+        }
+        
+        // Get stats
+        auto stats = comparator.GetStats();
+        std::cout << "\n=== Comparison Results ===\n";
+        std::cout << "Baseline allocations: " << stats.baselineAllocCount << "\n";
+        std::cout << "Comparison allocations: " << stats.comparisonAllocCount << "\n";
+        std::cout << "Baseline total size: " << sizeToString(stats.baselineTotalSize).toStdString() << "\n";
+        std::cout << "Comparison total size: " << sizeToString(stats.comparisonTotalSize).toStdString() << "\n";
+        std::cout << "Size delta: ";
+        if (stats.sizeDelta >= 0) {
+            std::cout << "+" << sizeToString(static_cast<quint64>(stats.sizeDelta)).toStdString();
+        } else {
+            std::cout << "-" << sizeToString(static_cast<quint64>(-stats.sizeDelta)).toStdString();
+        }
+        std::cout << "\n";
+        std::cout << "Changed allocations (>1KB growth): " << stats.changedAllocations << "\n\n";
+
+        // Export results as text
+        std::cout << "Exporting diff as text file: " << outputFile.toStdString() << "...\n";
+
+        if (!comparator.ExportToText(outputFile)) {
+            CLI_ERROR(QString("Failed to export: %1").arg(comparator.GetErrorMessage()));
+            std::cerr << "Error: " << comparator.GetErrorMessage().toStdString() << "\n";
+            CliLogger::Instance().Close();
+            return 1;
+        }
+        
+        std::cout << "Comparison complete! Output saved to: " << outputFile.toStdString() << "\n";
+        CLI_LOG("Comparison completed successfully");
+        CliLogger::Instance().Close();
+        return 0;
+    }
+    
+    // Validate required options for profiling mode
     if (!parser.isSet(appOption) || !parser.isSet(outOption)) {
         CLI_ERROR("--app and --out are required");
         CLI_LOG(QString("Parsed values:"));

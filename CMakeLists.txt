@@ -205,6 +205,7 @@ set(CLI_CORE_INCS
     include/stacktraceproxymodel.h
     include/startappprocess.h
     include/hashstring.h
+    include/profilecomparator.h
 )
 
 set(CLI_CORE_SRCS
@@ -223,6 +224,7 @@ set(CLI_CORE_SRCS
     src/stacktraceproxymodel.cpp
     src/startappprocess.cpp
     src/hashstring.cpp
+    src/profilecomparator.cpp
 )
 
 # Add CLI executable without WIN32/MACOSX_BUNDLE flags (console application)

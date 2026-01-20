@@ -5,6 +5,8 @@
 #include <QDataStream>
 #include <QTextStream>
 #include <QDebug>
+#include <functional>
+#include <algorithm>
 
 #define APP_MAGIC 0xA4B3C2D1
 #define APP_VERSION 106
@@ -229,16 +231,17 @@ QHash<uint, ProfileComparator::CallTreeNode*> ProfileComparator::BuildCallTreeWi
             continue;
         }
         
-        // Build list of function names, skipping root levels
+        // Build list of function names and metadata, skipping root levels
         // Call stacks are stored leaf-first (index 0 = allocation site, last index = root)
         // We iterate from 0 to (size - skipRootLevels_) to match MainWindow::GetMergedCallstacks
         QStringList callstackNames;
+        QVector<QPair<QString, quint64>> callstackMetadata;  // Store library + address for each frame
         int endIndex = callStack.size() - skipRootLevels_;
         for (int i = 0; i < endIndex; ++i) {
             const auto& frame = callStack[i];
             QString libraryName = frame.first.Get();
             quint64 funcAddr = frame.second;
-            
+
             // Resolve function name from symbol map
             QString funcName;
             auto libIt = data.symbolMap.find(libraryName);
@@ -252,18 +255,20 @@ QHash<uint, ProfileComparator::CallTreeNode*> ProfileComparator::BuildCallTreeWi
             } else {
                 funcName = QString("%1!0x%2").arg(libraryName).arg(funcAddr, 0, 16);
             }
-            
+
             callstackNames << funcName;
+            callstackMetadata.append(qMakePair(libraryName, funcAddr));
         }
-        
+
         // Now build the tree using hash-based merging (same as MainWindow::GetMergedCallstacks)
         CallTreeNode* child = nullptr;
-        for (auto it = callstackNames.begin(); it != callstackNames.end(); ++it) {
+        for (int idx = 0; idx < callstackNames.size(); ++idx) {
             // Hash of the suffix from current position to end - this uniquely identifies a path
+            auto it = callstackNames.begin() + idx;
             auto curHash = qHashRange(it, callstackNames.end());
             auto itemIt = nodeMap.find(curHash);
             CallTreeNode* node = nullptr;
-            
+
             if (itemIt != nodeMap.end()) {
                 // Node exists - update size/count for entire parent chain
                 node = itemIt.value();
@@ -273,7 +278,7 @@ QHash<uint, ProfileComparator::CallTreeNode*> ProfileComparator::BuildCallTreeWi
                     parent->count += 1;
                     parent = parent->parent;
                 }
-                
+
                 // Attach child if we created one
                 if (child != nullptr) {
                     node->children.append(child);
@@ -281,10 +286,12 @@ QHash<uint, ProfileComparator::CallTreeNode*> ProfileComparator::BuildCallTreeWi
                 }
                 break;  // Stop - rest of the chain already exists
             }
-            
+
             // Create new node
             node = new CallTreeNode();
-            node->functionName = *it;
+            node->functionName = callstackNames[idx];
+            node->libraryName = callstackMetadata[idx].first;
+            node->functionAddress = callstackMetadata[idx].second;
             node->size = record.size_;
             node->count = 1;
             node->parent = nullptr;
@@ -470,11 +477,18 @@ bool ProfileComparator::ExportToText(const QString& outputPath)
     stream << "\n\n";
     
     stream << "Changed allocations (>1KB growth): " << stats_.changedAllocations << "\n\n";
-    
+
     stream << "=== Memory Growth (Delta: Comparison - Baseline) ===" << "\n\n";
-    
-    // Write delta tree
-    for (CallTreeNode* root : deltaRoots_) {
+
+    // Sort root nodes by size (descending order) before writing
+    QVector<CallTreeNode*> sortedRoots = deltaRoots_;
+    std::sort(sortedRoots.begin(), sortedRoots.end(),
+        [](CallTreeNode* a, CallTreeNode* b) {
+            return a->size > b->size;  // Descending order (largest first)
+        });
+
+    // Write sorted delta tree
+    for (CallTreeNode* root : sortedRoots) {
         WriteCallTreeToText(stream, root, 0);
     }
     
@@ -485,15 +499,15 @@ bool ProfileComparator::ExportToText(const QString& outputPath)
 void ProfileComparator::WriteCallTreeToText(QTextStream& stream, CallTreeNode* node, int depth)
 {
     if (!node) return;
-    
+
     // Write indentation
     for (int i = 0; i < depth; ++i) {
         stream << "    ";  // 4 spaces for indentation
     }
-    
+
     // Write function name
     stream << node->functionName << ", ";
-    
+
     // Write size with +/- prefix for deltas
     if (node->size > 0) {
         stream << "+" << sizeToString(static_cast<quint64>(node->size));
@@ -502,9 +516,9 @@ void ProfileComparator::WriteCallTreeToText(QTextStream& stream, CallTreeNode* n
     } else {
         stream << sizeToString(0);
     }
-    
+
     stream << ", ";
-    
+
     // Write count with +/- prefix for deltas
     if (node->count > 0) {
         stream << "+" << node->count;
@@ -513,11 +527,211 @@ void ProfileComparator::WriteCallTreeToText(QTextStream& stream, CallTreeNode* n
     } else {
         stream << "0";
     }
-    
+
     stream << "\n";
-    
-    // Recursively write children
-    for (CallTreeNode* child : node->children) {
+
+    // Sort children by size (descending order) before writing
+    QVector<CallTreeNode*> sortedChildren = node->children;
+    std::sort(sortedChildren.begin(), sortedChildren.end(),
+        [](CallTreeNode* a, CallTreeNode* b) {
+            return a->size > b->size;  // Descending order (largest first)
+        });
+
+    // Recursively write sorted children
+    for (CallTreeNode* child : sortedChildren) {
         WriteCallTreeToText(stream, child, depth + 1);
     }
 }
+
+void ProfileComparator::ConvertDeltaTreeToRecords(
+    QVector<StackRecord>& stackRecords,
+    QHash<QUuid, QVector<QPair<HashString, quint64>>>& callStackMap)
+{
+    // Convert delta tree back to StackRecords format
+    // Each leaf node in the delta tree becomes a StackRecord
+    // We need to reconstruct the call stack path for each leaf
+
+    stackRecords.clear();
+    callStackMap.clear();
+
+    quint32 seqCounter = 0;
+
+    // Helper function to recursively traverse tree and collect leaf nodes
+    std::function<void(CallTreeNode*, QVector<CallTreeNode*>&)> traverseTree;
+    traverseTree = [&](CallTreeNode* node, QVector<CallTreeNode*>& callStackPath) {
+        if (!node) return;
+
+        // Add current node to path
+        callStackPath.append(node);
+
+        // If this is a leaf node with non-zero delta, create a StackRecord
+        if (node->children.isEmpty() && (node->size != 0 || node->count != 0)) {
+            // Create UUID for this call stack
+            QUuid uuid = QUuid::createUuid();
+
+            // Create StackRecord (we create one record to represent the delta)
+            StackRecord record;
+            record.uuid_ = uuid;
+            record.seq_ = seqCounter++;
+            record.time_ = 0;  // Delta comparison doesn't have meaningful timestamp
+            record.size_ = static_cast<qint32>(node->size);
+            record.addr_ = 0;  // Not meaningful in delta
+            record.funcAddr_ = 0;  // Will be set per frame in callstack
+            record.library_ = HashString();  // Will be set from top frame
+
+            // Build callstack from nodes - they already have library and address
+            // IMPORTANT: .loli format stores callstacks leaf-first (allocation site first, root last)
+            // But our tree traversal goes root-to-leaf, so we need to reverse the order
+            QVector<QPair<HashString, quint64>> callstack;
+            for (int i = callStackPath.size() - 1; i >= 0; --i) {
+                CallTreeNode* frameNode = callStackPath[i];
+
+                // Store library as HashString
+                HashString libHash;
+                if (!frameNode->libraryName.isEmpty()) {
+                    // Check if this string already has a hash
+                    bool found = false;
+                    for (auto it = HashString::hashmap_.begin(); it != HashString::hashmap_.end(); ++it) {
+                        if (it.value() == frameNode->libraryName) {
+                            libHash.hashcode_ = it.key();
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        // Create new hash entry
+                        libHash.hashcode_ = qHash(frameNode->libraryName);
+                        HashString::hashmap_[libHash.hashcode_] = frameNode->libraryName;
+                    }
+                }
+
+                callstack.append(qMakePair(libHash, frameNode->functionAddress));
+            }
+
+            // Set library from first frame (leaf - now at index 0 after reversal)
+            if (!callstack.isEmpty()) {
+                record.library_ = callstack[0].first;
+                record.funcAddr_ = callstack[0].second;
+            }
+
+            // Store record and callstack
+            stackRecords.append(record);
+            callStackMap.insert(uuid, callstack);
+        }
+
+        // Recurse to children
+        for (CallTreeNode* child : node->children) {
+            traverseTree(child, callStackPath);
+        }
+
+        // Remove current node from path (backtrack)
+        callStackPath.removeLast();
+    };
+
+    // Traverse all root nodes
+    for (CallTreeNode* root : deltaRoots_) {
+        QVector<CallTreeNode*> path;
+        traverseTree(root, path);
+    }
+}
+
+bool ProfileComparator::ExportToLoli(const QString& outputPath)
+{
+    if (!compared_) {
+        errorMessage_ = "Must call Compare() before exporting";
+        return false;
+    }
+
+    QFile file(outputPath);
+    if (!file.open(QIODevice::WriteOnly)) {
+        errorMessage_ = QString("Cannot create output file: %1").arg(outputPath);
+        return false;
+    }
+
+    QDataStream stream(&file);
+    stream.setVersion(QDataStream::Qt_5_12);
+
+    // Write magic and version
+    stream << static_cast<quint32>(APP_MAGIC);
+    stream << static_cast<qint32>(APP_VERSION);
+
+    // Convert delta tree to records and callstack map
+    QVector<StackRecord> stackRecords;
+    QHash<QUuid, QVector<QPair<HashString, quint64>>> callStackMap;
+    ConvertDeltaTreeToRecords(stackRecords, callStackMap);
+
+    // Write meminfo (empty for delta comparison)
+    stream << static_cast<qint32>(0);  // maxMemInfoValue
+    stream << static_cast<qint32>(0);  // series count
+
+    // Write string hashes
+    stream << HashString::hashmap_;
+
+    // Write stack trace records
+    stream << static_cast<qint32>(stackRecords.size());
+    for (const auto& record : stackRecords) {
+        stream << record.uuid_.toString();
+        stream << record.seq_;
+        stream << record.time_;
+        stream << record.size_;
+        stream << record.addr_;
+        stream << record.funcAddr_;
+        stream << record.library_.hashcode_;
+    }
+
+    // Write callstack map
+    stream << static_cast<qint32>(callStackMap.size());
+    for (auto it = callStackMap.begin(); it != callStackMap.end(); ++it) {
+        stream << it.key().toString();
+        const auto& callstack = it.value();
+        stream << static_cast<qint32>(callstack.size());
+        for (const auto& frame : callstack) {
+            stream << frame.first.hashcode_ << frame.second;
+        }
+    }
+
+    // Write symbol map from comparison data (use merged symbol map from both profiles)
+    QHash<QString, QHash<quint64, QString>> mergedSymbolMap = comparisonData_.symbolMap;
+
+    // Merge baseline symbols that aren't in comparison
+    for (auto it = baselineData_.symbolMap.begin(); it != baselineData_.symbolMap.end(); ++it) {
+        const QString& libraryName = it.key();
+        const auto& baselineSymbols = it.value();
+
+        if (!mergedSymbolMap.contains(libraryName)) {
+            mergedSymbolMap[libraryName] = baselineSymbols;
+        } else {
+            // Merge symbols for this library
+            auto& targetSymbols = mergedSymbolMap[libraryName];
+            for (auto symIt = baselineSymbols.begin(); symIt != baselineSymbols.end(); ++symIt) {
+                if (!targetSymbols.contains(symIt.key())) {
+                    targetSymbols[symIt.key()] = symIt.value();
+                }
+            }
+        }
+    }
+
+    stream << static_cast<qint32>(mergedSymbolMap.size());
+    for (auto it = mergedSymbolMap.begin(); it != mergedSymbolMap.end(); ++it) {
+        stream << it.key();
+        const auto& symbols = it.value();
+        stream << static_cast<qint32>(symbols.size());
+        for (auto symIt = symbols.begin(); symIt != symbols.end(); ++symIt) {
+            stream << symIt.key();
+            stream << symIt.value();
+        }
+    }
+
+    // Write empty free address map
+    stream << static_cast<qint32>(0);
+
+    // Write empty screenshots
+    stream << static_cast<qint32>(0);
+
+    // Write empty smaps sections
+    stream << static_cast<qint32>(0);
+
+    file.close();
+    return true;
+}
+

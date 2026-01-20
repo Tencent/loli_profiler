@@ -49,3 +49,4 @@ CMakeCache.txt
 .cache/
 
 dist/
+/.claude

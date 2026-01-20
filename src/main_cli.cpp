@@ -54,7 +54,7 @@ void printUsage() {
     std::cout << "  --compare              Enable compare mode (requires 2 positional file arguments)\n";
     std::cout << "  <baseline.loli>        First .loli file (baseline)\n";
     std::cout << "  <comparison.loli>      Second .loli file (comparison)\n";
-    std::cout << "  --out <path>           Output diff file path (.txt)\n\n";
+    std::cout << "  --out <path>           Output file path (.txt for text report, .loli for GUI visualization)\n\n";
     std::cout << "Compare Mode - Optional Options:\n";
     std::cout << "  --skip-root-levels <N> Skip N root call stack frames (useful for system libs without symbols)\n\n";
     std::cout << "General Options:\n";
@@ -68,6 +68,8 @@ void printUsage() {
     std::cout << "    --symbol /path/to/libgame.so\n\n";
     std::cout << "  # Compare two profiles and export diff as text\n";
     std::cout << "  LoliProfilerCLI --compare baseline.loli comparison.loli --out diff.txt\n\n";
+    std::cout << "  # Compare and export as .loli for GUI visualization\n";
+    std::cout << "  LoliProfilerCLI --compare baseline.loli comparison.loli --out diff.loli\n\n";
     std::cout << "  # Compare and skip 2 root call stack levels (e.g., system library frames)\n";
     std::cout << "  LoliProfilerCLI --compare baseline.loli comparison.loli --out diff.txt --skip-root-levels 2\n";
 }
@@ -231,17 +233,36 @@ int main(int argc, char *argv[]) {
         std::cout << "\n";
         std::cout << "Changed allocations (>1KB growth): " << stats.changedAllocations << "\n\n";
 
-        // Export results as text
-        std::cout << "Exporting diff as text file: " << outputFile.toStdString() << "...\n";
+        // Detect output format based on file extension
+        bool exportAsLoli = outputFile.toLower().endsWith(".loli");
 
-        if (!comparator.ExportToText(outputFile)) {
-            CLI_ERROR(QString("Failed to export: %1").arg(comparator.GetErrorMessage()));
-            std::cerr << "Error: " << comparator.GetErrorMessage().toStdString() << "\n";
-            CliLogger::Instance().Close();
-            return 1;
+        if (exportAsLoli) {
+            // Export as .loli file for GUI visualization
+            std::cout << "Exporting diff as .loli file: " << outputFile.toStdString() << "...\n";
+
+            if (!comparator.ExportToLoli(outputFile)) {
+                CLI_ERROR(QString("Failed to export as .loli: %1").arg(comparator.GetErrorMessage()));
+                std::cerr << "Error: " << comparator.GetErrorMessage().toStdString() << "\n";
+                CliLogger::Instance().Close();
+                return 1;
+            }
+
+            std::cout << "Comparison complete! .loli file saved to: " << outputFile.toStdString() << "\n";
+            std::cout << "You can open this file in LoliProfiler GUI to visualize the memory growth.\n";
+        } else {
+            // Export as text file
+            std::cout << "Exporting diff as text file: " << outputFile.toStdString() << "...\n";
+
+            if (!comparator.ExportToText(outputFile)) {
+                CLI_ERROR(QString("Failed to export as text: %1").arg(comparator.GetErrorMessage()));
+                std::cerr << "Error: " << comparator.GetErrorMessage().toStdString() << "\n";
+                CliLogger::Instance().Close();
+                return 1;
+            }
+
+            std::cout << "Comparison complete! Output saved to: " << outputFile.toStdString() << "\n";
         }
-        
-        std::cout << "Comparison complete! Output saved to: " << outputFile.toStdString() << "\n";
+
         CLI_LOG("Comparison completed successfully");
         CliLogger::Instance().Close();
         return 0;

@@ -50,6 +50,14 @@ public:
      * @return true if export successful
      */
     bool ExportToText(const QString& outputPath);
+
+    /**
+     * Export comparison result to .loli format for GUI visualization
+     * Creates a .loli file containing delta call stacks (positive = growth, negative = reduction)
+     * @param outputPath Path to output .loli file
+     * @return true if export successful
+     */
+    bool ExportToLoli(const QString& outputPath);
     
     /**
      * Get comparison summary statistics
@@ -81,13 +89,15 @@ private:
     };
     
     struct CallTreeNode {
-        QString functionName;
-        qint64 size;      // Changed to qint64 to support negative deltas
-        qint64 count;     // Changed to qint64 to support negative deltas
+        QString functionName;      // Display name (resolved symbol or "library!0xaddress")
+        QString libraryName;       // Original library name
+        quint64 functionAddress;   // Original function address
+        qint64 size;               // Changed to qint64 to support negative deltas
+        qint64 count;              // Changed to qint64 to support negative deltas
         QVector<CallTreeNode*> children;
-        CallTreeNode* parent;  // For easier parent chain traversal
-        
-        CallTreeNode() : size(0), count(0), parent(nullptr) {}
+        CallTreeNode* parent;      // For easier parent chain traversal
+
+        CallTreeNode() : functionAddress(0), size(0), count(0), parent(nullptr) {}
         ~CallTreeNode() {
             qDeleteAll(children);
         }
@@ -100,6 +110,11 @@ private:
 
     // Write call tree to text output
     void WriteCallTreeToText(QTextStream& stream, CallTreeNode* node, int depth);
+
+    // Convert delta tree to stack records and callstack map for .loli export
+    void ConvertDeltaTreeToRecords(
+        QVector<StackRecord>& stackRecords,
+        QHash<QUuid, QVector<QPair<HashString, quint64>>>& callStackMap);
 
     ProfileData baselineData_;
     ProfileData comparisonData_;

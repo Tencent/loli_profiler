@@ -211,6 +211,185 @@ If the app exits or crashes:
 - Requires configured Android SDK/NDK paths
 - Windows: Requires properly quoted paths for spaces
 
+## Compare Mode
+
+The CLI supports comparing two `.loli` profile files to detect memory regressions between builds or app versions.
+
+### Basic Comparison
+
+```bash
+LoliProfilerCLI.exe --compare baseline.loli current.loli --out diff.txt
+```
+
+### Comparison Options
+
+- `--compare <baseline.loli> <current.loli>` - Compare two profile files
+- `--out <output_path>` - Output file (`.txt` for text report, `.loli` for GUI-viewable format)
+- `--skip-root-levels <n>` - Skip top N call stack levels (useful for system libs without symbols)
+
+### Output Formats
+
+**Text format (diff.txt):**
+```
+=== LoliProfiler Comparison Report ===
+
+Baseline total size: 628.12 MB
+Comparison total size: 631.71 MB
+Size delta: +3.59 MB
+
+=== Memory Growth (Delta: Comparison - Baseline) ===
+
+FRunnableThreadPThread::Run(), +18.44 MB, +79446
+    FAsyncLoadingThread::Run(), +9.94 MB, +65478
+        UDataTable::Serialize(FArchive&), +5.20 MB, +56497
+            ...
+```
+
+**Loli format:** Can be opened in LoliProfiler GUI for interactive exploration.
+
+## AI-Powered Memory Analysis
+
+For large diff files, use the `analyze_memory_diff.py` script to generate detailed analysis reports using Claude Code.
+
+### Analysis Pipeline
+
+```mermaid
+flowchart LR
+    subgraph Input["📥 Input"]
+        A[("diff.txt<br/>~3 MB<br/>154 nodes")]
+    end
+
+    subgraph Preprocess["🔧 Preprocessing"]
+        B["Parse Tree Structure"]
+        C["Filter ≥ Threshold MB"]
+        D["Pattern Matching"]
+        E["Deduplicate"]
+
+        B --> C
+        C --> D
+        D --> E
+
+        D -.- D1["Skip low-level:<br/>FMemory::, TArray::,<br/>operator new, etc."]
+        D -.- D2["Keep functional:<br/>U*::, A*::, CAk*::,<br/>Manager/System classes"]
+        C -.- C1["Climb tree to find<br/>functional ancestors<br/>for significant nodes"]
+    end
+
+    subgraph Output["📤 Filtered Output"]
+        F[("filtered.txt<br/>~10 KB<br/>3 trees")]
+    end
+
+    subgraph Analyze["🤖 Claude Code Analysis"]
+        G["Search Source Code"]
+        H["Read Implementation"]
+        I["Analyze Allocations"]
+        J["Generate Report"]
+
+        G --> H
+        H --> I
+        I --> J
+    end
+
+    subgraph Report["📋 Report"]
+        K[("report.md<br/>Chinese<br/>Optimization<br/>Suggestions")]
+    end
+
+    A --> B
+    E --> F
+    F --> G
+    J --> K
+```
+
+### How It Works
+
+1. **Preprocessing** (`preprocess_memory_diff.py`):
+   - Parses the tree-structured diff.txt file
+   - Filters call stacks by memory threshold (default: ≥ 2 MB)
+   - Uses regex patterns to identify functional-level vs low-level functions
+   - Climbs the call tree to find meaningful allocation points
+   - Deduplicates identical call stacks
+   - Reduces ~3 MB input to ~10 KB filtered output (99%+ reduction)
+
+2. **Analysis** (`analyze_memory_diff.py`):
+   - Auto-detects large files and triggers preprocessing
+   - Sends filtered data to Claude Code
+   - Claude searches source code repositories for function implementations
+   - Analyzes what data structures are allocated and why
+   - Generates Chinese markdown report with optimization suggestions
+
+### Usage
+
+**Basic analysis:**
+```bash
+python analyze_memory_diff.py diff.txt --repo /path/to/source -o report.md
+```
+
+**With separate baseline/target repos:**
+```bash
+python analyze_memory_diff.py diff.txt \
+    --base-repo /path/to/baseline/source \
+    --target-repo /path/to/current/source \
+    -o report.md
+```
+
+**Standalone preprocessing:**
+```bash
+python preprocess_memory_diff.py diff.txt -o filtered.txt --threshold 2.0 --verbose
+```
+
+### Analysis Options
+
+| Option | Description |
+|--------|-------------|
+| `--repo <path>` | Source code repository (used for both versions) |
+| `--base-repo <path>` | Baseline version source code |
+| `--target-repo <path>` | Current version source code |
+| `-o, --output <path>` | Output report file (default: timestamped .md) |
+| `--min-size <MB>` | Minimum memory threshold (default: 2.0 MB) |
+| `-t, --timeout <sec>` | Analysis timeout (default: 1800 = 30 min) |
+
+### Pattern Matching
+
+The preprocessing uses hardcoded patterns for UE4/Wwise projects:
+
+**Low-level patterns (filtered out):**
+- `FMemory::`, `operator new`, `malloc`
+- `TArray::`, `TMap::`, `TSet::`
+- `FPropertyTag::`, `FArchive::`, `FLinkerLoad::`
+- `FString::`, `FName::`, `FText::`
+
+**Functional-level patterns (kept):**
+- `U[A-Z]*::` - UObject-derived classes
+- `A[A-Z]*::` - AActor-derived classes
+- `F*Manager::`, `F*System::` - Manager/System classes
+- `CAk*::`, `Ak*::` - Wwise audio API
+
+### Example Report Output
+
+```markdown
+# 内存分析报告
+
+生成时间: 2026-01-27 10:00:00
+分析工具: LoliProfiler
+基线版本: ua0919
+对比版本: ua1219
+
+## 主要内存增长点分析
+
+### [1] UDataTable::LoadStructData - +5.20 MB
+
+**完整调用栈:**
+FAsyncLoadingThread::Run()
+    → FAsyncPackage::EventDrivenSerializeExport()
+        → UDataTable::Serialize()
+            → UDataTable::LoadStructData()
+
+**代码位置:** Engine/Source/Runtime/Engine/Private/DataTable.cpp:88
+
+**增长原因:** 大量DataTable行数据加载，每行通过FMemory::Malloc独立分配
+
+**优化建议:** 使用内存池分配相同RowStruct的行数据，减少碎片
+```
+
 ## See Also
 
 - [Quick Start Guide](QUICK_START.md)

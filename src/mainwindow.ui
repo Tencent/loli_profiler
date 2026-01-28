@@ -190,7 +190,7 @@
                <string>Load symbols after capture is done</string>
               </property>
               <property name="text">
-               <string>Load Symblos</string>
+               <string>Load Symbols</string>
               </property>
              </widget>
             </item>

@@ -25,7 +25,8 @@ LoliProfiler supports profiling debuggable applications out of box. And offers e
 * Support profiling release build applications on rooted devices.
 * Multiple data view modes: tree map/call tree/memory fragmentation.
 * Builtin adb console to be able to exec command.
-* **CLI mode for automated profiling and CI/CD integration.**
+* **CLI mode** for automated profiling and CI/CD integration.
+* **AI** (Claude Code) based memory growth report generation.
 
 # Documents
 

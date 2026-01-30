@@ -16,5 +16,6 @@ echo Copying Python analysis scripts...
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cp "$SCRIPT_DIR/../analyze_memory_diff.py" "$DeployPath/"
 cp "$SCRIPT_DIR/../preprocess_memory_diff.py" "$DeployPath/"
+cp "$SCRIPT_DIR/../markdown_to_html.py" "$DeployPath/"
 
 echo finish Deployqt.....

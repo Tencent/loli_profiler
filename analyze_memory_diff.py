@@ -24,6 +24,13 @@ except ImportError:
     PREPROCESSING_AVAILABLE = False
     print("Warning: preprocess_memory_diff.py not found, large file preprocessing disabled", file=sys.stderr)
 
+# Import markdown to HTML converter
+try:
+    from markdown_to_html import markdown_to_html, convert_file as convert_md_to_html
+    HTML_CONVERSION_AVAILABLE = True
+except ImportError:
+    HTML_CONVERSION_AVAILABLE = False
+
 
 def analyze_memory_diff(diff_file: str,
                         base_repo_path: str,
@@ -450,7 +457,7 @@ Examples:
     parser.add_argument('--target-repo',
                         help='Path to comparison version source code repo')
     parser.add_argument('--output', '-o',
-                        help='Output report file path (default: memory_analysis_report_YYYYMMDD_HHMMSS.md)')
+                        help='Output report file path. Use .html extension for HTML output (default: memory_analysis_report_YYYYMMDD_HHMMSS.md)')
     parser.add_argument('--min-size', type=float, default=2.0,
                         help='Minimum memory growth threshold in MiB (default: 2.0)')
     parser.add_argument('--timeout', '-t', type=int, default=1800,
@@ -485,15 +492,37 @@ Examples:
     output_file = args.output or f"memory_analysis_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
     output_file = os.path.abspath(output_file)
 
+    # Check if HTML output is requested
+    output_html = output_file.lower().endswith('.html')
+    if output_html:
+        # Generate markdown first, then convert to HTML
+        md_output_file = output_file[:-5] + '.md'  # Replace .html with .md
+    else:
+        md_output_file = output_file
+
     # Run analysis
     success = analyze_memory_diff(
         args.diff_file,
         base_repo,
         target_repo,
-        output_file,
+        md_output_file,
         min_size_mb=args.min_size,
         timeout=args.timeout
     )
+
+    # Convert to HTML if requested
+    if success and output_html:
+        if HTML_CONVERSION_AVAILABLE:
+            print(f"\nConverting markdown to HTML...")
+            if convert_md_to_html(md_output_file, output_file):
+                print(f"HTML report written to: {output_file}")
+                # Optionally remove intermediate markdown file
+                # os.remove(md_output_file)
+            else:
+                print(f"Warning: HTML conversion failed, markdown report available at: {md_output_file}", file=sys.stderr)
+        else:
+            print(f"\nWarning: HTML conversion requested but markdown_to_html.py not available", file=sys.stderr)
+            print(f"Markdown report available at: {md_output_file}", file=sys.stderr)
 
     return 0 if success else 1
 

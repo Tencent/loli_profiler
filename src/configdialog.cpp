@@ -169,9 +169,9 @@ ConfigDialog::Settings ConfigDialog::ParseConfigFile() {
             if (words[0] == "threshold") {
                 settings->threshold_ = words[1].toInt();
             } else if (words[0] == "whitelist") {
-                settings->whitelist_ = words[1].split(',', QString::SkipEmptyParts);
+                settings->whitelist_ = words[1].split(',', Qt::SkipEmptyParts);
             } else if (words[0] == "blacklist") {
-                settings->blacklist_ = words[1].split(',', QString::SkipEmptyParts);
+                settings->blacklist_ = words[1].split(',', Qt::SkipEmptyParts);
             } else if (words[0] == "mode") {
                 settings->mode_ = words[1];
             } else if (words[0] == "build") {

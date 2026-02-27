@@ -492,7 +492,7 @@ void CliProfiler::ReadSMapsFile(QFile* file) {
         auto line = stream.readLine();
         if (line.isEmpty())
             continue;
-        auto strList = line.split(' ', QString::SkipEmptyParts);
+        auto strList = line.split(' ', Qt::SkipEmptyParts);
         if (sectionTitleRx.indexIn(line) != -1) {
             int matchedLength = sectionTitleRx.matchedLength();
             if (matchedLength == -1)

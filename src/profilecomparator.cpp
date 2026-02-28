@@ -5,6 +5,7 @@
 #include <QDataStream>
 #include <QTextStream>
 #include <QDebug>
+#include <QPointF>
 #include <functional>
 #include <algorithm>
 

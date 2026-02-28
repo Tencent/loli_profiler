@@ -30,7 +30,7 @@ void CliLogger::Init(const QString& logPath) {
         
         QString startMsg = QString("=== LoliProfiler CLI Log Started at %1 ===")
             .arg(QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss"));
-        *stream_ << startMsg << endl;
+        *stream_ << startMsg << Qt::endl;
         stream_->flush();
         
         // Also try stdout
@@ -50,7 +50,7 @@ void CliLogger::Log(const QString& message) {
     
     // Write to file
     if (initialized_ && stream_) {
-        *stream_ << logLine << endl;
+        *stream_ << logLine << Qt::endl;
         stream_->flush();
     }
     
@@ -67,7 +67,7 @@ void CliLogger::Error(const QString& message) {
     
     // Write to file
     if (initialized_ && stream_) {
-        *stream_ << logLine << endl;
+        *stream_ << logLine << Qt::endl;
         stream_->flush();
     }
     
@@ -83,7 +83,7 @@ void CliLogger::Close() {
         if (stream_) {
             QString endMsg = QString("=== LoliProfiler CLI Log Ended at %1 ===")
                 .arg(QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss"));
-            *stream_ << endMsg << endl;
+            *stream_ << endMsg << Qt::endl;
             delete stream_;
             stream_ = nullptr;
         }

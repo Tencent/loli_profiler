@@ -16,6 +16,9 @@ StartAppProcess::StartAppProcess(QObject* parent)
 
 void StartAppProcess::StartApp(const QString& appName, const QString& subProcessName, const QString& compiler, 
     const QString& arch, bool interceptMode, QProgressDialog* dialog) {
+#ifdef NO_GUI_MODE
+    (void)dialog; // Suppress unused parameter warning in CLI mode
+#endif
     startResult_ = false;
     interceptMode_ = interceptMode;
     errorStr_ = QString();

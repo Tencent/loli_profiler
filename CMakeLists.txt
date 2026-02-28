@@ -4,6 +4,9 @@ set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Option to build GUI (default ON for backward compatibility)
+option(BUILD_GUI "Build GUI application" ON)
+
 if (APPLE)
     set(OS_BUNDLE MACOSX_BUNDLE)
     set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13" CACHE STRING "Minimum OS X deployment version")
@@ -27,12 +30,22 @@ set(CMAKE_AUTOUIC ON) # UI files
 set(PROJECT_NAME LoliProfiler)
 project(${PROJECT_NAME})
 
-find_package(Qt5 COMPONENTS Core Widgets OpenGL Gui Network Charts Concurrent REQUIRED)
+# Only find GUI components if BUILD_GUI is ON
+if(BUILD_GUI)
+    find_package(Qt5 COMPONENTS Core Widgets OpenGL Gui Network Charts Concurrent REQUIRED)
+else()
+    find_package(Qt5 COMPONENTS Core Network Concurrent REQUIRED)
+endif()
 
 # Avoid generating ZERO_CHECK VS project, must in root CMakeLists.txt
 if(MSVC)
     set(CMAKE_SUPPRESS_REGENERATION true)
 endif()
+
+# ============================================================================
+# GUI Application (LoliProfiler)
+# ============================================================================
+if(BUILD_GUI)
 
 set(LOLIPROFILER_INCS
     include/adbprocess.h
@@ -183,6 +196,8 @@ if(APPLE AND NOT XCODE_VERSION)
 endif()
 
 install(TARGETS ${PROJECT_NAME} DESTINATION ${CMAKE_BINARY_DIR}/bin/release)
+
+endif() # BUILD_GUI
 
 # ============================================================================
 # CLI-only executable (LoliProfilerCLI)

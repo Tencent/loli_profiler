@@ -14,7 +14,7 @@ struct TimerProfiler{
     }
     ~TimerProfiler() {
         auto ms = std::chrono::duration<double, std::milli>(sclock::now() - startTime_);
-        qDebug() << msg_ << " " << QString::number(ms.count()) << " ms" << endl;
+        qDebug() << msg_ << " " << QString::number(ms.count()) << " ms" << Qt::endl;
     }
 private:
     std::chrono::time_point<std::chrono::steady_clock> startTime_;

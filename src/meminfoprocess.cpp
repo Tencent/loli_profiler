@@ -44,7 +44,7 @@ void MemInfoProcess::OnProcessFinihed() {
             }
             errorReadCount++;
             if (line.contains(appName)) {
-                auto list = line.split(QRegularExpression("\\s+"), QString::SkipEmptyParts);
+                auto list = line.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
                 if (list.size() > 5)
                     appPid_ = list[4];
                 foundAppName = true;
@@ -55,7 +55,7 @@ void MemInfoProcess::OnProcessFinihed() {
                 break;
             if (line.size() == 0)
                 continue;
-            auto list = line.split(QRegularExpression("\\s+"), QString::SkipEmptyParts);
+            auto list = line.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
             if (list.size() < 2)
                 continue;
             auto name = list.at(0);

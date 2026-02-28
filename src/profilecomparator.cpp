@@ -363,36 +363,52 @@ bool ProfileComparator::Compare(int skipRootLevels)
     
     // Size limiter - ignore small differences (1 KiB)
     quint64 sizeLimiter = 1024;
-    
+
     // Collect leaf nodes for delta calculation
     QList<CallTreeNode*> leafItems;
-    
+
+    // Counter for new allocations
+    int newAllocationsCounter = 0;
+
     // Diff leaf nodes only (matching MainWindow::on_actionShow_Leaks_triggered logic)
     for (auto it = comparisonHashmap.begin(); it != comparisonHashmap.end(); ++it) {
         auto key = it.key();
         auto compNode = it.value();
         auto baselineIt = baselineHashmap.find(key);
-        
-        // Only process leaf nodes that exist in both trees
-        if (compNode->children.size() != 0 || baselineIt == baselineHashmap.end()) {
+
+        // Skip non-leaf nodes
+        if (compNode->children.size() != 0) {
             compNode->size = 0;
             compNode->count = 0;
             continue;
         }
-        
+
         leafItems.append(compNode);
-        
-        auto baseNode = baselineIt.value();
-        qint64 newSize = compNode->size - baseNode->size;
-        qint64 newCount = compNode->count - baseNode->count;
-        
-        // Filter small differences
-        if (newSize < static_cast<qint64>(sizeLimiter) || newCount <= 0) {
-            compNode->size = 0;
-            compNode->count = 0;
+
+        if (baselineIt == baselineHashmap.end()) {
+            // NEW ALLOCATION - exists in comparison only
+            // Full size/count is the delta (was 0 in baseline)
+            if (compNode->size < static_cast<qint64>(sizeLimiter)) {
+                compNode->size = 0;
+                compNode->count = 0;
+            } else {
+                // Keep original values as delta, count as new allocation
+                newAllocationsCounter++;
+            }
         } else {
-            compNode->size = newSize;
-            compNode->count = newCount;
+            // EXISTING ALLOCATION - calculate delta
+            auto baseNode = baselineIt.value();
+            qint64 newSize = compNode->size - baseNode->size;
+            qint64 newCount = compNode->count - baseNode->count;
+
+            // Filter small differences
+            if (newSize < static_cast<qint64>(sizeLimiter) || newCount <= 0) {
+                compNode->size = 0;
+                compNode->count = 0;
+            } else {
+                compNode->size = newSize;
+                compNode->count = newCount;
+            }
         }
     }
     
@@ -424,6 +440,7 @@ bool ProfileComparator::Compare(int skipRootLevels)
     
     // Count statistics and remove zero-count nodes
     stats_.changedAllocations = 0;
+    stats_.newAllocationsCount = newAllocationsCounter;
 
     for (auto node : comparisonHashmap) {
         if (node->count > 0) {
@@ -475,8 +492,9 @@ bool ProfileComparator::ExportToText(const QString& outputPath)
         stream << "-" << sizeToString(static_cast<quint64>(-stats_.sizeDelta));
     }
     stream << "\n\n";
-    
-    stream << "Changed allocations (>1KB growth): " << stats_.changedAllocations << "\n\n";
+
+    stream << "Changed allocations (>1KB growth): " << stats_.changedAllocations << "\n";
+    stream << "New allocations (not in baseline): " << stats_.newAllocationsCount << "\n\n";
 
     stream << "=== Memory Growth (Delta: Comparison - Baseline) ===" << "\n\n";
 

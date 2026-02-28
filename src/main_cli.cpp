@@ -231,7 +231,8 @@ int main(int argc, char *argv[]) {
             std::cout << "-" << sizeToString(static_cast<quint64>(-stats.sizeDelta)).toStdString();
         }
         std::cout << "\n";
-        std::cout << "Changed allocations (>1KB growth): " << stats.changedAllocations << "\n\n";
+        std::cout << "Changed allocations (>1KB growth): " << stats.changedAllocations << "\n";
+        std::cout << "New allocations (not in baseline): " << stats.newAllocationsCount << "\n\n";
 
         // Detect output format based on file extension
         bool exportAsLoli = outputFile.toLower().endsWith(".loli");

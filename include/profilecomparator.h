@@ -69,6 +69,7 @@ public:
         int baselineAllocCount;
         int comparisonAllocCount;
         int changedAllocations;        // allocations with size growth >1KB
+        int newAllocationsCount;       // allocations only in comparison (not in baseline)
     };
     
     ComparisonStats GetStats() const { return stats_; }

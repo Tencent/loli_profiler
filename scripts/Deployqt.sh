@@ -25,5 +25,6 @@ mkdir -p "$DeployPath/mcp_server"
 cp "$SCRIPT_DIR/../mcp_server/__init__.py" "$DeployPath/mcp_server/"
 cp "$SCRIPT_DIR/../mcp_server/tree_model.py" "$DeployPath/mcp_server/"
 cp "$SCRIPT_DIR/../mcp_server/heap_explorer_server.py" "$DeployPath/mcp_server/"
+cp "$SCRIPT_DIR/../.mcp.json" "$DeployPath/"
 
 echo finish Deployqt.....

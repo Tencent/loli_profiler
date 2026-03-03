@@ -25,3 +25,16 @@ done
 
 mkdir $ReleasePath/Resources/
 cp res/devices.icns $ReleasePath/Resources/
+
+echo 3. copy Python analysis scripts and MCP server to release
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cp "$SCRIPT_DIR/../analyze_memory_diff.py" "$ReleasePath/"
+cp "$SCRIPT_DIR/../preprocess_memory_diff.py" "$ReleasePath/"
+cp "$SCRIPT_DIR/../markdown_to_html.py" "$ReleasePath/"
+cp "$SCRIPT_DIR/../analyze_heap.py" "$ReleasePath/"
+cp "$SCRIPT_DIR/../requirements.txt" "$ReleasePath/"
+
+mkdir -p "$ReleasePath/mcp_server"
+cp "$SCRIPT_DIR/../mcp_server/__init__.py" "$ReleasePath/mcp_server/"
+cp "$SCRIPT_DIR/../mcp_server/tree_model.py" "$ReleasePath/mcp_server/"
+cp "$SCRIPT_DIR/../mcp_server/heap_explorer_server.py" "$ReleasePath/mcp_server/"

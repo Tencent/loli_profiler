@@ -42,6 +42,14 @@ public:
      * @return true if comparison successful
      */
     bool Compare(int skipRootLevels = 0);
+
+    /**
+     * Build call tree from a single loaded profile (no delta calculation)
+     * Only requires baseline to be loaded
+     * @param skipRootLevels Number of root stack frames to skip (default: 0)
+     * @return true if successful
+     */
+    bool DumpProfile(int skipRootLevels = 0);
     
     /**
      * Export comparison result to text format (deep copy style)
@@ -50,6 +58,14 @@ public:
      * @return true if export successful
      */
     bool ExportToText(const QString& outputPath);
+
+    /**
+     * Export single profile dump to text format (absolute values, no +/- prefix)
+     * Format: function_name, size, count (with tab indentation for hierarchy)
+     * @param outputPath Path to output text file
+     * @return true if export successful
+     */
+    bool ExportDumpToText(const QString& outputPath);
 
     /**
      * Export comparison result to .loli format for GUI visualization
@@ -109,8 +125,11 @@ private:
     // Efficient hash-based call tree building (matches MainWindow::GetMergedCallstacks logic)
     QHash<uint, CallTreeNode*> BuildCallTreeWithHashMap(const ProfileData& data, QVector<CallTreeNode*>& roots);
 
-    // Write call tree to text output
+    // Write call tree to text output (delta format with +/- prefix)
     void WriteCallTreeToText(QTextStream& stream, CallTreeNode* node, int depth);
+
+    // Write call tree to text output (absolute format, no +/- prefix)
+    void WriteCallTreeToTextAbsolute(QTextStream& stream, CallTreeNode* node, int depth);
 
     // Convert delta tree to stack records and callstack map for .loli export
     void ConvertDeltaTreeToRecords(

@@ -27,11 +27,13 @@ LoliProfiler supports profiling debuggable applications out of box. And offers e
 * Builtin adb console to be able to exec command.
 * **CLI mode** for automated profiling and CI/CD integration.
 * **AI** (Claude Code) based memory growth report generation.
+* **MCP server** for interactive heap snapshot/diff exploration with Claude Code.
 
 # Documents
 
 * [Quick Start Guide](docs/QUICK_START.md) [(Chinese)](docs/QUICK_START_CN.md)
 * [CLI Mode Guide](docs/CLI_MODE.md) - Automated profiling for CI/CD
+* [MCP Heap Explorer](docs/MCP_HEAP_EXPLORER.md) - Interactive heap diff analysis with Claude Code
 * [Working With Game Engines](docs/GAME_ENGINE.md) [(Chinese)](docs/GAME_ENGINE_CN.md)
 * [Trouble Shooting](docs/TROUBLE_SHOOTING.md)
 * [Build Project](docs/BUILD.md)

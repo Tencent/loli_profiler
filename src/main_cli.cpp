@@ -39,7 +39,8 @@ void printUsage() {
     std::cout << "LoliProfiler CLI - Android Memory Profiling Tool\n\n";
     std::cout << "Usage:\n";
     std::cout << "  LoliProfilerCLI --app <package_name> --out <output.loli> [options]\n";
-    std::cout << "  LoliProfilerCLI --compare <baseline.loli> <comparison.loli> --out <output> [options]\n\n";
+    std::cout << "  LoliProfilerCLI --compare <baseline.loli> <comparison.loli> --out <output> [options]\n";
+    std::cout << "  LoliProfilerCLI --dump <profile.loli> --out <output.txt> [options]\n\n";
     std::cout << "Profiling Mode - Required Options:\n";
     std::cout << "  --app <name>           Target application package name\n";
     std::cout << "  --out <path>           Output .loli file path\n\n";
@@ -57,6 +58,12 @@ void printUsage() {
     std::cout << "  --out <path>           Output file path (.txt for text report, .loli for GUI visualization)\n\n";
     std::cout << "Compare Mode - Optional Options:\n";
     std::cout << "  --skip-root-levels <N> Skip N root call stack frames (useful for system libs without symbols)\n\n";
+    std::cout << "Dump Mode - Usage:\n";
+    std::cout << "  --dump                 Export a single .loli file to text format\n";
+    std::cout << "  <profile.loli>         Input .loli file (positional argument)\n";
+    std::cout << "  --out <path>           Output text file path\n\n";
+    std::cout << "Dump Mode - Optional Options:\n";
+    std::cout << "  --skip-root-levels <N> Skip N root call stack frames (useful for system libs without symbols)\n\n";
     std::cout << "General Options:\n";
     std::cout << "  --help, -h             Show this help message\n";
     std::cout << "  --version, -v          Show version information\n\n";
@@ -71,7 +78,11 @@ void printUsage() {
     std::cout << "  # Compare and export as .loli for GUI visualization\n";
     std::cout << "  LoliProfilerCLI --compare baseline.loli comparison.loli --out diff.loli\n\n";
     std::cout << "  # Compare and skip 2 root call stack levels (e.g., system library frames)\n";
-    std::cout << "  LoliProfilerCLI --compare baseline.loli comparison.loli --out diff.txt --skip-root-levels 2\n";
+    std::cout << "  LoliProfilerCLI --compare baseline.loli comparison.loli --out diff.txt --skip-root-levels 2\n\n";
+    std::cout << "  # Dump a single .loli file to text\n";
+    std::cout << "  LoliProfilerCLI --dump profile.loli --out dump.txt\n\n";
+    std::cout << "  # Dump with skipping root levels\n";
+    std::cout << "  LoliProfilerCLI --dump profile.loli --out dump.txt --skip-root-levels 2\n";
 }
 
 int main(int argc, char *argv[]) {
@@ -133,6 +144,11 @@ int main(int argc, char *argv[]) {
     QCommandLineOption compareOption(QStringList() << "compare",
         "Compare two .loli files (baseline vs comparison)");
     parser.addOption(compareOption);
+
+    // Dump mode option
+    QCommandLineOption dumpOption(QStringList() << "dump",
+        "Export a single .loli file to text format");
+    parser.addOption(dumpOption);
     
     parser.addPositionalArgument("files", "Input .loli files for comparison (baseline comparison)", "[file1] [file2]");
     
@@ -146,7 +162,15 @@ int main(int argc, char *argv[]) {
     parser.process(app);
     
     CLI_LOG("Arguments parsed successfully");
-    
+
+    // Mutual exclusion check for modes
+    if (parser.isSet(compareOption) && parser.isSet(dumpOption)) {
+        std::cerr << "Error: --compare and --dump cannot be used together\n";
+        printUsage();
+        CliLogger::Instance().Close();
+        return 1;
+    }
+
     // Check if this is compare mode
     if (parser.isSet(compareOption)) {
         // Compare mode
@@ -175,7 +199,13 @@ int main(int argc, char *argv[]) {
         QString comparisonFile = compareFiles[1];
         QString outputFile = parser.value(outOption);
         int skipRootLevels = parser.value(skipRootLevelsOption).toInt();
-        
+
+        if (skipRootLevels < 0) {
+            std::cerr << "Error: --skip-root-levels must be a non-negative integer\n";
+            CliLogger::Instance().Close();
+            return 1;
+        }
+
         CLI_LOG(QString("Baseline file: %1").arg(baselineFile));
         CLI_LOG(QString("Comparison file: %1").arg(comparisonFile));
         CLI_LOG(QString("Output file: %1").arg(outputFile));
@@ -265,6 +295,91 @@ int main(int argc, char *argv[]) {
         }
 
         CLI_LOG("Comparison completed successfully");
+        CliLogger::Instance().Close();
+        return 0;
+    }
+
+    // Check if this is dump mode
+    if (parser.isSet(dumpOption)) {
+        CLI_LOG("Running in DUMP mode");
+
+        QStringList dumpFiles = parser.positionalArguments();
+        if (dumpFiles.size() != 1) {
+            CLI_ERROR("--dump requires exactly one file argument");
+            std::cerr << "Error: --dump requires exactly one .loli file\n";
+            std::cerr << "Usage: LoliProfilerCLI --dump <profile.loli> --out <output.txt>\n";
+            printUsage();
+            CliLogger::Instance().Close();
+            return 1;
+        }
+
+        if (!parser.isSet(outOption)) {
+            CLI_ERROR("--out is required in dump mode");
+            std::cerr << "Error: --out is required to specify output file\n";
+            printUsage();
+            CliLogger::Instance().Close();
+            return 1;
+        }
+
+        QString inputFile = dumpFiles[0];
+        QString outputFile = parser.value(outOption);
+        int skipRootLevels = parser.value(skipRootLevelsOption).toInt();
+
+        if (skipRootLevels < 0) {
+            std::cerr << "Error: --skip-root-levels must be a non-negative integer\n";
+            CliLogger::Instance().Close();
+            return 1;
+        }
+
+        CLI_LOG(QString("Input file: %1").arg(inputFile));
+        CLI_LOG(QString("Output file: %1").arg(outputFile));
+        CLI_LOG(QString("Skip root levels: %1").arg(skipRootLevels));
+
+        std::cout << "Loading profile: " << inputFile.toStdString() << "...\n";
+
+        ProfileComparator comparator;
+
+        // Load profile as baseline
+        if (!comparator.LoadProfile(inputFile, true)) {
+            CLI_ERROR(QString("Failed to load profile: %1").arg(comparator.GetErrorMessage()));
+            std::cerr << "Error: " << comparator.GetErrorMessage().toStdString() << "\n";
+            CliLogger::Instance().Close();
+            return 1;
+        }
+
+        std::cout << "Building call tree";
+        if (skipRootLevels > 0) {
+            std::cout << " (skipping " << skipRootLevels << " root levels)";
+        }
+        std::cout << "...\n";
+
+        // Build call tree from single profile
+        if (!comparator.DumpProfile(skipRootLevels)) {
+            CLI_ERROR(QString("Failed to process profile: %1").arg(comparator.GetErrorMessage()));
+            std::cerr << "Error: " << comparator.GetErrorMessage().toStdString() << "\n";
+            CliLogger::Instance().Close();
+            return 1;
+        }
+
+        // Print stats
+        auto stats = comparator.GetStats();
+        std::cout << "\n=== Profile Summary ===\n";
+        std::cout << "Total allocations: " << stats.baselineAllocCount << "\n";
+        std::cout << "Total size: " << sizeToString(stats.baselineTotalSize).toStdString() << "\n\n";
+
+        // Export to text
+        std::cout << "Exporting to text file: " << outputFile.toStdString() << "...\n";
+
+        if (!comparator.ExportDumpToText(outputFile)) {
+            CLI_ERROR(QString("Failed to export: %1").arg(comparator.GetErrorMessage()));
+            std::cerr << "Error: " << comparator.GetErrorMessage().toStdString() << "\n";
+            CliLogger::Instance().Close();
+            return 1;
+        }
+
+        std::cout << "Dump complete! Output saved to: " << outputFile.toStdString() << "\n";
+
+        CLI_LOG("Dump completed successfully");
         CliLogger::Instance().Close();
         return 0;
     }

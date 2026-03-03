@@ -62,6 +62,12 @@ LoliProfilerCLI --compare baseline.loli current.loli --out diff.txt
 
 # Compare with skipped root levels (for system libs without symbols)
 LoliProfilerCLI --compare baseline.loli current.loli --out diff.txt --skip-root-levels 2
+
+# Dump a single .loli file to text (hierarchical call tree with absolute values)
+LoliProfilerCLI --dump profile.loli --out dump.txt
+
+# Dump with skipped root levels
+LoliProfilerCLI --dump profile.loli --out dump.txt --skip-root-levels 2
 ```
 
 ## Architecture
@@ -179,6 +185,29 @@ The CLI supports comparing two `.loli` files to detect memory regressions:
 - Before/after performance optimization validation
 - A/B testing different implementations
 - Memory leak detection across builds
+
+## CLI Dump Mode
+
+The CLI supports exporting a single `.loli` file to a text report with hierarchical call tree format:
+
+**Key Features:**
+- Builds merged call tree from a single profile (no delta calculation)
+- Outputs absolute values (total size, count) instead of +/- deltas
+- Supports skipping root call stack frames (`--skip-root-levels`)
+- Useful for text-based analysis with MCP tools or other automation
+
+**Output Format:**
+```
+=== LoliProfiler Profile Report ===
+
+Total allocations: 2353608
+Total size: 534.44 MB
+
+=== Memory Allocations ===
+
+FunctionName(), 132.19 MB, 778693
+    ChildFunction(), 132.17 MB, 778551
+```
 
 ## Development Notes
 

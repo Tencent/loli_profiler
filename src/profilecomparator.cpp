@@ -464,6 +464,97 @@ bool ProfileComparator::Compare(int skipRootLevels)
     return true;
 }
 
+bool ProfileComparator::DumpProfile(int skipRootLevels)
+{
+    if (!baselineLoaded_) {
+        errorMessage_ = "Profile must be loaded first (call LoadProfile with isBaseline=true)";
+        return false;
+    }
+
+    // Save skipRootLevels for use in BuildCallTreeWithHashMap
+    skipRootLevels_ = skipRootLevels;
+
+    // Clean up previous delta tree
+    qDeleteAll(deltaRoots_);
+    deltaRoots_.clear();
+
+    // Filter out freed allocations to show only live memory
+    // This matches GUI behavior which filters via freeAddrMap_
+    ProfileData filteredData;
+    filteredData.callStackMap = baselineData_.callStackMap;
+    filteredData.symbolMap = baselineData_.symbolMap;
+    filteredData.stringHashMap = baselineData_.stringHashMap;
+
+    for (const auto& record : baselineData_.stackRecords) {
+        auto it = baselineData_.freeAddrMap.find(record.addr_);
+        if (it != baselineData_.freeAddrMap.end() && record.seq_ < it.value()) {
+            continue;  // This allocation was freed later, skip it
+        }
+        filteredData.stackRecords.append(record);
+    }
+
+    // Calculate statistics from filtered (live) allocations
+    stats_ = ComparisonStats();
+    stats_.baselineAllocCount = filteredData.stackRecords.size();
+    stats_.comparisonAllocCount = 0;
+    stats_.baselineTotalSize = 0;
+    stats_.comparisonTotalSize = 0;
+    stats_.sizeDelta = 0;
+    stats_.changedAllocations = 0;
+    stats_.newAllocationsCount = 0;
+
+    for (const auto& record : filteredData.stackRecords) {
+        stats_.baselineTotalSize += record.size_;
+    }
+
+    // Build call tree from filtered profile
+    // Return value intentionally discarded - nodeMap is only needed during construction.
+    // Node ownership is managed through root -> children hierarchy.
+    BuildCallTreeWithHashMap(filteredData, deltaRoots_);
+
+    compared_ = true;
+    return true;
+}
+
+bool ProfileComparator::ExportDumpToText(const QString& outputPath)
+{
+    if (!compared_) {
+        errorMessage_ = "Must call DumpProfile() before exporting";
+        return false;
+    }
+
+    QFile file(outputPath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        errorMessage_ = QString("Cannot create output file: %1").arg(outputPath);
+        return false;
+    }
+
+    QTextStream stream(&file);
+    stream.setCodec("UTF-8");
+
+    // Write header
+    stream << "=== LoliProfiler Profile Report ===" << "\n\n";
+    stream << "Total allocations: " << stats_.baselineAllocCount << "\n";
+    stream << "Total size: " << sizeToString(stats_.baselineTotalSize) << "\n\n";
+
+    stream << "=== Memory Allocations ===" << "\n\n";
+
+    // Sort root nodes by size (descending order) before writing
+    QVector<CallTreeNode*> sortedRoots = deltaRoots_;
+    std::sort(sortedRoots.begin(), sortedRoots.end(),
+        [](CallTreeNode* a, CallTreeNode* b) {
+            return a->size > b->size;  // Descending order (largest first)
+        });
+
+    // Write sorted call tree with absolute values
+    for (CallTreeNode* root : sortedRoots) {
+        WriteCallTreeToTextAbsolute(stream, root, 0);
+    }
+
+    file.close();
+    return true;
+}
+
 bool ProfileComparator::ExportToText(const QString& outputPath)
 {
     if (!compared_) {
@@ -559,6 +650,33 @@ void ProfileComparator::WriteCallTreeToText(QTextStream& stream, CallTreeNode* n
     // Recursively write sorted children
     for (CallTreeNode* child : sortedChildren) {
         WriteCallTreeToText(stream, child, depth + 1);
+    }
+}
+
+void ProfileComparator::WriteCallTreeToTextAbsolute(QTextStream& stream, CallTreeNode* node, int depth)
+{
+    if (!node) return;
+
+    // Write indentation
+    for (int i = 0; i < depth; ++i) {
+        stream << "    ";  // 4 spaces for indentation
+    }
+
+    // Write function name, absolute size, absolute count (no +/- prefix)
+    stream << node->functionName << ", "
+           << sizeToString(static_cast<quint64>(node->size)) << ", "
+           << node->count << "\n";
+
+    // Sort children by size (descending order) before writing
+    QVector<CallTreeNode*> sortedChildren = node->children;
+    std::sort(sortedChildren.begin(), sortedChildren.end(),
+        [](CallTreeNode* a, CallTreeNode* b) {
+            return a->size > b->size;  // Descending order (largest first)
+        });
+
+    // Recursively write sorted children
+    for (CallTreeNode* child : sortedChildren) {
+        WriteCallTreeToTextAbsolute(stream, child, depth + 1);
     }
 }
 

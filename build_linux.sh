@@ -75,6 +75,16 @@ echo "Copying Python analysis scripts..."
 cp -v analyze_memory_diff.py $DeployPath/LoliProfiler/
 cp -v preprocess_memory_diff.py $DeployPath/LoliProfiler/
 cp -v markdown_to_html.py $DeployPath/LoliProfiler/
+cp -v analyze_heap.py $DeployPath/LoliProfiler/
+cp -v requirements.txt $DeployPath/LoliProfiler/
+
+# Copy MCP server
+echo "Copying MCP server..."
+mkdir -p $DeployPath/LoliProfiler/mcp_server
+cp -v mcp_server/__init__.py $DeployPath/LoliProfiler/mcp_server/
+cp -v mcp_server/tree_model.py $DeployPath/LoliProfiler/mcp_server/
+cp -v mcp_server/heap_explorer_server.py $DeployPath/LoliProfiler/mcp_server/
+cp -v .mcp.json $DeployPath/LoliProfiler/
 
 # Copy config files if they exist
 if [ -d "res" ]; then

@@ -2,8 +2,7 @@ set -xeuo pipefail
 
 export AndroidPluginPath="./plugins/Android"
 export ReleasePath="./build/cmake/bin/release"
-export MacdeployqtPath=`find $QT5Path -name "macdeployqt"`
-export QT5_Clang=`find $QT5Path -name "clang_64"`
+export QT5_Clang="$QT5Path"
 export DeployPath="./dist"
 echo deleting dir
 rm -rf ./build

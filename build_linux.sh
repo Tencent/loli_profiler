@@ -24,3 +24,18 @@ echo Ndk_R16_CMD: $Ndk_R16_CMD
 echo Ndk_R20_CMD: $Ndk_R20_CMD
 
 bash scripts/EnterPoint_linux.sh
+
+ReleasePath="./build/cmake/bin/release"
+
+echo "Copying Python analysis scripts and MCP server to release..."
+cp analyze_memory_diff.py "$ReleasePath/"
+cp preprocess_memory_diff.py "$ReleasePath/"
+cp markdown_to_html.py "$ReleasePath/"
+cp analyze_heap.py "$ReleasePath/"
+cp requirements.txt "$ReleasePath/"
+
+mkdir -p "$ReleasePath/mcp_server"
+cp mcp_server/__init__.py "$ReleasePath/mcp_server/"
+cp mcp_server/tree_model.py "$ReleasePath/mcp_server/"
+cp mcp_server/heap_explorer_server.py "$ReleasePath/mcp_server/"
+cp .mcp.json "$ReleasePath/"

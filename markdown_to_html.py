@@ -117,6 +117,108 @@ def convert_horizontal_rules(text: str) -> str:
     return re.sub(r'^---+\s*$', '<hr>', text, flags=re.MULTILINE)
 
 
+def convert_tables(text: str) -> str:
+    """Convert markdown tables to HTML tables."""
+    lines = text.split('\n')
+    result = []
+    table_lines = []
+    in_table = False
+    
+    def is_table_row(line: str) -> bool:
+        """Check if line looks like a table row (starts and ends with |)."""
+        stripped = line.strip()
+        return stripped.startswith('|') and stripped.endswith('|')
+    
+    def is_separator_row(line: str) -> bool:
+        """Check if line is a table separator row (contains only |, -, :, spaces)."""
+        stripped = line.strip()
+        if not stripped.startswith('|') or not stripped.endswith('|'):
+            return False
+        # Remove pipes and check if remaining chars are only -, :, spaces
+        content = stripped[1:-1]
+        return bool(re.match(r'^[\s\-:|]+$', content))
+    
+    def parse_table_row(line: str) -> list:
+        """Parse a table row into cells."""
+        stripped = line.strip()
+        # Remove leading and trailing pipes
+        if stripped.startswith('|'):
+            stripped = stripped[1:]
+        if stripped.endswith('|'):
+            stripped = stripped[:-1]
+        # Split by pipe and strip each cell
+        cells = [cell.strip() for cell in stripped.split('|')]
+        return cells
+    
+    def render_table(table_lines: list) -> str:
+        """Render collected table lines as HTML table."""
+        if len(table_lines) < 2:
+            # Not a valid table, return as is
+            return '\n'.join(table_lines)
+        
+        # Find separator row index
+        separator_idx = -1
+        for i, line in enumerate(table_lines):
+            if is_separator_row(line):
+                separator_idx = i
+                break
+        
+        if separator_idx == -1:
+            # No separator found, not a valid table
+            return '\n'.join(table_lines)
+        
+        # Header rows are before separator
+        header_lines = table_lines[:separator_idx]
+        # Body rows are after separator
+        body_lines = table_lines[separator_idx + 1:]
+        
+        html = ['<table>']
+        
+        # Render header
+        if header_lines:
+            html.append('<thead>')
+            for line in header_lines:
+                cells = parse_table_row(line)
+                html.append('<tr>')
+                for cell in cells:
+                    html.append(f'<th>{cell}</th>')
+                html.append('</tr>')
+            html.append('</thead>')
+        
+        # Render body
+        if body_lines:
+            html.append('<tbody>')
+            for line in body_lines:
+                cells = parse_table_row(line)
+                html.append('<tr>')
+                for cell in cells:
+                    html.append(f'<td>{cell}</td>')
+                html.append('</tr>')
+            html.append('</tbody>')
+        
+        html.append('</table>')
+        return '\n'.join(html)
+    
+    for line in lines:
+        if is_table_row(line):
+            if not in_table:
+                in_table = True
+            table_lines.append(line)
+        else:
+            if in_table:
+                # End of table, render it
+                result.append(render_table(table_lines))
+                table_lines = []
+                in_table = False
+            result.append(line)
+    
+    # Handle table at end of text
+    if in_table and table_lines:
+        result.append(render_table(table_lines))
+    
+    return '\n'.join(result)
+
+
 def convert_paragraphs(text: str) -> str:
     """Wrap text blocks in paragraph tags."""
     # Split by double newlines
@@ -134,11 +236,12 @@ def convert_paragraphs(text: str) -> str:
             block.startswith('<pre') or
             block.startswith('<hr') or
             block.startswith('<li') or
+            block.startswith('<table') or
             block.startswith('<p')):
             result.append(block)
         else:
-            # Check if block contains list items (don't wrap those in p tags)
-            if '<li>' in block:
+            # Check if block contains list items or table (don't wrap those in p tags)
+            if '<li>' in block or '<table>' in block or '<tr>' in block:
                 result.append(block)
             else:
                 # Convert single newlines to <br> within paragraphs
@@ -369,20 +472,23 @@ def markdown_to_html(markdown_text: str, title: Optional[str] = None) -> str:
     # Step 4: Convert horizontal rules
     content = convert_horizontal_rules(content)
 
-    # Step 5: Convert lists
+    # Step 5: Convert tables (before lists, as tables might be mixed with other content)
+    content = convert_tables(content)
+
+    # Step 6: Convert lists
     content = convert_lists(content)
 
-    # Step 6: Convert bold and italic (now safe - code is protected)
+    # Step 7: Convert bold and italic (now safe - code is protected)
     content = convert_bold_italic(content)
 
-    # Step 7: Restore inline code
+    # Step 8: Restore inline code
     for idx, code in enumerate(inline_codes):
         content = content.replace(f'\x00INLINECODE{idx}\x00', code)
 
-    # Step 8: Wrap remaining text in paragraphs (before restoring code blocks)
+    # Step 9: Wrap remaining text in paragraphs (before restoring code blocks)
     content = convert_paragraphs(content)
 
-    # Step 9: Highlight memory values (positive = red, negative = green)
+    # Step 10: Highlight memory values (positive = red, negative = green)
     # Do this before restoring code blocks so code content is not affected
     content = re.sub(
         r'\+(\d+\.?\d*)\s*(MB|KB|GB|MiB|KiB|GiB)',
@@ -395,7 +501,7 @@ def markdown_to_html(markdown_text: str, title: Optional[str] = None) -> str:
         content
     )
 
-    # Step 10: Restore code blocks (after all text processing is done)
+    # Step 11: Restore code blocks (after all text processing is done)
     for idx, block in enumerate(code_blocks):
         content = content.replace(f'\x00CODEBLOCK{idx}\x00', block)
 

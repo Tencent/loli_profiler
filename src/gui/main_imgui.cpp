@@ -17,7 +17,8 @@ int main()
     settings.depthBits = 24;
     settings.stencilBits = 8;
 
-    sf::RenderWindow window(sf::VideoMode({1280, 720}), "LoliProfiler", sf::Style::Default, settings);
+    sf::RenderWindow window(sf::VideoMode({1280, 720}), "LoliProfiler",
+                            sf::Style::Default, sf::State::Windowed, settings);
     window.setVerticalSyncEnabled(true);
 
     if (!ImGui::SFML::Init(window))

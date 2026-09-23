@@ -298,7 +298,7 @@ install(TARGETS LoliProfilerCLI DESTINATION ${CMAKE_BINARY_DIR}/bin/release)
 # ============================================================================
 if(BUILD_IMGUI_GUI)
 
-find_package(Qt5 COMPONENTS Core Network REQUIRED)
+find_package(Qt5 COMPONENTS Core Network Concurrent REQUIRED)
 
 # --- Third-party dependencies (vendored under thirdparty/) ---
 
@@ -325,11 +325,54 @@ add_subdirectory(thirdparty/nativefiledialog-extended)
 # OpenGL3 backend is compiled here.
 set(IMGUI_GUI_SRCS
     src/gui/main_imgui.cpp
+    src/gui/themes.cpp
+    src/gui/filedialogs.cpp
+    src/gui/guidatabridge.cpp
     thirdparty/imgui/backends/imgui_impl_opengl3.cpp
+)
+
+# The bridge reuses core profiling sources (Qt-based). Reuse the CLI core list,
+# minus the CLI entry point and CLI-only files.
+set(IMGUI_GUI_CORE_SRCS
+    src/adbprocess.cpp
+    src/addressprocess.cpp
+    src/configdialog.cpp
+    src/lz4/lz4.c
+    src/meminfoprocess.cpp
+    src/pathutils.cpp
+    src/screenshotprocess.cpp
+    src/stacktracemodel.cpp
+    src/stacktraceprocess.cpp
+    src/stacktraceproxymodel.cpp
+    src/startappprocess.cpp
+    src/hashstring.cpp
+)
+
+# Headers for the Q_OBJECT core classes are passed to the target so AUTOMOC
+# generates their meta-object code (same approach as the CLI target).
+set(IMGUI_GUI_CORE_INCS
+    include/adbprocess.h
+    include/addressprocess.h
+    include/configdialog.h
+    include/meminfoprocess.h
+    include/screenshotprocess.h
+    include/stacktracemodel.h
+    include/stacktraceprocess.h
+    include/stacktraceproxymodel.h
+    include/startappprocess.h
+    include/hashstring.h
+    include/pathutils.h
+    include/smaps/smapssection.h
+    src/gui/guisnapshot.h
+    src/gui/guidatabridge.h
+    src/gui/themes.h
+    src/gui/filedialogs.h
 )
 
 add_executable(LoliProfilerImGui ${OS_BUNDLE}
     ${IMGUI_GUI_SRCS}
+    ${IMGUI_GUI_CORE_SRCS}
+    ${IMGUI_GUI_CORE_INCS}
 )
 
 # C++17 is required by SFML 3 / ImGui-SFML (do NOT change the global standard)
@@ -338,13 +381,18 @@ set_target_properties(LoliProfilerImGui PROPERTIES CXX_STANDARD 17 CXX_STANDARD_
 if(MSVC)
     # No /WX here: vendored deps are compiled as-is and would trip -Werror-style builds
     target_compile_options(LoliProfilerImGui PRIVATE "/W3" "/EHsc" "/MP")
-    target_compile_definitions(LoliProfilerImGui PRIVATE "_CRT_SECURE_NO_WARNINGS=1" "NOGDI" "NOMINMAX")
+    target_compile_definitions(LoliProfilerImGui PRIVATE "_CRT_SECURE_NO_WARNINGS=1" "NOGDI" "NOMINMAX" "NO_GUI_MODE")
 else()
     target_compile_options(LoliProfilerImGui PRIVATE "-Wall" "-Wextra" $<$<COMPILE_LANGUAGE:CXX>:-Wno-invalid-offsetof;-fno-rtti> "-Wno-missing-braces")
+    target_compile_definitions(LoliProfilerImGui PRIVATE "NO_GUI_MODE")
 endif()
 
 target_include_directories(LoliProfilerImGui
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     PRIVATE
+        src/
+        src/lz4/
         thirdparty/imgui
 )
 
@@ -357,6 +405,7 @@ target_link_libraries(LoliProfilerImGui
         nfd
         Qt5::Core
         Qt5::Network
+        Qt5::Concurrent
 )
 
 if(WIN32)

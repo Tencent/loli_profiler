@@ -6,11 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 LoliProfiler is a C/C++ memory profiling tool for Android games and applications built with Qt. It connects to Android devices via ADB to capture and analyze memory allocation patterns, stack traces, and system memory information.
 
-The project builds two executables:
-- **LoliProfiler** — Full GUI application with interactive profiling and visualization
+The project builds three executables:
+- **LoliProfiler** — Full GUI application (Qt 5 Widgets/Charts) with interactive profiling and visualization
+- **LoliProfilerImGui** — Experimental Dear ImGui GUI (branch `imgui-gui`): SFML + ImGui (docking) frontend, Qt-free panels. Set to replace the Qt GUI.
 - **LoliProfilerCLI** — Console application for automated profiling and CI/CD integration
 
-Both executables share core profiling logic and configuration files, with the CLI version excluding GUI dependencies (Widgets, Charts, OpenGL) for a lighter footprint.
+All executables share core profiling logic and configuration files. The CLI and ImGui GUI exclude the heavy GUI dependencies (Widgets, Charts, OpenGL).
 
 For architecture details, data structures, threading model, and development patterns see **[docs/ARCH.md](docs/ARCH.md)**.
 
@@ -30,8 +31,44 @@ Set these environment variables before building:
 
 ### Build Outputs
 - GUI: `./build/cmake/bin/release/LoliProfiler.exe` (Windows) or `LoliProfiler.app` (macOS)
+- ImGui GUI: `build/imgui_cfg/Release/LoliProfilerImGui.exe` (see below)
 - CLI: `./build/cmake/bin/release/LoliProfilerCLI.exe` (Windows) or `LoliProfilerCLI` (macOS/Linux)
 - Final package: `./dist/`
+
+## ImGui GUI (branch `imgui-gui`)
+
+The experimental ImGui-based GUI lives under `src/gui/`, built via the CMake
+option `BUILD_IMGUI_GUI` (default ON) into target `LoliProfilerImGui`.
+
+Dependencies are vendored as submodules under `thirdparty/` (pinned):
+- `imgui` — Dear ImGui **v1.92.9b-docking** (docking branch, dockspace layout)
+- `SFML` — 3.0.2 (window/event backend; static, no audio/network)
+- `imgui-sfml` — master (v3.0 + ImGui 1.92 `GetTexID()` compatibility fix)
+- `nativefiledialog-extended` — native file dialogs (NFD)
+
+**SFML 3 / imgui-sfml require C++17** — the project global is C++14, so C++17 is
+set per-target on `LoliProfilerImGui` only (do not change the global standard).
+
+Architecture: a root ImGui dockspace hosts dockable panels (Capture Status,
+Stacktrace, Timeline, Treemap, Smaps, Screenshot, Console). Launch settings live
+in the modal Run/Launch dialog (File → Run/Launch… or the toolbar) — there is no
+dashboard page. `src/gui/guidatabridge.{h,cpp}` is the **only Qt-aware file** in
+the GUI target: it owns the core ADB/stacktrace/meminfo/screenshot processes and
+converts their Qt signals into Qt-free POD snapshots (`guisnapshot.h`) that the
+panels consume. The stacktrace tree uses a flat-index + `ImGuiListClipper`
+design (`stacktracetree.{h,cpp}`) so large profiles stay interactive.
+
+Build (Windows):
+```bash
+cmake -S . -B build/imgui_cfg -DBUILD_GUI=OFF -DCMAKE_PREFIX_PATH="<QT5Path>"
+cmake --build build/imgui_cfg --target LoliProfilerImGui --config Release
+# Run (Qt DLLs must be on PATH for the Qt5::Core-using bridge):
+PATH="<QT5Path>/bin:$PATH" ./build/imgui_cfg/Release/LoliProfilerImGui.exe
+```
+
+Themes are switchable at runtime via File → Themes (12 themes ported from the
+Fury editor), persisted via QSettings.
+
 
 ## CLI Quick Reference
 

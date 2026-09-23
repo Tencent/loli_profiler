@@ -528,10 +528,44 @@ bool GuiDataBridge::SaveRecord(const QString& path) {
 }
 
 void GuiDataBridge::RebuildCallTreeLocked() {
-    // Aggregate records into a merged callstack tree keyed by function name.
-    // Mirrors MainWindow::GetMergedCallstacks but emits a flat, Qt-free array.
-    snapshot_.callTree.clear();
-    // TODO(M2): build flat CallTreeNode array using callStackMap_ + symbolMap_.
+    // Resolve each record's callstack (root-first) into StackFrameSnapshot so
+    // the ImGui StacktraceTree can aggregate and render. Symbol names come from
+    // symbolMap_ (populated from the record file or nm resolution); unresolved
+    // addresses fall back to a hex string, like MainWindow::TryAddNewAddress.
+    const auto& records = snapshot_.records;
+    snapshot_.recordFrames.clear();
+    snapshot_.recordFrames.resize(records.size());
+
+    auto resolve = [&](const QString& lib, quint64 addr) -> QString {
+        auto libIt = symbolMap_.find(lib);
+        if (libIt != symbolMap_.end()) {
+            auto nameIt = libIt.value().find(addr);
+            if (nameIt != libIt.value().end() && !nameIt.value().isEmpty())
+                return nameIt.value();
+        }
+        return QString("0x%1").arg(addr, 0, 16);
+    };
+
+    // We iterate recordsCache_ (which carries uuid_ -> callStackMap_).
+    for (int i = 0; i < recordsCache_.size(); i++) {
+        const auto& record = recordsCache_[i];
+        auto csIt = callStackMap_.find(record.uuid_);
+        if (csIt == callStackMap_.end())
+            continue;
+        const auto& callstack = csIt.value();
+        auto& frames = snapshot_.recordFrames[i];
+        frames.reserve(callstack.size());
+        // callstack is leaf-first (innermost frame first); emit root-first.
+        for (int j = callstack.size() - 1; j >= 0; j--) {
+            const QString lib = callstack[j].first.Get();
+            const quint64 addr = callstack[j].second;
+            StackFrameSnapshot f;
+            f.library = lib.toStdString();
+            f.funcAddr = addr;
+            f.funcName = resolve(lib, addr).toStdString();
+            frames.push_back(std::move(f));
+        }
+    }
 }
 
 } // namespace gui

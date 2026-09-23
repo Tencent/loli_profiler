@@ -106,6 +106,8 @@ struct GuiSnapshot {
     std::vector<DeviceSnapshot>      devices;
     std::vector<std::string>         installedApps;
     std::vector<RecordSnapshot>      records;      // flat allocation records
+    // resolved call frames per record (parallel to records); each is root-first
+    std::vector<std::vector<StackFrameSnapshot>> recordFrames;
     std::vector<CallTreeNode>        callTree;     // merged callstack tree
     std::vector<MemInfoSample>       memTimeline;
     std::vector<ScreenshotSnapshot>  screenshots;

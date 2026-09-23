@@ -328,6 +328,7 @@ set(IMGUI_GUI_SRCS
     src/gui/themes.cpp
     src/gui/filedialogs.cpp
     src/gui/guidatabridge.cpp
+    src/gui/stacktracetree.cpp
     thirdparty/imgui/backends/imgui_impl_opengl3.cpp
 )
 
@@ -365,6 +366,7 @@ set(IMGUI_GUI_CORE_INCS
     include/smaps/smapssection.h
     src/gui/guisnapshot.h
     src/gui/guidatabridge.h
+    src/gui/stacktracetree.h
     src/gui/themes.h
     src/gui/filedialogs.h
 )

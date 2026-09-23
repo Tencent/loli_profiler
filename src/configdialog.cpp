@@ -201,6 +201,56 @@ ConfigDialog::Settings ConfigDialog::GetCurrentSettings() {
     return currentSettings_;
 }
 
+// Writes the current + saved settings to loli3.conf. Mode-agnostic (no Qt
+// Widgets), so it can be shared by the GUI dialog and the ImGui GUI.
+static void WriteConfigFileToDisk() {
+    auto cfgPaths = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation);
+    auto cfgPath = cfgPaths.first();
+    QDir().mkpath(cfgPath);
+    QFile file(cfgPath + "/loli3.conf");
+    file.remove();
+    file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+    if (file.open(QIODevice::ReadWrite | QIODevice::Truncate | QIODevice::Text)) {
+        QTextStream stream(&file);
+        auto saveSettings = [](QTextStream& stream, const ConfigDialog::Settings& settings) {
+            stream << "threshold:" << settings.threshold_ << endl;
+            stream << "whitelist:";
+            auto numLibs = settings.whitelist_.count();
+            for (int i = 0; i < numLibs; i++) {
+                stream << settings.whitelist_[i];
+                if (i != numLibs) stream << ',';
+            }
+            stream << endl;
+            stream << "blacklist:";
+            numLibs = settings.blacklist_.count();
+            for (int i = 0; i < numLibs; i++) {
+                stream << settings.blacklist_[i];
+                if (i != numLibs) stream << ',';
+            }
+            stream << endl;
+            stream << "mode:" << settings.mode_ << endl;
+            stream << "build:" << settings.build_ << endl;
+            stream << "type:" << settings.type_ << endl;
+            stream << "arch:" << settings.arch_ << endl;
+            stream << "compiler:" << settings.compiler_ << endl;
+            stream << "hook:" << settings.hook_ << endl;
+        };
+        saveSettings(stream, currentSettings_);
+        for (auto it = savedSettings_.begin(); it != savedSettings_.end(); ++it) {
+            stream << "saved:" << it.key() << endl;
+            saveSettings(stream, it.value());
+        }
+        stream.flush();
+    }
+    file.close();
+}
+
+void ConfigDialog::SetCurrentSettings(const Settings& settings) {
+    currentSettings_ = settings;
+    settingsInitialized_ = true;
+    WriteConfigFileToDisk();
+}
+
 bool ConfigDialog::IsNoStackMode() {
     return GetCurrentSettings().mode_ == "nostack";
 }

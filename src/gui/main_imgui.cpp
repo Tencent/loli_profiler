@@ -10,6 +10,7 @@
 #include "filedialogs.h"
 #include "guidatabridge.h"
 #include "guisnapshot.h"
+#include "runlaunchdialog.h"
 
 #include <QSettings>
 #include <QString>
@@ -218,6 +219,7 @@ int main() {
     // are pumped by the Qt event loop integration used elsewhere).
     gui::GuiDataBridge bridge;
     gui::GuiSnapshot snapshot;
+    gui::RunLaunchDialog runLaunchDialog;
 
     std::string loadedRecordName;
     sf::Texture screenshotTexture;
@@ -245,8 +247,8 @@ int main() {
         // Menu bar
         if (ImGui::BeginMainMenuBar()) {
             if (ImGui::BeginMenu("File")) {
-                if (ImGui::MenuItem("Run/Launch...", nullptr, false, false)) {
-                    // TODO: launch profiling session
+                if (ImGui::MenuItem("Run/Launch...")) {
+                    runLaunchDialog.Open(&bridge);
                 }
                 if (ImGui::MenuItem("Open Record...")) {
                     if (auto path = FileDialogs::OpenFile({{"Loli Record", "loli"}})) {
@@ -277,6 +279,26 @@ int main() {
             }
             ImGui::EndMainMenuBar();
         }
+
+        // Toolbar: Run/Launch + Stop Capture
+        if (ImGui::Begin("Toolbar", nullptr,
+                         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar)) {
+            if (ImGui::Button("Run/Launch")) {
+                runLaunchDialog.Open(&bridge);
+            }
+            ImGui::SameLine();
+            if (!snapshot.capture.capturing)
+                ImGui::BeginDisabled();
+            if (ImGui::Button("Stop Capture")) {
+                bridge.StopCapture();
+            }
+            if (!snapshot.capture.capturing)
+                ImGui::EndDisabled();
+        }
+        ImGui::End();
+
+        // Modal Run/Launch dialog (no-op unless open).
+        runLaunchDialog.Render();
 
         // Dockable panels
         if (ImGui::Begin("Capture Status")) {

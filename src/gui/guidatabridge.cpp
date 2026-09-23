@@ -320,6 +320,41 @@ bool GuiDataBridge::IsCapturing() const { return isCapturing_; }
 bool GuiDataBridge::IsConnected() const { return isConnected_; }
 
 // ---------------------------------------------------------------------------
+// config
+// ---------------------------------------------------------------------------
+CaptureConfigSnapshot GuiDataBridge::GetCaptureConfig() const {
+    const auto s = ConfigDialog::GetCurrentSettings();
+    CaptureConfigSnapshot c;
+    c.threshold = s.threshold_;
+    c.mode      = s.mode_.toStdString();
+    c.build     = s.build_.toStdString();
+    c.type      = s.type_.toStdString();
+    c.arch      = s.arch_.toStdString();
+    c.compiler  = s.compiler_.toStdString();
+    c.hook      = s.hook_.toStdString();
+    for (const auto& w : s.whitelist_) c.whitelist.push_back(w.toStdString());
+    for (const auto& b : s.blacklist_) c.blacklist.push_back(b.toStdString());
+    return c;
+}
+
+void GuiDataBridge::SaveCaptureConfig(const CaptureConfigSnapshot& config) {
+    ConfigDialog::Settings s = ConfigDialog::GetCurrentSettings();
+    s.threshold_ = config.threshold;
+    s.mode_      = QString::fromStdString(config.mode);
+    s.build_     = QString::fromStdString(config.build);
+    s.type_      = QString::fromStdString(config.type);
+    s.arch_      = QString::fromStdString(config.arch);
+    s.compiler_  = QString::fromStdString(config.compiler);
+    s.hook_      = QString::fromStdString(config.hook);
+    s.whitelist_.clear();
+    for (const auto& w : config.whitelist) s.whitelist_ << QString::fromStdString(w);
+    s.blacklist_.clear();
+    for (const auto& b : config.blacklist) s.blacklist_ << QString::fromStdString(b);
+    ConfigDialog::SetCurrentSettings(s);
+    AppendLog("Capture configuration saved.");
+}
+
+// ---------------------------------------------------------------------------
 // record file I/O (reuses the exact .loli QDataStream layout)
 // ---------------------------------------------------------------------------
 bool GuiDataBridge::LoadRecord(const QString& path) {

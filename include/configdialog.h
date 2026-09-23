@@ -46,7 +46,10 @@ public:
     static Settings ParseConfigFile();
     static bool IsNoStackMode();
     static Settings GetCurrentSettings();
-    
+    // Applies new current settings and persists them to loli3.conf.
+    // Works in both GUI and NO_GUI_MODE builds.
+    static void SetCurrentSettings(const Settings& settings);
+
 #ifndef NO_GUI_MODE
 private:
     static bool CreateIfNoConfigFile(QWidget *parent = nullptr);

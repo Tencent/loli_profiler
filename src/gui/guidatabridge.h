@@ -66,6 +66,10 @@ public:
     bool LoadRecord(const QString& path);
     bool SaveRecord(const QString& path);
 
+    // ---- config ----
+    CaptureConfigSnapshot GetCaptureConfig() const;
+    void SaveCaptureConfig(const CaptureConfigSnapshot& config);
+
     // ---- snapshot access (called from ImGui render thread) ----
     // Copies the latest state into `out`. Thread-safe.
     void UpdateSnapshot(GuiSnapshot& out);

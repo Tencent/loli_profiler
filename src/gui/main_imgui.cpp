@@ -11,6 +11,7 @@
 #include "guidatabridge.h"
 #include "guisnapshot.h"
 #include "runlaunchdialog.h"
+#include "stacktracetree.h"
 
 #include <QSettings>
 #include <QString>
@@ -66,41 +67,83 @@ void DrawCaptureStatusPanel(const gui::GuiSnapshot& snapshot) {
     ImGui::Text("Elapsed:  %s", FormatElapsed(cap.elapsedMs).c_str());
 }
 
-void DrawStacktracePanel(const gui::GuiSnapshot& snapshot) {
+void DrawStacktracePanel(const gui::GuiSnapshot& snapshot, gui::StacktraceTree& tree,
+                         size_t& builtRecordCount, char* filterBuf, size_t filterBufSize) {
     if (snapshot.records.empty()) {
         ImGui::TextUnformatted("No allocation records loaded.");
         return;
     }
 
-    if (!ImGui::BeginTable("stacktrace_table", 5,
-                           ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
-                               ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable)) {
+    // Rebuild the aggregated tree only when the record set grows (new data).
+    if (snapshot.records.size() != builtRecordCount) {
+        tree.Rebuild(snapshot.records, snapshot.recordFrames);
+        builtRecordCount = snapshot.records.size();
+    }
+
+    // Toolbar: filter + expand/collapse + stats.
+    if (ImGui::InputTextWithHint("##treefilter", "filter function/library...",
+                                 filterBuf, filterBufSize)) {
+        tree.SetFilter(filterBuf);
+    }
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Expand All"))   tree.ExpandAll();
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Collapse All")) tree.CollapseAll();
+    ImGui::SameLine();
+    ImGui::TextDisabled("(%zu nodes)", tree.Nodes().size());
+
+    // Tree table: flat visible rows rendered via clipper for large datasets.
+    const ImGuiTableFlags flags =
+        ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY |
+        ImGuiTableFlags_Resizable;
+    if (!ImGui::BeginTable("stacktrace_tree", 3, flags)) {
         return;
     }
     ImGui::TableSetupScrollFreeze(0, 1);
-    ImGui::TableSetupColumn("Seq", ImGuiTableColumnFlags_WidthFixed, 60.0f);
-    ImGui::TableSetupColumn("Time", ImGuiTableColumnFlags_WidthFixed, 80.0f);
-    ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed, 100.0f);
-    ImGui::TableSetupColumn("Address", ImGuiTableColumnFlags_WidthFixed, 110.0f);
-    ImGui::TableSetupColumn("Library", ImGuiTableColumnFlags_WidthStretch);
+    ImGui::TableSetupColumn("Function", ImGuiTableColumnFlags_WidthStretch);
+    ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed, 110.0f);
+    ImGui::TableSetupColumn("Count", ImGuiTableColumnFlags_WidthFixed, 80.0f);
     ImGui::TableHeadersRow();
 
+    const auto& rows = tree.VisibleRows();
     ImGuiListClipper clipper;
-    clipper.Begin(static_cast<int>(snapshot.records.size()));
+    clipper.Begin(static_cast<int>(rows.size()));
     while (clipper.Step()) {
-        for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row) {
-            const gui::RecordSnapshot& rec = snapshot.records[row];
+        for (int r = clipper.DisplayStart; r < clipper.DisplayEnd; ++r) {
+            const auto& row = rows[r];
+            const auto& node = tree.NodeAt(row.nodeIndex);
+
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
-            ImGui::Text("%u", rec.seq);
+
+            // Indent + expander. Use Selectable spanning for row interaction.
+            ImGui::PushID(row.nodeIndex);
+            if (row.hasChildren) {
+                const char* arrow = row.expanded ? "[-]" : "[+]";
+                ImGui::TextUnformatted(arrow);
+                if (ImGui::IsItemClicked())
+                    tree.SetExpanded(row.nodeIndex, !row.expanded);
+                ImGui::SameLine();
+            } else {
+                ImGui::TextUnformatted(" ");
+                ImGui::SameLine();
+            }
+            // indent by depth
+            for (int d = 0; d < row.depth; ++d) {
+                ImGui::Indent(14.0f);
+            }
+            ImGui::TextUnformatted(node.funcName.c_str());
+            if (ImGui::IsItemHovered() && !node.library.empty())
+                ImGui::SetTooltip("%s", node.library.c_str());
+            for (int d = 0; d < row.depth; ++d) {
+                ImGui::Unindent(14.0f);
+            }
+
             ImGui::TableNextColumn();
-            ImGui::Text("%d ms", rec.timeMs);
+            ImGui::Text("%s", FormatBytes(node.totalSize).c_str());
             ImGui::TableNextColumn();
-            ImGui::Text("%s", FormatBytes(static_cast<uint64_t>(rec.size)).c_str());
-            ImGui::TableNextColumn();
-            ImGui::Text("0x%llX", static_cast<unsigned long long>(rec.addr));
-            ImGui::TableNextColumn();
-            ImGui::TextUnformatted(rec.library.empty() ? "-" : rec.library.c_str());
+            ImGui::Text("%u", node.allocCount);
+            ImGui::PopID();
         }
     }
     ImGui::EndTable();
@@ -225,6 +268,9 @@ int main() {
     sf::Texture screenshotTexture;
     size_t uploadedScreenshotCount = 0;
     size_t lastConsoleLineCount = 0;
+    gui::StacktraceTree stacktraceTree;
+    size_t stacktraceBuiltRecords = 0;
+    char stacktraceFilter[256] = {0};
 
     sf::Clock deltaClock;
     while (window.isOpen()) {
@@ -307,7 +353,8 @@ int main() {
         ImGui::End();
 
         if (ImGui::Begin("Stacktrace")) {
-            DrawStacktracePanel(snapshot);
+            DrawStacktracePanel(snapshot, stacktraceTree, stacktraceBuiltRecords,
+                                stacktraceFilter, sizeof(stacktraceFilter));
         }
         ImGui::End();
 

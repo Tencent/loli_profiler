@@ -6,12 +6,14 @@
 #include "imgui.h"
 #include "imgui-SFML.h"
 
+#include "chartwidgets.h"
 #include "themes.h"
 #include "filedialogs.h"
 #include "guidatabridge.h"
 #include "guisnapshot.h"
 #include "runlaunchdialog.h"
 #include "stacktracetree.h"
+#include "treemappanel.h"
 
 #include <QSettings>
 #include <QString>
@@ -149,29 +151,6 @@ void DrawStacktracePanel(const gui::GuiSnapshot& snapshot, gui::StacktraceTree& 
     ImGui::EndTable();
 }
 
-void DrawTimelinePanel(const gui::GuiSnapshot& snapshot) {
-    if (snapshot.memTimeline.empty()) {
-        ImGui::TextUnformatted("No memory timeline data.");
-        return;
-    }
-    ImGui::Text("Samples: %zu", snapshot.memTimeline.size());
-    ImGui::Text("Latest total: %s",
-                FormatBytes(snapshot.memTimeline.back().total).c_str());
-}
-
-void DrawTreemapPanel(const gui::GuiSnapshot& snapshot) {
-    ImGui::Text("Call tree nodes: %zu", snapshot.callTree.size());
-    ImGui::TextUnformatted("Treemap visualization coming soon.");
-}
-
-void DrawSmapsPanel(const gui::GuiSnapshot& snapshot) {
-    if (snapshot.smaps.empty()) {
-        ImGui::TextUnformatted("No smaps data.");
-        return;
-    }
-    ImGui::Text("Sections: %zu", snapshot.smaps.size());
-}
-
 void DrawScreenshotPanel(const gui::GuiSnapshot& snapshot, sf::Texture& texture,
                          size_t& uploadedCount) {
     if (snapshot.screenshots.empty()) {
@@ -271,6 +250,8 @@ int main() {
     gui::StacktraceTree stacktraceTree;
     size_t stacktraceBuiltRecords = 0;
     char stacktraceFilter[256] = {0};
+    gui::TimelineView timelineView;
+    gui::TreemapState treemapState;
 
     sf::Clock deltaClock;
     while (window.isOpen()) {
@@ -359,17 +340,17 @@ int main() {
         ImGui::End();
 
         if (ImGui::Begin("Timeline")) {
-            DrawTimelinePanel(snapshot);
+            gui::DrawMemoryTimelineChart(snapshot, timelineView);
         }
         ImGui::End();
 
         if (ImGui::Begin("Treemap")) {
-            DrawTreemapPanel(snapshot);
+            gui::DrawTreemapPanel(stacktraceTree, treemapState);
         }
         ImGui::End();
 
         if (ImGui::Begin("Smaps")) {
-            DrawSmapsPanel(snapshot);
+            gui::DrawSmapsPanel(snapshot);
         }
         ImGui::End();
 

@@ -330,6 +330,8 @@ set(IMGUI_GUI_SRCS
     src/gui/guidatabridge.cpp
     src/gui/stacktracetree.cpp
     src/gui/runlaunchdialog.cpp
+    src/gui/chartwidgets.cpp
+    src/gui/treemappanel.cpp
     thirdparty/imgui/backends/imgui_impl_opengl3.cpp
 )
 
@@ -366,9 +368,12 @@ set(IMGUI_GUI_CORE_INCS
     include/pathutils.h
     include/smaps/smapssection.h
     src/gui/guisnapshot.h
+    src/gui/chartwidgets.h
     src/gui/guidatabridge.h
     src/gui/stacktracetree.h
     src/gui/runlaunchdialog.h
+    src/gui/chartwidgets.h
+    src/gui/treemappanel.h
     src/gui/themes.h
     src/gui/filedialogs.h
 )

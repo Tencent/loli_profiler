@@ -7,6 +7,9 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Option to build GUI (default ON for backward compatibility)
 option(BUILD_GUI "Build GUI application" ON)
 
+# Option to build the new Dear ImGui-based GUI (experimental)
+option(BUILD_IMGUI_GUI "Build ImGui GUI application" ON)
+
 if (APPLE)
     set(OS_BUNDLE MACOSX_BUNDLE)
     set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13" CACHE STRING "Minimum OS X deployment version")
@@ -289,3 +292,86 @@ if(APPLE AND NOT XCODE_VERSION)
 endif()
 
 install(TARGETS LoliProfilerCLI DESTINATION ${CMAKE_BINARY_DIR}/bin/release)
+
+# ============================================================================
+# ImGui GUI Application (LoliProfilerImGui) - experimental, SFML + Dear ImGui
+# ============================================================================
+if(BUILD_IMGUI_GUI)
+
+find_package(Qt5 COMPONENTS Core Network REQUIRED)
+
+# --- Third-party dependencies (vendored under thirdparty/) ---
+
+# SFML 3 (static, no audio/network)
+set(SFML_BUILD_AUDIO OFF CACHE BOOL "" FORCE)
+set(SFML_BUILD_NETWORK OFF CACHE BOOL "" FORCE)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+add_subdirectory(thirdparty/SFML)
+
+# ImGui-SFML v3 (expects IMGUI_DIR pointing at the imgui top-level dir,
+# and IMGUI_SFML_FIND_SFML=OFF so it uses the SFML target from add_subdirectory)
+set(IMGUI_SFML_FIND_SFML OFF CACHE BOOL "" FORCE)
+set(IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/imgui CACHE PATH "imgui top-level directory" FORCE)
+add_subdirectory(thirdparty/imgui-sfml)
+
+# nativefiledialog-extended (target: nfd)
+add_subdirectory(thirdparty/nativefiledialog-extended)
+
+# --- Sources ---
+# NOTE: add new GUI source files to this list as they are created
+# (file(GLOB src/gui/*.cpp) could be used instead, explicit list matches repo style).
+# ImGui core sources (imgui/imgui_demo/imgui_draw/imgui_tables/imgui_widgets) are
+# compiled into the ImGui-SFML target itself via its FindImGui.cmake; only the
+# OpenGL3 backend is compiled here.
+set(IMGUI_GUI_SRCS
+    src/gui/main_imgui.cpp
+    thirdparty/imgui/backends/imgui_impl_opengl3.cpp
+)
+
+add_executable(LoliProfilerImGui ${OS_BUNDLE}
+    ${IMGUI_GUI_SRCS}
+)
+
+# C++17 is required by SFML 3 / ImGui-SFML (do NOT change the global standard)
+set_target_properties(LoliProfilerImGui PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+
+if(MSVC)
+    # No /WX here: vendored deps are compiled as-is and would trip -Werror-style builds
+    target_compile_options(LoliProfilerImGui PRIVATE "/W3" "/EHsc" "/MP")
+    target_compile_definitions(LoliProfilerImGui PRIVATE "_CRT_SECURE_NO_WARNINGS=1" "NOGDI" "NOMINMAX")
+else()
+    target_compile_options(LoliProfilerImGui PRIVATE "-Wall" "-Wextra" $<$<COMPILE_LANGUAGE:CXX>:-Wno-invalid-offsetof;-fno-rtti> "-Wno-missing-braces")
+endif()
+
+target_include_directories(LoliProfilerImGui
+    PRIVATE
+        thirdparty/imgui
+)
+
+target_link_libraries(LoliProfilerImGui
+    PRIVATE
+        SFML::Graphics
+        SFML::Window
+        SFML::System
+        ImGui-SFML::ImGui-SFML
+        nfd
+        Qt5::Core
+        Qt5::Network
+)
+
+if(WIN32)
+    target_link_libraries(LoliProfilerImGui PRIVATE opengl32)
+elseif(APPLE)
+    target_link_libraries(LoliProfilerImGui PRIVATE "-framework OpenGL")
+endif()
+
+if(APPLE AND NOT XCODE_VERSION)
+    add_custom_command(TARGET LoliProfilerImGui
+        POST_BUILD COMMAND
+        ${CMAKE_INSTALL_NAME_TOOL} -add_rpath "@executable_path/../Frameworks/"
+        $<TARGET_FILE:LoliProfilerImGui>)
+endif()
+
+install(TARGETS LoliProfilerImGui DESTINATION ${CMAKE_BINARY_DIR}/bin/release)
+
+endif() # BUILD_IMGUI_GUI

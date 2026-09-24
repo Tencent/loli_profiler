@@ -348,6 +348,7 @@ int main(int argc, char** argv) {
     int loadingFrames = 0;
     double lastTreeBuildMs = 0.0;
     double worstFrameMs = 0.0;
+    bool wasLoading = false;
 
     // Adopt the worker-built aggregated tree when the snapshot version changes.
     // The tree arrives pre-built (interned strings) inside the snapshot, so this
@@ -454,11 +455,16 @@ int main(int argc, char** argv) {
 
         // Fixed toolbar strip at the top, directly under the menubar and above
         // the dockspace. Attached to the main viewport; it does not dock/float.
-        const float toolbarHeight = ImGui::GetFrameHeightWithSpacing();
+        // Height = button height + vertical padding so buttons aren't clipped.
+        const float toolbarHeight = ImGui::GetFrameHeightWithSpacing() +
+                                    ImGui::GetStyle().FramePadding.y * 2.0f +
+                                    ImGui::GetStyle().ItemSpacing.y;
         if (ImGui::BeginViewportSideBar("##MainToolBar", ImGui::GetMainViewport(),
                                         ImGuiDir_Up, toolbarHeight,
                                         ImGuiWindowFlags_NoScrollbar |
                                             ImGuiWindowFlags_NoSavedSettings)) {
+            // Vertically center the buttons in the strip.
+            ImGui::SetCursorPosY(ImGui::GetStyle().FramePadding.y);
             if (ImGui::Button("Run/Launch")) {
                 runLaunchDialog.Open(&bridge);
             }
@@ -516,18 +522,27 @@ int main(int argc, char** argv) {
         ImGui::End();
 
         // Loading overlay: modal progress while a record parses on the worker
-        // thread, so the UI never appears frozen.
-        if (bridge.IsLoading()) {
+        // thread, so the UI never appears frozen. We open it once on the loading
+        // rising edge and close it once on the falling edge — calling OpenPopup
+        // every frame would keep it open forever after loading finishes.
+        const bool isLoading = bridge.IsLoading();
+        if (isLoading && !wasLoading)
             ImGui::OpenPopup("Loading Record");
-        }
+        wasLoading = isLoading;
+
         if (ImGui::BeginPopupModal("Loading Record", nullptr,
                                    ImGuiWindowFlags_AlwaysAutoResize |
                                    ImGuiWindowFlags_NoMove)) {
-            ImGui::TextUnformatted("Loading record, please wait...");
-            const float progress = bridge.LoadProgress();
-            ImGui::ProgressBar(progress, ImVec2(360, 0));
-            ImGui::Text("%.0f%%", progress * 100.0f);
-            ImGui::EndPopup();
+            if (!isLoading) {
+                ImGui::CloseCurrentPopup();
+                ImGui::EndPopup();
+            } else {
+                ImGui::TextUnformatted("Loading record, please wait...");
+                const float progress = bridge.LoadProgress();
+                ImGui::ProgressBar(progress, ImVec2(360, 0));
+                ImGui::Text("%.0f%%", progress * 100.0f);
+                ImGui::EndPopup();
+            }
         }
 
         window.clear();

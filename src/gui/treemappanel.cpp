@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <vector>
 
 namespace gui {
@@ -160,6 +161,15 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
 
             // Display layer.
             disp->clear(sf::Color(24, 24, 28));
+
+            // Load a font once for cell labels (Segoe UI on Windows, matching the
+            // ImGui UI font). Static so it persists across renders.
+            static sf::Font font;
+            static bool fontLoaded = false;
+            if (!fontLoaded) {
+                fontLoaded = font.openFromFile("C:/Windows/Fonts/segoeui.ttf");
+            }
+
             for (const auto& c : cells) {
                 const auto& node = tree.NodeAt(c.nodeIndex);
                 sf::RectangleShape r(sf::Vector2f(c.rect.w - 1, c.rect.h - 1));
@@ -168,6 +178,18 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
                 r.setOutlineThickness(1.0f);
                 r.setOutlineColor(sf::Color(16, 16, 16));
                 disp->draw(r);
+
+                // Cell label (top depth levels, only where the cell is big enough).
+                if (fontLoaded && c.rect.w > 40.0f && c.rect.h > 16.0f && c.depth <= 2) {
+                    const char* name = tree.PoolStr(node.funcName);
+                    sf::Text text(font, sf::String::fromUtf8(name, name + std::strlen(name)),
+                                  12u);
+                    text.setPosition({ c.rect.x + 3.0f, c.rect.y + 1.0f });
+                    text.setFillColor(sf::Color(255, 255, 255, 235));
+                    // Clip: skip drawing if the text is wider than the cell.
+                    if (text.getLocalBounds().size.x < c.rect.w - 6.0f)
+                        disp->draw(text);
+                }
             }
             disp->display();
 

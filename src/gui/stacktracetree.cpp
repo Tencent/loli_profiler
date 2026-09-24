@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 
 namespace gui {
 
@@ -9,51 +10,90 @@ void StacktraceTree::Clear() {
     nodes_.clear();
     roots_.clear();
     visibleRows_.clear();
-    // expandedIds_ intentionally retained so expansion survives a rebuild
-    // against the same logical tree (ids are stable per funcName path).
+    // expandedIds_ retained so expansion survives a rebuild of the same tree.
 }
 
-void StacktraceTree::Rebuild(
-    const std::vector<RecordSnapshot>& records,
-    const std::vector<std::vector<StackFrameSnapshot>>& framesFor) {
+void StacktraceTree::Adopt(StacktraceTree&& other) {
+    nodes_  = std::move(other.nodes_);
+    roots_  = std::move(other.roots_);
+    pool_   = std::move(other.pool_);
+    poolIndex_ = std::move(other.poolIndex_);
+    nextId_ = other.nextId_;
+    // Keep our expandedIds_/filter_; visible list is rebuilt below.
+    RebuildVisible();
+}
+
+int32_t StacktraceTree::Intern(const std::string& s) {
+    auto it = poolIndex_.find(s);
+    if (it != poolIndex_.end())
+        return it->second;
+    int32_t idx = static_cast<int32_t>(pool_.size());
+    pool_.push_back(s);
+    poolIndex_.emplace(pool_.back(), idx);
+    return idx;
+}
+
+void StacktraceTree::BuildFromRecords(
+    const std::vector<uint32_t>& recordSizes,
+    const std::vector<std::vector<RawFrameIdx>>& recordFrames,
+    const std::vector<std::string>& funcNames,
+    const std::vector<std::string>& libNames) {
 
     nodes_.clear();
     roots_.clear();
+    pool_.clear();
+    poolIndex_.clear();
     nextId_ = 1;
 
-    // Merge records into an aggregated tree keyed by root-first frame path.
-    // A path-key map finds an existing node at each level.
-    std::unordered_map<std::string, int32_t> pathMap;
-    pathMap.reserve(records.size() * 2);
+    const size_t recordCount = recordFrames.size();
 
-    const size_t count = records.size();
-    for (size_t i = 0; i < count; i++) {
-        const auto& rec = records[i];
-        const auto& frames = (i < framesFor.size()) ? framesFor[i]
-                                                    : std::vector<StackFrameSnapshot>{};
+    // Pre-intern the caller's string tables into our pool once, so per-frame we
+    // only ever copy an index (never a string). Map caller-index -> pool-index.
+    std::vector<int32_t> funcPoolIdx(funcNames.size());
+    for (size_t k = 0; k < funcNames.size(); k++)
+        funcPoolIdx[k] = Intern(funcNames[k]);
+    std::vector<int32_t> libPoolIdx(libNames.size());
+    for (size_t k = 0; k < libNames.size(); k++)
+        libPoolIdx[k] = Intern(libNames[k]);
+
+    // Merge records into an aggregated tree. Instead of building a full path
+    // STRING per frame (snprintf + string hash over 100M+ frames), key each node
+    // by the integer pair (parentNodeIndex, funcPoolIndex) -> childNodeIndex.
+    // This is allocation-free in the hot loop and dramatically faster.
+    struct PairHash {
+        size_t operator()(const uint64_t v) const noexcept {
+            return std::hash<uint64_t>()(v * 0x9E3779B97F4A7C15ULL);
+        }
+    };
+    // key = (parent+1) << 32 | funcPoolIndex   (parent -1 -> 0)
+    std::unordered_map<uint64_t, int32_t, PairHash> nodeMap;
+    nodeMap.reserve(recordCount / 2 + 16);
+
+    for (size_t i = 0; i < recordCount; i++) {
+        const auto& frames = recordFrames[i];
         if (frames.empty())
             continue;
+        const uint32_t size = i < recordSizes.size() ? recordSizes[i] : 0;
 
         int32_t parent = -1;
-        std::string path;
-        path.reserve(256);
-        for (const auto& frame : frames) {
-            path += frame.funcName;
-            path += '\x1f';  // unit separator, avoids collisions
+        for (const RawFrameIdx& fr : frames) {
+            const int32_t fIdx = fr.funcName < funcPoolIdx.size() ? funcPoolIdx[fr.funcName] : -1;
+            const int32_t lIdx = fr.library  < libPoolIdx.size()  ? libPoolIdx[fr.library]  : -1;
 
-            auto it = pathMap.find(path);
+            const uint64_t key = (uint64_t)(uint32_t)(parent + 1) << 32 | (uint32_t)fIdx;
+            auto it = nodeMap.find(key);
             int32_t nodeIndex;
-            if (it != pathMap.end()) {
+            if (it != nodeMap.end()) {
                 nodeIndex = it->second;
             } else {
                 nodeIndex = static_cast<int32_t>(nodes_.size());
                 Node node;
-                node.funcName = frame.funcName;
-                node.library  = frame.library;
+                node.funcName = fIdx;
+                node.library  = lIdx;
                 node.parent   = parent;
                 node.id       = nextId_++;
-                nodes_.push_back(std::move(node));
-                pathMap.emplace(path, nodeIndex);
+                nodes_.push_back(node);
+                nodeMap.emplace(key, nodeIndex);
                 if (parent >= 0)
                     nodes_[parent].children.push_back(nodeIndex);
                 else
@@ -62,17 +102,20 @@ void StacktraceTree::Rebuild(
             parent = nodeIndex;
         }
 
-        // Attribute the record size up the chain (every ancestor aggregates).
-        const uint64_t sz = rec.size > 0 ? static_cast<uint64_t>(rec.size) : 0;
+        if (parent < 0)
+            continue;
+
         int32_t walk = parent;
         while (walk >= 0) {
-            nodes_[walk].totalSize += sz;
+            nodes_[walk].totalSize += size;
             nodes_[walk].allocCount += 1;
             walk = nodes_[walk].parent;
         }
     }
+    std::fprintf(stderr, "[tree-dbg] afterLoop nodes=%zu roots=%zu pool=%zu recordCount=%zu\n",
+                 nodes_.size(), roots_.size(), pool_.size(), recordCount);
+    std::fflush(stderr);
 
-    // Sort children by total size descending for a stable, useful ordering.
     for (auto& node : nodes_) {
         std::sort(node.children.begin(), node.children.end(),
                   [&](int32_t a, int32_t b) {
@@ -149,8 +192,10 @@ void StacktraceTree::AppendVisible(int32_t nodeIndex, int32_t depth) {
 
 bool StacktraceTree::MatchesFilterRecursive(int32_t nodeIndex) const {
     const Node& node = nodes_[nodeIndex];
-    // Case-insensitive substring match on funcName or library.
-    auto containsCI = [&](const std::string& hay) {
+    auto containsCI = [&](int32_t poolIdx) {
+        if (poolIdx < 0 || poolIdx >= (int32_t)pool_.size())
+            return false;
+        const std::string& hay = pool_[poolIdx];
         auto it = std::search(hay.begin(), hay.end(), filter_.begin(), filter_.end(),
             [](char a, char b) {
                 return std::tolower(static_cast<unsigned char>(a)) ==

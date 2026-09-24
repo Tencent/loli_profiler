@@ -127,7 +127,7 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state) {
             state.focusedNode = tree.NodeAt(state.focusedNode).parent;
         }
         ImGui::SameLine();
-        ImGui::TextDisabled("| %s", tree.NodeAt(state.focusedNode).funcName.c_str());
+        ImGui::TextDisabled("| %s", tree.PoolStr(tree.NodeAt(state.focusedNode).funcName));
     }
 
     // choose top-level items: roots, or children of the focused node
@@ -171,7 +171,7 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state) {
         if (cell.rect.w > 50.0f && cell.rect.h > 18.0f) {
             dl->PushClipRect(p0, p1, true);
             dl->AddText(ImVec2(p0.x + 3, p0.y + 2), IM_COL32(255, 255, 255, 230),
-                        node.funcName.c_str());
+                        tree.PoolStr(node.funcName));
             dl->PopClipRect();
         }
     }
@@ -180,9 +180,9 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state) {
     if (state.hoveredNode >= 0) {
         const auto& node = tree.NodeAt(state.hoveredNode);
         ImGui::BeginTooltip();
-        ImGui::Text("%s", node.funcName.c_str());
-        if (!node.library.empty())
-            ImGui::TextDisabled("%s", node.library.c_str());
+        ImGui::Text("%s", tree.PoolStr(node.funcName));
+        if (node.library >= 0)
+            ImGui::TextDisabled("%s", tree.PoolStr(node.library));
         ImGui::Text("%llu bytes, %u allocs",
                     (unsigned long long)node.totalSize, node.allocCount);
         if (!node.children.empty())

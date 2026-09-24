@@ -6,10 +6,15 @@
 // the GUI target) fills these from core profiling state once per frame/update.
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
 namespace gui {
+
+// Forward decl: the aggregated call tree is built on a worker thread and
+// handed to the UI inside the snapshot (avoids a UI-thread rebuild).
+class StacktraceTree;
 
 // A single allocation/free record (mirrors core StackRecord, Qt-free).
 struct RecordSnapshot {
@@ -106,9 +111,9 @@ struct GuiSnapshot {
     std::vector<DeviceSnapshot>      devices;
     std::vector<std::string>         installedApps;
     std::vector<RecordSnapshot>      records;      // flat allocation records
-    // resolved call frames per record (parallel to records); each is root-first
-    std::vector<std::vector<StackFrameSnapshot>> recordFrames;
-    std::vector<CallTreeNode>        callTree;     // merged callstack tree
+    // The aggregated call tree, pre-built on the loader worker thread. The UI
+    // adopts it (move) when a new snapshot version arrives. Null when empty.
+    std::shared_ptr<StacktraceTree>  stackTree;
     std::vector<MemInfoSample>       memTimeline;
     std::vector<ScreenshotSnapshot>  screenshots;
     std::vector<SMapsSectionSnapshot> smaps;

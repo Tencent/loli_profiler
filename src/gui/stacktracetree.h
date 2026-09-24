@@ -1,78 +1,101 @@
 #ifndef LOLI_PROFILER_GUI_STACKTRACETREE_H
 #define LOLI_PROFILER_GUI_STACKTRACETREE_H
 
-// StacktraceTree — builds a merged, aggregated call-tree from flat allocation
-// records and exposes a FLAT, clipper-ready list of visible rows for ImGui.
+// StacktraceTree — builds a merged, aggregated call-tree and exposes a FLAT,
+// clipper-ready list of visible rows for ImGui.
 //
-// Performance design (mirrors Qt model/view virtualization, without Qt):
-//  - The aggregated tree is built ONCE from the snapshot records (on demand via
-//    Rebuild), not per frame.
-//  - The visible-row list is a flat std::vector<VisibleRow> rebuilt only when
-//    expansion state or filter changes — never per frame.
-//  - ImGui renders it with ImGuiListClipper over VisibleRows(), so only
-//    on-screen rows submit widgets.
+// Performance design (this is the hot path for 300-400MB records):
+//  - The tree is built ONCE on a WORKER THREAD from raw record/callstack data,
+//    with funcName/library stored in an interned string pool (indices, not
+//    copies) so we never materialize millions of duplicate strings.
+//  - The visible-row list is rebuilt only on expansion/filter change.
+//  - ImGui renders VisibleRows() via ImGuiListClipper (only on-screen rows).
 //
-// Pure C++17, no Qt.
+// Pure C++17, no Qt in this header (the raw Qt containers are only touched in
+// the .cpp build path, behind templates/callbacks).
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
-#include "guisnapshot.h"
-
 namespace gui {
 
 class StacktraceTree {
 public:
-    // One aggregated node in the merged call tree.
+    StacktraceTree() = default;
+    // Movable (built on a worker thread, then swapped into the UI-side tree).
+    StacktraceTree(StacktraceTree&&) = default;
+    StacktraceTree& operator=(StacktraceTree&&) = default;
+    StacktraceTree(const StacktraceTree&) = delete;
+    StacktraceTree& operator=(const StacktraceTree&) = delete;
+
+    // Adopt another tree's built data (nodes/pool/roots), preserving this
+    // tree's expansion state where node ids still match.
+    void Adopt(StacktraceTree&& other);
+
+    // One aggregated node. funcName/library are indices into the string pool.
     struct Node {
-        std::string funcName;
-        std::string library;
-        uint64_t    totalSize = 0;   // bytes attributed at/below this node
-        uint32_t    allocCount = 0;  // allocations attributed at/below this node
+        int32_t     funcName = -1;   // index into Pool()
+        int32_t     library  = -1;   // index into Pool()
+        uint64_t    totalSize = 0;
+        uint32_t    allocCount = 0;
         int32_t     parent = -1;
         std::vector<int32_t> children;
         uint64_t    id = 0;          // stable id for expansion state
     };
 
-    // One row in the flattened, expansion-aware visible list.
     struct VisibleRow {
-        int32_t  nodeIndex = -1; // index into nodes_
+        int32_t  nodeIndex = -1;
         int32_t  depth = 0;
         bool     hasChildren = false;
         bool     expanded = false;
     };
 
-    // Build/refresh the aggregated tree from flat records + their callstacks.
-    // `records` are the flat allocation records; `framesFor` returns the resolved
-    // call frames (root-first) for records[i], or empty. Called on data change.
-    void Rebuild(const std::vector<RecordSnapshot>& records,
-                 const std::vector<std::vector<StackFrameSnapshot>>& framesFor);
+    // A single resolved frame fed to the builder (root-first), as string-pool
+    // indices into the vectors passed to BuildFromRecords (no per-frame copies).
+    struct RawFrameIdx {
+        uint32_t funcName;  // index into funcNames[]
+        uint32_t library;   // index into libNames[]
+    };
+
+    // Build the aggregated tree from per-record root-first frame index lists.
+    // funcNames[]/libNames[] are the caller-owned string tables that the frame
+    // indices reference; the tree interns them into its own pool. recordSizes[i]
+    // is the byte size of record i. Runs off the UI thread; no ImGui calls.
+    void BuildFromRecords(
+        const std::vector<uint32_t>& recordSizes,
+        const std::vector<std::vector<RawFrameIdx>>& recordFrames,
+        const std::vector<std::string>& funcNames,
+        const std::vector<std::string>& libNames);
 
     void Clear();
 
-    // Expansion control (keyed by stable node id; survives rebuilds).
     void SetExpanded(int32_t nodeIndex, bool expanded);
     void ExpandAll();
     void CollapseAll();
 
-    // Text filter; empty clears. Rebuilds the visible list.
     void SetFilter(const std::string& text);
     const std::string& Filter() const { return filter_; }
 
-    // Flat visible rows (respecting expansion + filter). Render with clipper.
     const std::vector<VisibleRow>& VisibleRows() const { return visibleRows_; }
     const Node& NodeAt(int32_t index) const { return nodes_[index]; }
     const std::vector<Node>& Nodes() const { return nodes_; }
-    int RootCount() const { return static_cast<int>(roots_.size()); }
     const std::vector<int32_t>& Roots() const { return roots_; }
+
+    // Interned display-string pool (func names + libraries).
+    const std::vector<std::string>& Pool() const { return pool_; }
+    const char* PoolStr(int32_t idx) const {
+        return (idx >= 0 && idx < (int32_t)pool_.size()) ? pool_[idx].c_str() : "";
+    }
 
 private:
     void RebuildVisible();
     void AppendVisible(int32_t nodeIndex, int32_t depth);
     bool MatchesFilterRecursive(int32_t nodeIndex) const;
+    int32_t Intern(const std::string& s);
 
 private:
     std::vector<Node>        nodes_;
@@ -81,6 +104,10 @@ private:
     std::unordered_set<uint64_t> expandedIds_;
     std::string              filter_;
     uint64_t                 nextId_ = 1;
+
+    // string interning
+    std::vector<std::string> pool_;
+    std::unordered_map<std::string, int32_t> poolIndex_;
 };
 
 } // namespace gui

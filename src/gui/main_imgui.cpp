@@ -183,9 +183,9 @@ void DrawStacktracePanel(const gui::GuiSnapshot& snapshot, gui::StacktraceTree& 
             for (int d = 0; d < row.depth; ++d) {
                 ImGui::Indent(14.0f);
             }
-            ImGui::TextUnformatted(node.funcName.c_str());
-            if (ImGui::IsItemHovered() && !node.library.empty())
-                ImGui::SetTooltip("%s", node.library.c_str());
+            ImGui::TextUnformatted(tree.PoolStr(node.funcName));
+            if (ImGui::IsItemHovered() && node.library >= 0)
+                ImGui::SetTooltip("%s", tree.PoolStr(node.library));
             for (int d = 0; d < row.depth; ++d) {
                 ImGui::Unindent(14.0f);
             }
@@ -349,14 +349,18 @@ int main(int argc, char** argv) {
     double lastTreeBuildMs = 0.0;
     double worstFrameMs = 0.0;
 
-    // Rebuild the aggregated tree only when the published snapshot version
-    // changes (new data), never per frame. This keeps the UI responsive.
+    // Adopt the worker-built aggregated tree when the snapshot version changes.
+    // The tree arrives pre-built (interned strings) inside the snapshot, so this
+    // is a cheap move — no UI-thread rebuild.
     auto rebuildTreeIfNeeded = [&]() {
         const uint64_t v = bridge.SnapshotVersion();
         if (v != stacktraceBuiltVersion) {
             const gui::GuiSnapshot& snap = *bridge.AcquireSnapshot();
             const auto t0 = std::chrono::steady_clock::now();
-            stacktraceTree.Rebuild(snap.records, snap.recordFrames);
+            if (snap.stackTree)
+                stacktraceTree.Adopt(std::move(*snap.stackTree));
+            else
+                stacktraceTree.Clear();
             const auto t1 = std::chrono::steady_clock::now();
             lastTreeBuildMs = std::chrono::duration<double, std::milli>(t1 - t0).count();
             stacktraceBuiltVersion = v;

@@ -10,8 +10,10 @@
 #include <QCoreApplication>
 #include <QTimer>
 #include <QDateTime>
+#include <QElapsedTimer>
 #include <QFutureWatcher>
 #include <QtConcurrent>
+#include <cstdio>
 
 #include "configdialog.h"
 #include "meminfoprocess.h"
@@ -19,6 +21,7 @@
 #include "startappprocess.h"
 #include "addressprocess.h"
 #include "pathutils.h"
+#include "stacktracetree.h"
 
 namespace gui {
 
@@ -38,6 +41,8 @@ struct GuiDataBridge::LoadResult {
     QVector<QVector<QPair<double,double>>> memSeries;
     QVector<QPair<qint32, QByteArray>> screenshots;
     QHash<QString, SMapsSection> sMapsSections;
+    // Pre-built aggregated call tree (interned strings), built on the worker.
+    std::shared_ptr<StacktraceTree> stackTree;
 };
 
 GuiDataBridge::GuiDataBridge(QObject* parent)
@@ -273,8 +278,8 @@ void GuiDataBridge::OnStacktraceData() {
         rs.funcAddr = 0;
         rs.library = isNoStack ? stack.library_.Get().toStdString() : std::string();
         working_->records.push_back(std::move(rs));
-        // frames are resolved on demand for capture; left empty here.
-        working_->recordFrames.emplace_back();
+        // frames are resolved on demand for capture; the live-capture tree build
+        // is a follow-up (the record-load path builds it on the worker).
     }
     working_->capture.recordCount = working_->records.size();
     working_->capture.connected = stacktraceProcess_->IsConnected();
@@ -374,6 +379,13 @@ void GuiDataBridge::LoadRecord(const QString& path) {
         result->path = path;
         result->fileName = QFileInfo(path).fileName();
 
+        QElapsedTimer timer;  // milestone timing for perf diagnosis
+        timer.start();
+        auto milestone = [&](const char* tag) {
+            std::fprintf(stderr, "[load] %-16s %lld ms\n", tag, timer.restart());
+            std::fflush(stderr);
+        };
+
         QFile file(path);
         if (!file.open(QFile::ReadOnly))
             return result;
@@ -412,6 +424,7 @@ void GuiDataBridge::LoadRecord(const QString& path) {
             }
         }
         setProgress(file.pos());
+        milestone("memseries");
 
         // string intern table (shared static; read on worker is safe because
         // we rebuild it on the Qt thread before use — here we just consume).
@@ -419,6 +432,7 @@ void GuiDataBridge::LoadRecord(const QString& path) {
         stream >> hashmap;
         HashString::hashmap_ = hashmap;
         setProgress(file.pos());
+        milestone("hashmap");
 
         // records
         qint32 value;
@@ -435,6 +449,7 @@ void GuiDataBridge::LoadRecord(const QString& path) {
             if ((i & 0xFFFF) == 0)
                 setProgress(file.pos());
         }
+        milestone("records");
 
         // callstack map
         stream >> value;
@@ -454,6 +469,7 @@ void GuiDataBridge::LoadRecord(const QString& path) {
             if ((i & 0x3FFF) == 0)
                 setProgress(file.pos());
         }
+        milestone("callstacks");
 
         // symbol map
         stream >> value;
@@ -510,6 +526,96 @@ void GuiDataBridge::LoadRecord(const QString& path) {
                    >> section.sharedClean_ >> section.sharedDirty_;
             result->sMapsSections.insert(name, section);
         }
+        milestone("smaps");
+
+        // Build the aggregated call tree HERE on the worker, with interned
+        // strings. This is the expensive step for large records; doing it off
+        // the UI thread (and once, not per-frame) keeps the GUI responsive.
+        // Symbol resolution is cached per (lib,addr) so we resolve each unique
+        // address only once instead of per frame.
+        {
+            auto tree = std::make_shared<StacktraceTree>();
+            const auto& records = result->records;
+            const auto& callStackMap = result->callStackMap;
+            const auto& symbolMap = result->symbolMap;
+
+            // Per-(lib,addr) resolution cache -> interned display string keys.
+            QHash<QString, QHash<quint64, QString>> resolveCache;
+            auto resolveName = [&](const QString& lib, quint64 addr) -> const QString& {
+                auto& libCache = resolveCache[lib];
+                auto it = libCache.find(addr);
+                if (it != libCache.end())
+                    return it.value();
+                QString name;
+                auto libIt = symbolMap.find(lib);
+                if (libIt != symbolMap.end()) {
+                    auto nameIt = libIt.value().find(addr);
+                    if (nameIt != libIt.value().end() && !nameIt.value().isEmpty())
+                        name = nameIt.value();
+                }
+                if (name.isEmpty())
+                    name = QString("0x%1").arg(addr, 0, 16);
+                return libCache.insert(addr, name).value();
+            };
+
+            // Build per-record root-first frames as INDICES into string tables,
+            // so we never copy a string per frame (105M frames here). Each unique
+            // funcName/libName is resolved+interned once into funcNames/libNames.
+            std::vector<std::string> funcNames;
+            std::vector<std::string> libNames;
+            std::unordered_map<QString, uint32_t> funcIdxOf;
+            std::unordered_map<QString, uint32_t> libIdxOf;
+            auto funcIdxFor = [&](const QString& s) -> uint32_t {
+                auto it = funcIdxOf.find(s);
+                if (it != funcIdxOf.end()) return it->second;
+                uint32_t k = (uint32_t)funcNames.size();
+                funcNames.push_back(s.toStdString());
+                funcIdxOf.emplace(s, k);
+                return k;
+            };
+            auto libIdxFor = [&](const QString& s) -> uint32_t {
+                auto it = libIdxOf.find(s);
+                if (it != libIdxOf.end()) return it->second;
+                uint32_t k = (uint32_t)libNames.size();
+                libNames.push_back(s.toStdString());
+                libIdxOf.emplace(s, k);
+                return k;
+            };
+
+            const size_t n = (size_t)records.size();
+            std::vector<uint32_t> recordSizes(n);
+            std::vector<std::vector<StacktraceTree::RawFrameIdx>> recordFrames(n);
+            size_t framesEmitted = 0, noCallstack = 0;
+            for (size_t i = 0; i < n; i++) {
+                const qint32 sz = records[(int)i].size_;
+                recordSizes[i] = sz > 0 ? (uint32_t)sz : 0u;
+                auto csIt = callStackMap.find(records[(int)i].uuid_);
+                if (csIt == callStackMap.end() || csIt.value().isEmpty()) {
+                    noCallstack++;
+                    continue;
+                }
+                const auto& cs = csIt.value();
+                auto& frames = recordFrames[i];
+                frames.reserve(cs.size());
+                for (int j = cs.size() - 1; j >= 0; j--) {
+                    const QString lib = cs[j].first.Get();
+                    const quint64 addr = cs[j].second;
+                    StacktraceTree::RawFrameIdx f;
+                    f.funcName = funcIdxFor(resolveName(lib, addr));
+                    f.library  = libIdxFor(lib);
+                    frames.push_back(f);
+                    framesEmitted++;
+                }
+            }
+            std::fprintf(stderr, "[tree] build-input framesEmitted=%zu noCallstack=%zu funcs=%zu libs=%zu\n",
+                         framesEmitted, noCallstack, funcNames.size(), libNames.size());
+            std::fflush(stderr);
+            milestone("tree-input");
+
+            tree->BuildFromRecords(recordSizes, recordFrames, funcNames, libNames);
+            milestone("tree");
+            result->stackTree = std::move(tree);
+        }
 
         setProgress(fileSize);
         result->ok = true;
@@ -541,27 +647,21 @@ void GuiDataBridge::OnRecordLoaded() {
         return;
     }
 
-    // Build a fresh snapshot from the loaded data (Qt thread now).
+    // Build a fresh snapshot from the loaded data (Qt thread now). The tree is
+    // already built on the worker; here we only do cheap POD copies.
+    QElapsedTimer snapTimer;
+    snapTimer.start();
+    auto snapMilestone = [&](const char* tag) {
+        std::fprintf(stderr, "[snap] %-16s %lld ms\n", tag, snapTimer.restart());
+        std::fflush(stderr);
+    };
     auto snap = std::make_shared<GuiSnapshot>();
 
+    // Records: cheap POD copy only (no per-record frame strings — the tree is
+    // already built on the worker with interned strings).
     const auto& records = result->records;
     snap->records.reserve(records.size());
-    snap->recordFrames.resize(records.size());
-
-    // resolve symbols helper
-    const auto& symbolMap = result->symbolMap;
-    auto resolve = [&](const QString& lib, quint64 addr) -> QString {
-        auto libIt = symbolMap.find(lib);
-        if (libIt != symbolMap.end()) {
-            auto nameIt = libIt.value().find(addr);
-            if (nameIt != libIt.value().end() && !nameIt.value().isEmpty())
-                return nameIt.value();
-        }
-        return QString("0x%1").arg(addr, 0, 16);
-    };
-
-    for (int i = 0; i < records.size(); i++) {
-        const auto& r = records[i];
+    for (const auto& r : records) {
         RecordSnapshot rs;
         rs.seq = r.seq_;
         rs.timeMs = r.time_;
@@ -570,23 +670,12 @@ void GuiDataBridge::OnRecordLoaded() {
         rs.funcAddr = r.funcAddr_;
         rs.library = r.library_.Get().toStdString();
         snap->records.push_back(std::move(rs));
-
-        auto csIt = result->callStackMap.find(r.uuid_);
-        if (csIt != result->callStackMap.end()) {
-            const auto& callstack = csIt.value();
-            auto& frames = snap->recordFrames[i];
-            frames.reserve(callstack.size());
-            for (int j = callstack.size() - 1; j >= 0; j--) {
-                const QString lib = callstack[j].first.Get();
-                const quint64 addr = callstack[j].second;
-                StackFrameSnapshot f;
-                f.library = lib.toStdString();
-                f.funcAddr = addr;
-                f.funcName = resolve(lib, addr).toStdString();
-                frames.push_back(std::move(f));
-            }
-        }
     }
+    snapMilestone("records");
+
+    // Adopt the worker-built tree.
+    snap->stackTree = result->stackTree;
+    snapMilestone("tree-adopt");
 
     // meminfo series -> timeline
     if (!result->memSeries.isEmpty()) {
@@ -635,9 +724,11 @@ void GuiDataBridge::OnRecordLoaded() {
     snap->capture.recordCount = snap->records.size();
     snap->capture.appName = result->fileName.toStdString();
     snap->logLines = working_ ? working_->logLines : std::vector<std::string>{};
+    snapMilestone("smaps+meta");
 
     working_ = snap;
     PublishSnapshot();
+    snapMilestone("publish");
 
     {
         QMutexLocker lock(&loadStatusMutex_);

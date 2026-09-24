@@ -174,9 +174,28 @@ void DrawMemoryTimelineChart(const GuiSnapshot& snapshot, TimelineView& view) {
     const double vmax = view.zoomMax;
     const double vspan = vmax - vmin;
 
-    // Plot geometry: keep margins minimal so the chart uses most of the panel.
-    const float labelW = 44.0f;  // slim left gutter for Y value labels
-    const float labelH = 16.0f;  // slim bottom gutter for X time labels
+    // Plot geometry: the plot rect is inset from the content region by a
+    // symmetric frame pad, reserving a measured left band (labelW) for the Y
+    // value labels and a slim bottom band (labelH) for the X time labels. The
+    // plot background is drawn ONLY over the plot rect, so the label bands stay
+    // unfilled and the labels are drawn on top of the window background.
+    char measureBuf[64];
+    float labelW = 0.0f;
+    {
+        const double mstep = NiceStep(maxVal / 4.0);
+        for (double v = mstep; v <= maxVal; v += mstep) {
+            std::snprintf(measureBuf, sizeof(measureBuf), "%s",
+                          FormatBytes(static_cast<uint64_t>(v)).c_str());
+            labelW = std::max(labelW, ImGui::CalcTextSize(measureBuf).x);
+        }
+        std::snprintf(measureBuf, sizeof(measureBuf), "%s",
+                      FormatBytes(static_cast<uint64_t>(maxVal)).c_str());
+        labelW = std::max(labelW, ImGui::CalcTextSize(measureBuf).x);
+        labelW += 7.0f;  // 6px gap to plot edge + 1px safety
+    }
+    const float labelH = ImGui::GetTextLineHeightWithSpacing() + 2.0f;
+    constexpr float kPad = 2.0f;  // symmetric top/bottom frame pad
+
     ImVec2 avail = ImGui::GetContentRegionAvail();
     avail.x = std::max(avail.x, labelW + 40.0f);
     avail.y = std::max(avail.y, labelH + 40.0f);
@@ -186,17 +205,16 @@ void DrawMemoryTimelineChart(const GuiSnapshot& snapshot, TimelineView& view) {
     const bool active = ImGui::IsItemActive();
     const ImVec2 pMin = ImGui::GetItemRectMin();
     const ImVec2 pMax = ImGui::GetItemRectMax();
-    const float plotW = pMax.x - pMin.x - labelW;
-    const float plotH = pMax.y - pMin.y - labelH;
-    const ImVec2 plotMin(pMin.x + labelW, pMin.y);
-    const ImVec2 plotMax(pMin.x + labelW + plotW, pMin.y + plotH);
+    const float plotW = pMax.x - pMin.x - labelW - kPad;
+    const float plotH = pMax.y - pMin.y - labelH - 2.0f * kPad;
+    const ImVec2 plotMin(pMin.x + labelW, pMin.y + kPad);
+    const ImVec2 plotMax(pMin.x + labelW + plotW, pMin.y + kPad + plotH);
     if (plotW < 10.0f || plotH < 10.0f)
         return;
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    // Uniform plot background: one solid fill covering the whole plot area
-    // edge-to-edge, then gridlines at a consistent low alpha on top of it.
-    dl->PushClipRect(plotMin, plotMax, true);
+    // Uniform plot background: one solid fill covering the plot rect (labels
+    // outside it stay on the window background, so no clip is needed).
     dl->AddRectFilled(plotMin, plotMax, IM_COL32(25, 28, 34, 255));
 
     const ImU32 gridCol = IM_COL32(255, 255, 255, 26);
@@ -220,7 +238,7 @@ void DrawMemoryTimelineChart(const GuiSnapshot& snapshot, TimelineView& view) {
         return plotMin.x + static_cast<float>((t - vmin) / vspan) * plotW;
     };
 
-    // Y axis ticks with byte-formatted labels.
+    // Y axis ticks with byte-formatted labels, right-aligned to plotMin.x.
     {
         const double rawStep = maxVal / 4.0;
         const double step = NiceStep(rawStep);
@@ -229,10 +247,12 @@ void DrawMemoryTimelineChart(const GuiSnapshot& snapshot, TimelineView& view) {
             const float y = valueToY(v);
             dl->AddLine(ImVec2(plotMin.x, y), ImVec2(plotMax.x, y), gridCol);
             std::snprintf(buf, sizeof(buf), "%s", FormatBytes(static_cast<uint64_t>(v)).c_str());
-            dl->AddText(ImVec2(pMin.x + 2.0f, y - 6.0f), IM_COL32(200, 200, 200, 255), buf);
+            const float tw = ImGui::CalcTextSize(buf).x;
+            dl->AddText(ImVec2(plotMin.x - 6.0f - tw, y - 6.0f), IM_COL32(200, 200, 200, 255), buf);
         }
-        dl->AddText(ImVec2(pMin.x + 2.0f, plotMin.y), IM_COL32(200, 200, 200, 255),
-                    FormatBytes(static_cast<uint64_t>(maxVal)).c_str());
+        std::snprintf(buf, sizeof(buf), "%s", FormatBytes(static_cast<uint64_t>(maxVal)).c_str());
+        const float tw = ImGui::CalcTextSize(buf).x;
+        dl->AddText(ImVec2(plotMin.x - 6.0f - tw, plotMin.y), IM_COL32(200, 200, 200, 255), buf);
     }
 
     // X axis ticks with second-formatted labels.
@@ -244,8 +264,8 @@ void DrawMemoryTimelineChart(const GuiSnapshot& snapshot, TimelineView& view) {
         for (double t = start; t <= vmax; t += step) {
             const float x = timeToX(t);
             dl->AddLine(ImVec2(x, plotMin.y), ImVec2(x, plotMax.y), gridCol);
-            std::snprintf(buf, sizeof(buf), "%.0fs", t / 1000.0);
-            dl->AddText(ImVec2(x + 2.0f, plotMax.y + 3.0f), IM_COL32(200, 200, 200, 255), buf);
+            std::snprintf(buf, sizeof(buf), "%.1fs", t / 1000.0);
+            dl->AddText(ImVec2(x + 2.0f, plotMax.y + 4.0f), IM_COL32(200, 200, 200, 255), buf);
         }
     }
 
@@ -320,8 +340,6 @@ void DrawMemoryTimelineChart(const GuiSnapshot& snapshot, TimelineView& view) {
         dl->AddLine(ImVec2(mouse.x, plotMin.y), ImVec2(mouse.x, plotMax.y),
                     IM_COL32(100, 160, 255, 180), 1.5f);
     }
-
-    dl->PopClipRect();
 
     // Right-click context menu: Reset View / Clear Selection.
     if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right))

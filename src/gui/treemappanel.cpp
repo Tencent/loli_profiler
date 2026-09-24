@@ -2,6 +2,7 @@
 
 #include "imgui.h"
 #include "imgui-SFML.h"
+#include "imgui_internal.h"
 #include "stacktracetree.h"
 
 #include <SFML/Graphics/RenderTexture.hpp>
@@ -186,11 +187,26 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
         return;
     }
 
-    // Reserve a bottom bar for the controls (Depth slider + Up button).
-    const float controlBarH = ImGui::GetFrameHeightWithSpacing();
+    // Reserve a bottom bar for the controls (Depth combo + Go Up button). The
+    // bar is one frame line; the extra 1px keeps rounding from ever producing
+    // a scrollbar.
+    const float controlBarH = ImGui::GetFrameHeightWithSpacing() + 1.0f;
 
+    // Size the image to the true client width. GetContentRegionAvail().x does
+    // NOT subtract a vertical scrollbar that is already visible this frame, and
+    // ScrollMax from the previous frame can lag, so we conservatively reserve
+    // the scrollbar width whenever scrolling is possible. This breaks a feedback
+    // loop where an image/combo 15px too wide forces a horizontal scrollbar,
+    // which in turn reserves vertical space and clips the bar.
+    ImGuiWindow* win = GImGui->CurrentWindow;
+    const float styleScrollbarW = GImGui->Style.ScrollbarSize;
+    const float padLeft = win->WindowPadding.x;
+    const float padRight = win->WindowPadding.x;
+    const bool reserveVScrollbar = (win->Flags & ImGuiWindowFlags_NoScrollbar) == 0;
+    const float usableW = std::max(8.0f, win->Size.x - padLeft - padRight -
+                                         (reserveVScrollbar ? styleScrollbarW : 0.0f));
     ImVec2 avail = ImGui::GetContentRegionAvail();
-    const int w = std::max(8, (int)avail.x);
+    const int w = std::max(8, (int)usableW);
     const int h = std::max(8, (int)(avail.y - controlBarH));
 
     // Decide whether we must re-render the textures.
@@ -355,15 +371,41 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
     if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right) && state.focusedNode >= 0)
         state.focusedNode = tree.NodeAt(state.focusedNode).parent;
 
-    // Bottom control bar: Depth slider stretched full width, Up button at right.
+    // Bottom control bar: Depth combo on the left, Go Up button at right.
+    // Clamp any out-of-range depth to the nearest preset so the combo's
+    // preview always matches a selectable option.
+    static const struct { const char* label; int depth; } kDepthOptions[] = {
+        { "Normal (6)", 6 },
+        { "Dense (9)", 9 },
+        { "Extreme (12)", 12 },
+    };
+    int depthIdx = 0;
+    int bestDist = 1 << 30;
+    for (int i = 0; i < 3; ++i) {
+        const int d = std::abs(state.maxDepth - kDepthOptions[i].depth);
+        if (d < bestDist) { bestDist = d; depthIdx = i; }
+    }
+    state.maxDepth = kDepthOptions[depthIdx].depth;
+
     ImGui::Separator();
-    const float upW = ImGui::CalcTextSize("Up").x + ImGui::GetStyle().FramePadding.x * 2.0f;
-    ImGui::SetNextItemWidth(std::max(50.0f, ImGui::GetContentRegionAvail().x - upW - ImGui::GetStyle().ItemSpacing.x));
-    ImGui::SliderInt("Depth", &state.maxDepth, 1, 12);
+    const float upW = ImGui::CalcTextSize("Go Up").x + ImGui::GetStyle().FramePadding.x * 2.0f;
+    // The combo width uses the same scroll-clamped usable width as the image
+    // above, so combo + spacing + button fit exactly without a horizontal bar.
+    ImGui::SetNextItemWidth(std::max(80.0f, usableW - upW - ImGui::GetStyle().ItemSpacing.x));
+    if (ImGui::BeginCombo("Depth", kDepthOptions[depthIdx].label)) {
+        for (int i = 0; i < 3; ++i) {
+            const bool selected = (i == depthIdx);
+            if (ImGui::Selectable(kDepthOptions[i].label, selected))
+                state.maxDepth = kDepthOptions[i].depth;
+            if (selected)
+                ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
     ImGui::SameLine();
     if (state.focusedNode < 0)
         ImGui::BeginDisabled();
-    if (ImGui::SmallButton("Up")) {
+    if (ImGui::SmallButton("Go Up")) {
         state.focusedNode = tree.NodeAt(state.focusedNode).parent;
     }
     if (state.focusedNode < 0)

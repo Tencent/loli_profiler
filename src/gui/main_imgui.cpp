@@ -15,6 +15,7 @@
 #include "runlaunchdialog.h"
 #include "stacktracetree.h"
 #include "treemappanel.h"
+#include "pathutils.h"
 
 #include <QSettings>
 #include <QString>
@@ -29,6 +30,7 @@
 #include <SFML/Window/VideoMode.hpp>
 
 #include <cstdio>
+#include <cfloat>
 #include <cstring>
 #include <chrono>
 #include <string>
@@ -80,6 +82,29 @@ std::string FormatElapsed(int32_t ms) {
     return buf;
 }
 
+// Clipboard text for the Stacktrace panel's "Copy" context-menu item:
+// the node's function name plus its aggregated size/count (and library).
+std::string FormatCallstackNode(const gui::StacktraceTree::Node& node,
+                                const gui::StacktraceTree& tree) {
+    std::string out = tree.PoolStr(node.funcName);
+    out += " (size: ";
+    out += FormatBytes(node.totalSize);
+    out += ", count: ";
+    char count[32];
+    std::snprintf(count, sizeof(count), "%u", node.allocCount);
+    out += count;
+    out += ")";
+    if (node.library >= 0) {
+        const char* lib = tree.PoolStr(node.library);
+        if (lib[0] != '\0') {
+            out += " [";
+            out += lib;
+            out += "]";
+        }
+    }
+    return out;
+}
+
 // Builds a sensible default dock layout on first run so panels aren't stacked:
 //   left: Capture Status / Console (bottom)
 //   center: Stacktrace (top) + Timeline (bottom)
@@ -116,35 +141,35 @@ void BuildDefaultDockLayout(ImGuiID dockspaceId) {
 
 // The tree is rebuilt OUTSIDE this function (version-gated on SnapshotVersion)
 // so it never blocks the frame loop more than necessary.
+// `contextNode` persists the nodeIndex of the right-clicked row across frames
+// (rows are transient under the clipper, so the popup acts on this stored id).
 void DrawStacktracePanel(const gui::GuiSnapshot& snapshot, gui::StacktraceTree& tree,
-                         char* filterBuf, size_t filterBufSize) {
+                         char* filterBuf, size_t filterBufSize, int32_t& contextNode) {
     if (snapshot.records.empty()) {
         ImGui::TextUnformatted("No allocation records loaded.");
         return;
     }
 
-    // Toolbar: filter only. Columns are sortable via the table header.
-    if (ImGui::InputTextWithHint("##treefilter", "filter function/library...",
-                                 filterBuf, filterBufSize)) {
-        tree.SetFilter(filterBuf);
-    }
-
     // Tree table: flat visible rows rendered via clipper for large datasets.
     // Sortable: clicking Size / Count re-sorts each node's children by that key.
+    // ScrollX so deeply-nested / long function names stay reachable horizontally.
     const ImGuiTableFlags flags =
         ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY |
-        ImGuiTableFlags_Resizable | ImGuiTableFlags_Sortable;
-    if (!ImGui::BeginTable("stacktrace_tree", 3, flags)) {
+        ImGuiTableFlags_ScrollX | ImGuiTableFlags_Resizable | ImGuiTableFlags_Sortable;
+    if (!ImGui::BeginTable("stacktrace_tree", 4, flags)) {
         return;
     }
     ImGui::TableSetupScrollFreeze(0, 1);
     ImGui::TableSetupColumn("Function", ImGuiTableColumnFlags_WidthStretch |
-                                            ImGuiTableColumnFlags_NoSort);
+                                            ImGuiTableColumnFlags_NoSort |
+                                            ImGuiTableColumnFlags_NoHeaderLabel);
     // Default to descending (largest first) for both sortable columns.
     ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed |
                                         ImGuiTableColumnFlags_PreferSortDescending, 110.0f, 1);
     ImGui::TableSetupColumn("Count", ImGuiTableColumnFlags_WidthFixed |
                                          ImGuiTableColumnFlags_PreferSortDescending, 80.0f, 2);
+    ImGui::TableSetupColumn("Library", ImGuiTableColumnFlags_WidthStretch |
+                                           ImGuiTableColumnFlags_NoSort, 0.0f, 3);
     ImGui::TableHeadersRow();
 
     // Consume sort specs: Size (default, desc) and Count are sortable; the
@@ -228,25 +253,55 @@ void DrawStacktracePanel(const gui::GuiSnapshot& snapshot, gui::StacktraceTree& 
             ImGui::TextUnformatted(tree.PoolStr(node.funcName));
 
             // Row interaction: invisible button over the whole Function cell text
-            // region (click toggles for parents, hover shows library tooltip).
+            // region — left-click toggles expansion for parents, right-click opens
+            // the context menu (records the nodeIndex; rows are clipper-transient).
             ImGui::SetCursorScreenPos(ImVec2(drawWindow->Pos.x + nameX, rowScreenY));
             const float rowW = drawWindow->Pos.x + ImGui::GetContentRegionAvail().x +
                                ImGui::GetCursorPosX() - (drawWindow->Pos.x + nameX);
             ImGui::InvisibleButton("##rowhit", ImVec2(std::max(rowW, lineHeight), lineHeight));
-            const bool rowHover = ImGui::IsItemHovered();
-            if (rowHover && node.library >= 0)
-                ImGui::SetTooltip("%s", tree.PoolStr(node.library));
             if (row.hasChildren && ImGui::IsItemClicked())
                 tree.SetExpanded(row.nodeIndex, !row.expanded);
+            if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) {
+                contextNode = row.nodeIndex;
+                ImGui::OpenPopup("##stacktrace_row_ctx");
+            }
 
             ImGui::TableNextColumn();
             ImGui::Text("%s", FormatBytes(node.totalSize).c_str());
             ImGui::TableNextColumn();
             ImGui::Text("%u", node.allocCount);
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted(tree.PoolStr(node.library));
             ImGui::PopID();
         }
     }
+
+    // Right-click context menu for a tree row (shared; acts on contextNode).
+    if (ImGui::BeginPopup("##stacktrace_row_ctx")) {
+        if (contextNode >= 0 && contextNode < (int32_t)tree.Nodes().size()) {
+            const auto& ctxNode = tree.NodeAt(contextNode);
+            const bool hasChildren = !ctxNode.children.empty();
+            if (ImGui::MenuItem("Copy", nullptr, false, true)) {
+                ImGui::SetClipboardText(
+                    FormatCallstackNode(ctxNode, tree).c_str());
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Expand Node", nullptr, false, hasChildren))
+                tree.SetExpanded(contextNode, true);
+            if (ImGui::MenuItem("Collapse Node", nullptr, false, hasChildren))
+                tree.SetExpanded(contextNode, false);
+        }
+        ImGui::EndPopup();
+    }
+
     ImGui::EndTable();
+
+    // Filter bar pinned to the BOTTOM of the panel, full width.
+    ImGui::SetNextItemWidth(-1.0f);
+    if (ImGui::InputTextWithHint("##treefilter", "filter function/library...",
+                                 filterBuf, filterBufSize)) {
+        tree.SetFilter(filterBuf);
+    }
 }
 
 void DrawScreenshotPanel(const gui::GuiSnapshot& snapshot, sf::Texture& texture,
@@ -371,6 +426,7 @@ int main(int argc, char** argv) {
     gui::StacktraceTree stacktraceTree;
     uint64_t stacktraceBuiltVersion = 0;  // bridge.SnapshotVersion() the tree was built from
     char stacktraceFilter[256] = {0};
+    int32_t stacktraceContextNode = -1;   // nodeIndex right-clicked in the Stacktrace panel
     gui::TimelineView timelineView;
     gui::TreemapState treemapState;
     // Dockable panel visibility, toggled from the Window menu.
@@ -379,6 +435,7 @@ int main(int argc, char** argv) {
     bool showTreemap = true;
     bool showSmaps = true;
     bool showScreenshot = true;
+    bool showSettingsDialog = false;
     bool firstFrame = true;
     int framesRendered = 0;
     int loadingFrames = 0;
@@ -468,19 +525,6 @@ int main(int argc, char** argv) {
                         window.setTitle("LoliProfiler - " + loadedRecordName);
                     }
                 }
-                if (ImGui::BeginMenu("Themes")) {
-                    int themeCount = 0;
-                    const ImGuiTheme* themes = GetImGuiThemes(&themeCount);
-                    for (int i = 0; i < themeCount; ++i) {
-                        const bool isActive = currentTheme == themes[i].name;
-                        if (ImGui::MenuItem(themes[i].name, nullptr, isActive)) {
-                            ApplyImGuiThemeByName(themes[i].name);
-                            currentTheme = themes[i].name;
-                            qtSettings.setValue("theme", QString::fromStdString(currentTheme));
-                        }
-                    }
-                    ImGui::EndMenu();
-                }
                 ImGui::Separator();
                 if (ImGui::MenuItem("Exit")) {
                     window.close();
@@ -493,6 +537,25 @@ int main(int argc, char** argv) {
                 ImGui::MenuItem("Treemap", nullptr, &showTreemap);
                 ImGui::MenuItem("Smaps", nullptr, &showSmaps);
                 ImGui::MenuItem("Screenshot", nullptr, &showScreenshot);
+                ImGui::EndMenu();
+            }
+            if (ImGui::BeginMenu("Settings")) {
+                if (ImGui::BeginMenu("Theme")) {
+                    int themeCount = 0;
+                    const ImGuiTheme* themes = GetImGuiThemes(&themeCount);
+                    for (int i = 0; i < themeCount; ++i) {
+                        const bool isActive = currentTheme == themes[i].name;
+                        if (ImGui::MenuItem(themes[i].name, nullptr, isActive)) {
+                            ApplyImGuiThemeByName(themes[i].name);
+                            currentTheme = themes[i].name;
+                            qtSettings.setValue("theme", QString::fromStdString(currentTheme));
+                        }
+                    }
+                    ImGui::EndMenu();
+                }
+                if (ImGui::MenuItem("Paths (SDK / NDK)...")) {
+                    showSettingsDialog = true;
+                }
                 ImGui::EndMenu();
             }
             ImGui::EndMainMenuBar();
@@ -538,18 +601,89 @@ int main(int argc, char** argv) {
         // Modal Run/Launch dialog (no-op unless open).
         runLaunchDialog.Render();
 
+        // Settings dialog: theme + Android SDK/NDK paths.
+        if (showSettingsDialog) {
+            ImGui::OpenPopup("Settings");
+            showSettingsDialog = false;
+        }
+        if (ImGui::BeginPopupModal("Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+            ImGui::SeparatorText("Theme");
+            int themeCount = 0;
+            const ImGuiTheme* themes = GetImGuiThemes(&themeCount);
+            if (ImGui::BeginCombo("##theme", currentTheme.c_str())) {
+                for (int i = 0; i < themeCount; ++i) {
+                    const bool isActive = currentTheme == themes[i].name;
+                    if (ImGui::Selectable(themes[i].name, isActive)) {
+                        ApplyImGuiThemeByName(themes[i].name);
+                        currentTheme = themes[i].name;
+                        qtSettings.setValue("theme", QString::fromStdString(currentTheme));
+                    }
+                    if (isActive) ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+
+            ImGui::SeparatorText("Android Paths");
+            static char sdkPath[512] = {0};
+            static char ndkPath[512] = {0};
+            static bool pathsLoaded = false;
+            if (!pathsLoaded) {
+                std::strncpy(sdkPath, PathUtils::GetSDKPath().toStdString().c_str(), sizeof(sdkPath) - 1);
+                std::strncpy(ndkPath, PathUtils::GetNDKPath().toStdString().c_str(), sizeof(ndkPath) - 1);
+                pathsLoaded = true;
+            }
+            ImGui::Text("Android SDK:");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(-110);
+            ImGui::InputText("##sdk", sdkPath, sizeof(sdkPath));
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Browse##sdk")) {
+                if (auto p = FileDialogs::PickFolder())
+                    std::strncpy(sdkPath, p->c_str(), sizeof(sdkPath) - 1);
+            }
+            ImGui::Text("Android NDK:");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(-110);
+            ImGui::InputText("##ndk", ndkPath, sizeof(ndkPath) - 1);
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Browse##ndk")) {
+                if (auto p = FileDialogs::PickFolder())
+                    std::strncpy(ndkPath, p->c_str(), sizeof(ndkPath) - 1);
+            }
+
+            ImGui::Separator();
+            if (ImGui::Button("Save", ImVec2(120, 0))) {
+                PathUtils::SetSDKPath(QString::fromStdString(sdkPath));
+                PathUtils::SetNDKPath(QString::fromStdString(ndkPath));
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Close", ImVec2(120, 0))) {
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
+
         // Dockable panels
         if (showStacktrace && ImGui::Begin("Stacktrace")) {
             rebuildTreeIfNeeded();
             DrawStacktracePanel(snapshot, stacktraceTree,
-                                stacktraceFilter, sizeof(stacktraceFilter));
+                                stacktraceFilter, sizeof(stacktraceFilter),
+                                stacktraceContextNode);
         }
         ImGui::End();
 
-        if (showTimeline && ImGui::Begin("Timeline")) {
-            gui::DrawMemoryTimelineChart(snapshot, timelineView);
+        // Timeline + Screenshot: constrain to a fixed max height so on vertical
+        // window resize the height-stretch-friendly panels (Stacktrace, Treemap)
+        // absorb the extra space instead of these top panels growing.
+        const float topBandMaxH = ImGui::GetMainViewport()->WorkSize.y * 0.40f;
+        if (showTimeline) {
+            ImGui::SetNextWindowSizeConstraints(ImVec2(0, 80), ImVec2(FLT_MAX, topBandMaxH));
+            if (ImGui::Begin("Timeline")) {
+                gui::DrawMemoryTimelineChart(snapshot, timelineView);
+            }
+            ImGui::End();
         }
-        ImGui::End();
 
         if (showTreemap && ImGui::Begin("Treemap")) {
             rebuildTreeIfNeeded();
@@ -562,18 +696,25 @@ int main(int argc, char** argv) {
         }
         ImGui::End();
 
-        if (showScreenshot && ImGui::Begin("Screenshot")) {
-            DrawScreenshotPanel(snapshot, screenshotTexture, uploadedScreenshotCount);
+        if (showScreenshot) {
+            ImGui::SetNextWindowSizeConstraints(ImVec2(0, 80), ImVec2(FLT_MAX, topBandMaxH));
+            if (ImGui::Begin("Screenshot")) {
+                DrawScreenshotPanel(snapshot, screenshotTexture, uploadedScreenshotCount);
+            }
+            ImGui::End();
         }
-        ImGui::End();
 
         // Loading overlay: modal progress while a record parses on the worker
         // thread, so the UI never appears frozen. We open it once on the loading
         // rising edge and close it once on the falling edge — calling OpenPopup
         // every frame would keep it open forever after loading finishes.
         const bool isLoading = bridge.IsLoading();
-        if (isLoading && !wasLoading)
+        if (isLoading && !wasLoading) {
+            // Center the modal in the main viewport before opening it.
+            const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+            ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
             ImGui::OpenPopup("Loading Record");
+        }
         wasLoading = isLoading;
 
         if (ImGui::BeginPopupModal("Loading Record", nullptr,

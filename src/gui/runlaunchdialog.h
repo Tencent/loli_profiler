@@ -55,6 +55,8 @@ private:
     // capture config
     CaptureConfigSnapshot config_;
     bool configLoaded_ = false;
+    char whiteEntry_[512] = {0};
+    char blackEntry_[512] = {0};
 
     static constexpr int kDefaultThreshold = 128;
 };

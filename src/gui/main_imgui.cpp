@@ -114,24 +114,24 @@ void BuildDefaultDockLayout(ImGuiID dockspaceId) {
     ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_DockSpace);
     ImGui::DockBuilderSetNodeSize(dockspaceId, ImGui::GetMainViewport()->Size);
 
-    // Target layout:
-    //   TOP    : Timeline (left, wide) + Screenshot (right, its own unit)
-    //   BOTTOM : Stacktrace (left) + Treemap/Smaps tabbed (right)
+    // Target layout (reversed so the stretch-friendly panels are on top):
+    //   TOP    : Stacktrace (left) + Treemap/Smaps tabbed (right)  [stretch]
+    //   BOTTOM : Timeline (left, wide) + Screenshot (right, its own unit)
     ImGuiID dockMain = dockspaceId;
-    // Bottom band (Stacktrace + Treemap/Smaps), full width.
-    ImGuiID dockBottom = ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Down, 0.58f, nullptr, &dockMain);
-    // Top band: split Screenshot off to the right (its own unit, not tabbed with Timeline).
-    ImGuiID dockTopRight = ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Right, 0.20f, nullptr, &dockMain);
-    ImGuiID dockTopLeft = dockMain;  // Timeline
-    // Bottom band split: Stacktrace (left) / Treemap+Smaps (right tabbed).
-    ImGuiID dockBottomRight = ImGui::DockBuilderSplitNode(dockBottom, ImGuiDir_Right, 0.42f, nullptr, &dockBottom);
-    ImGuiID dockBottomLeft = dockBottom;  // Stacktrace
+    // Top band (Stacktrace + Treemap/Smaps), full width.
+    ImGuiID dockTop = ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Up, 0.62f, nullptr, &dockMain);
+    // Bottom band: split Screenshot off to the right (its own unit).
+    ImGuiID dockBottomRight = ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Right, 0.20f, nullptr, &dockMain);
+    ImGuiID dockBottomLeft = dockMain;  // Timeline
+    // Top band split: Stacktrace (left) / Treemap+Smaps (right tabbed).
+    ImGuiID dockTopRight = ImGui::DockBuilderSplitNode(dockTop, ImGuiDir_Right, 0.42f, nullptr, &dockTop);
+    ImGuiID dockTopLeft = dockTop;  // Stacktrace
 
-    ImGui::DockBuilderDockWindow("Timeline", dockTopLeft);
-    ImGui::DockBuilderDockWindow("Screenshot", dockTopRight);
-    ImGui::DockBuilderDockWindow("Stacktrace", dockBottomLeft);
-    ImGui::DockBuilderDockWindow("Treemap", dockBottomRight);
-    ImGui::DockBuilderDockWindow("Smaps", dockBottomRight);
+    ImGui::DockBuilderDockWindow("Stacktrace", dockTopLeft);
+    ImGui::DockBuilderDockWindow("Treemap", dockTopRight);
+    ImGui::DockBuilderDockWindow("Smaps", dockTopRight);
+    ImGui::DockBuilderDockWindow("Timeline", dockBottomLeft);
+    ImGui::DockBuilderDockWindow("Screenshot", dockBottomRight);
     ImGui::DockBuilderFinish(dockspaceId);
 }
 
@@ -150,27 +150,89 @@ void DrawStacktracePanel(const gui::GuiSnapshot& snapshot, gui::StacktraceTree& 
         return;
     }
 
+    // --- Item 1: single vertical scrollbar.
+    // The table gets ScrollY/ScrollX and scrolls internally. We reserve the
+    // bottom filter bar's height up front by giving the table an explicit outer
+    // size of (avail - filterBarH); the filter then sits at the bottom with no
+    // overflow, so the host window never grows a second scrollbar.
+    const float filterBarH = ImGui::GetFrameHeightWithSpacing();
+    const ImVec2 tableSize(-FLT_MIN, ImMax(1.0f, ImGui::GetContentRegionAvail().y - filterBarH));
+
+    // --- Item 2a: auto-size the Function column to fit the widest visible row.
+    // Track the max content width (depth*indent + arrow + name) across ALL rows
+    // and feed it as the Function column's stretch weight, so the Function column
+    // is at least as wide as the deepest/longest visible name. Overflow is
+    // reachable via the horizontal scrollbar. The max name width is cached per
+    // node so the full O(N) scan only runs when expansion/filter/sort changes.
+    const auto& rows = tree.VisibleRows();
+    static ImGuiID lastVisibleSignature = 0;
+    static float maxNameW = 0.0f;
+    const float stepX = ImGui::GetTreeNodeToLabelSpacing();
+    const float cellPadX = ImGui::GetStyle().CellPadding.x;
+    const float frameH = ImGui::GetFrameHeight();
+    const ImGuiID visibleSignature = ImHashStr("stacktrace_tree", 0, (ImGuiID)(intptr_t)&tree);
+    if (visibleSignature != lastVisibleSignature) {
+        maxNameW = 0.0f;
+        for (size_t r = 0; r < rows.size(); ++r) {
+            const auto& row = rows[r];
+            const auto& node = tree.NodeAt(row.nodeIndex);
+            const float nameW = ImGui::CalcTextSize(tree.PoolStr(node.funcName)).x;
+            const float contentW = stepX + (float)row.depth * stepX +
+                                   ImGui::GetStyle().ItemInnerSpacing.x + nameW;
+            if (contentW > maxNameW)
+                maxNameW = contentW;
+        }
+        lastVisibleSignature = visibleSignature;
+    }
+    // Function column minimum content width (stretch weight = min pixel width).
+    const float funcMinW = maxNameW + cellPadX * 2.0f;
+
     // Tree table: flat visible rows rendered via clipper for large datasets.
     // Sortable: clicking Size / Count re-sorts each node's children by that key.
     // ScrollX so deeply-nested / long function names stay reachable horizontally.
     const ImGuiTableFlags flags =
         ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY |
         ImGuiTableFlags_ScrollX | ImGuiTableFlags_Resizable | ImGuiTableFlags_Sortable;
-    if (!ImGui::BeginTable("stacktrace_tree", 4, flags)) {
+    if (!ImGui::BeginTable("stacktrace_tree", 4, flags, tableSize)) {
         return;
     }
     ImGui::TableSetupScrollFreeze(0, 1);
+    // Function: WidthStretch so it ABSORBS any manual resize (the Size/Count/
+    // Library columns are WidthFixed and keep their widths). The stretch weight
+    // is our computed min content width, so the column is always at least wide
+    // enough to show the full deepest/longest visible name.
     ImGui::TableSetupColumn("Function", ImGuiTableColumnFlags_WidthStretch |
                                             ImGuiTableColumnFlags_NoSort |
-                                            ImGuiTableColumnFlags_NoHeaderLabel);
+                                            ImGuiTableColumnFlags_NoHeaderLabel,
+                            funcMinW, 0);
     // Default to descending (largest first) for both sortable columns.
     ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed |
                                         ImGuiTableColumnFlags_PreferSortDescending, 110.0f, 1);
     ImGui::TableSetupColumn("Count", ImGuiTableColumnFlags_WidthFixed |
                                          ImGuiTableColumnFlags_PreferSortDescending, 80.0f, 2);
-    ImGui::TableSetupColumn("Library", ImGuiTableColumnFlags_WidthStretch |
+    // Library: trailing WidthFixed so the Function/Size separator drag widens
+    // only Function (the fixed columns keep their widths; the stretch column
+    // takes/absorbs the delta).
+    ImGui::TableSetupColumn("Library", ImGuiTableColumnFlags_WidthFixed |
                                            ImGuiTableColumnFlags_NoSort, 0.0f, 3);
     ImGui::TableHeadersRow();
+
+    // --- Item 2a (cont.): keep the Function column wide enough for the content.
+    // The user may drag the Function/Size separator; only enlarge (never shrink)
+    // toward the measured content width so a manual narrow choice isn't yanked
+    // back while it is active. We feed the request through the queued-resize
+    // fields, which BeginTable applies before layout locks, so this never fights
+    // a live resize interaction.
+    if (ImGuiTable* table = ImGui::GetCurrentTable()) {
+        const ImGuiTableColumn& funcCol = table->Columns[0];
+        if (!(table->ResizedColumn == 0 && ImGui::IsMouseDragging(0))) {
+            const float curW = funcCol.WidthRequest;
+            if (funcMinW > curW + 0.5f) {
+                table->ResizedColumn = 0;
+                table->ResizedColumnNextWidth = funcMinW;
+            }
+        }
+    }
 
     // Consume sort specs: Size (default, desc) and Count are sortable; the
     // Function column is marked NoSort so clicks there are ignored. On the very
@@ -200,7 +262,6 @@ void DrawStacktracePanel(const gui::GuiSnapshot& snapshot, gui::StacktraceTree& 
         }
     }
 
-    const auto& rows = tree.VisibleRows();
     ImGuiListClipper clipper;
     clipper.Begin(static_cast<int>(rows.size()));
     while (clipper.Step()) {
@@ -518,7 +579,7 @@ int main(int argc, char** argv) {
                 if (ImGui::MenuItem("Run/Launch...")) {
                     runLaunchDialog.Open(&bridge);
                 }
-                if (ImGui::MenuItem("Open Record...")) {
+                if (ImGui::MenuItem("Open Record...", "Ctrl+O")) {
                     if (auto path = FileDialogs::OpenFile({{"Loli Record", "loli"}})) {
                         bridge.LoadRecord(QString::fromStdString(*path));
                         loadedRecordName = *path;
@@ -526,7 +587,11 @@ int main(int argc, char** argv) {
                     }
                 }
                 ImGui::Separator();
-                if (ImGui::MenuItem("Exit")) {
+                if (ImGui::MenuItem("Settings...", "Ctrl+,")) {
+                    showSettingsDialog = true;
+                }
+                ImGui::Separator();
+                if (ImGui::MenuItem("Exit", "Ctrl+Q")) {
                     window.close();
                 }
                 ImGui::EndMenu();
@@ -539,26 +604,27 @@ int main(int argc, char** argv) {
                 ImGui::MenuItem("Screenshot", nullptr, &showScreenshot);
                 ImGui::EndMenu();
             }
-            if (ImGui::BeginMenu("Settings")) {
-                if (ImGui::BeginMenu("Theme")) {
-                    int themeCount = 0;
-                    const ImGuiTheme* themes = GetImGuiThemes(&themeCount);
-                    for (int i = 0; i < themeCount; ++i) {
-                        const bool isActive = currentTheme == themes[i].name;
-                        if (ImGui::MenuItem(themes[i].name, nullptr, isActive)) {
-                            ApplyImGuiThemeByName(themes[i].name);
-                            currentTheme = themes[i].name;
-                            qtSettings.setValue("theme", QString::fromStdString(currentTheme));
-                        }
-                    }
-                    ImGui::EndMenu();
-                }
-                if (ImGui::MenuItem("Paths (SDK / NDK)...")) {
-                    showSettingsDialog = true;
-                }
-                ImGui::EndMenu();
-            }
             ImGui::EndMainMenuBar();
+        }
+
+        // Global shortcuts: Ctrl+O (open record), Ctrl+Q (exit). On macOS the
+        // platform "Cmd" is io.KeySuper; treat Ctrl or Super as the modifier.
+        {
+            ImGuiIO& io = ImGui::GetIO();
+            const bool mod = io.KeyCtrl || io.KeySuper;
+            if (mod && ImGui::IsKeyPressed(ImGuiKey_O, false)) {
+                if (auto path = FileDialogs::OpenFile({{"Loli Record", "loli"}})) {
+                    bridge.LoadRecord(QString::fromStdString(*path));
+                    loadedRecordName = *path;
+                    window.setTitle("LoliProfiler - " + loadedRecordName);
+                }
+            }
+            if (mod && ImGui::IsKeyPressed(ImGuiKey_Q, false)) {
+                window.close();
+            }
+            if (mod && ImGui::IsKeyPressed(ImGuiKey_Comma, false)) {
+                showSettingsDialog = true;
+            }
         }
 
         // Fixed toolbar strip at the top, directly under the menubar and above
@@ -673,12 +739,9 @@ int main(int argc, char** argv) {
         }
         ImGui::End();
 
-        // Timeline + Screenshot: constrain to a fixed max height so on vertical
-        // window resize the height-stretch-friendly panels (Stacktrace, Treemap)
-        // absorb the extra space instead of these top panels growing.
-        const float topBandMaxH = ImGui::GetMainViewport()->WorkSize.y * 0.40f;
+        // Timeline + Screenshot live in the bottom band (fixed height by the dock
+        // split); Stacktrace + Treemap occupy the top band and stretch on resize.
         if (showTimeline) {
-            ImGui::SetNextWindowSizeConstraints(ImVec2(0, 80), ImVec2(FLT_MAX, topBandMaxH));
             if (ImGui::Begin("Timeline")) {
                 gui::DrawMemoryTimelineChart(snapshot, timelineView);
             }
@@ -697,7 +760,6 @@ int main(int argc, char** argv) {
         ImGui::End();
 
         if (showScreenshot) {
-            ImGui::SetNextWindowSizeConstraints(ImVec2(0, 80), ImVec2(FLT_MAX, topBandMaxH));
             if (ImGui::Begin("Screenshot")) {
                 DrawScreenshotPanel(snapshot, screenshotTexture, uploadedScreenshotCount);
             }

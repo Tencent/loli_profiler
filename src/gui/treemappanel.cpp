@@ -12,10 +12,12 @@
 #include <SFML/Graphics/Font.hpp>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 namespace gui {
@@ -178,6 +180,48 @@ sf::RenderTexture* EnsureTexture(sf::RenderTexture*& tex, int w, int h) {
     return tex;
 }
 
+std::string ToLower(const char* s) {
+    std::string out(s ? s : "");
+    for (char& c : out) c = (char)std::tolower((unsigned char)c);
+    return out;
+}
+
+// Version counter for the search state; bumped whenever the text changes so
+// the texture re-renders (and the match cache recomputes) exactly once.
+uint64_t SearchVersion(const TreemapState& state, uint64_t dataVersion) {
+    uint64_t h = 1469598103934665603ull; // FNV-1a offset basis
+    for (const char* p = state.search; *p; ++p) {
+        h ^= (uint64_t)(unsigned char)*p;
+        h *= 1099511628211ull;
+    }
+    return h ^ dataVersion;
+}
+
+// Recompute the cached search matches (node indices whose funcName or library
+// contains the search text, case-insensitive). Only runs when the text or the
+// data version changed since the last build.
+void RebuildSearchMatches(const StacktraceTree& tree, TreemapState& state,
+                          uint64_t dataVersion) {
+    if (state.searchBuiltForVersion == dataVersion &&
+        std::strcmp(state.searchBuiltText, state.search) == 0)
+        return;
+    state.searchMatches.clear();
+    state.searchMatchIdx = -1;
+    const std::string needle = ToLower(state.search);
+    if (!needle.empty()) {
+        const auto& nodes = tree.Nodes();
+        state.searchMatches.reserve(nodes.size() / 8 + 1);
+        for (int32_t i = 0; i < (int32_t)nodes.size(); ++i) {
+            const auto& node = nodes[i];
+            if (ToLower(tree.PoolStr(node.funcName)).find(needle) != std::string::npos ||
+                ToLower(tree.PoolStr(node.library)).find(needle) != std::string::npos)
+                state.searchMatches.push_back(i);
+        }
+    }
+    state.searchBuiltForVersion = dataVersion;
+    std::snprintf(state.searchBuiltText, sizeof(state.searchBuiltText), "%s", state.search);
+}
+
 } // namespace
 
 void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
@@ -187,31 +231,48 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
         return;
     }
 
-    // Reserve a bottom bar for the controls (Depth combo + Go Up button). The
-    // bar is one frame line; the extra 1px keeps rounding from ever producing
-    // a scrollbar.
-    const float controlBarH = ImGui::GetFrameHeightWithSpacing() + 1.0f;
+    // Reserve the bottom bar for the controls (search + Depth combo + Go Up
+    // button). Its true height is: ItemSpacing + Separator + ItemSpacing +
+    // one frame row. Add a couple of px of slack for float->int truncation so
+    // image + bar always fit the content region exactly (no v-scrollbar).
+    const ImGuiStyle& barStyle = ImGui::GetStyle();
+    const float controlBarH = ImGui::GetFrameHeightWithSpacing() +
+                              2.0f * barStyle.ItemSpacing.y +
+                              barStyle.SeparatorSize + 2.0f;
 
-    // Size the image to the true client width. GetContentRegionAvail().x does
-    // NOT subtract a vertical scrollbar that is already visible this frame, and
-    // ScrollMax from the previous frame can lag, so we conservatively reserve
-    // the scrollbar width whenever scrolling is possible. This breaks a feedback
-    // loop where an image/combo 15px too wide forces a horizontal scrollbar,
-    // which in turn reserves vertical space and clips the bar.
+    // Size the image to the true client width. GetContentRegionAvail() can lag
+    // a frame behind scrollbar visibility, which would let an image a few px
+    // too wide force a horizontal scrollbar (which in turn steals vertical
+    // space and clips the bar). Reserve the scrollbar width only while
+    // scrolling is actually in effect (ScrollMax from the previous frame);
+    // once the content fits, the image spans the full content width.
     ImGuiWindow* win = GImGui->CurrentWindow;
     const float styleScrollbarW = GImGui->Style.ScrollbarSize;
     const float padLeft = win->WindowPadding.x;
     const float padRight = win->WindowPadding.x;
-    const bool reserveVScrollbar = (win->Flags & ImGuiWindowFlags_NoScrollbar) == 0;
+    const bool reserveVScrollbar = (win->Flags & ImGuiWindowFlags_NoScrollbar) == 0 &&
+                                   win->ScrollMax.y > 0.0f;
     const float usableW = std::max(8.0f, win->Size.x - padLeft - padRight -
                                          (reserveVScrollbar ? styleScrollbarW : 0.0f));
     ImVec2 avail = ImGui::GetContentRegionAvail();
     const int w = std::max(8, (int)usableW);
     const int h = std::max(8, (int)(avail.y - controlBarH));
 
+    // Search: refresh the cached match list only when the text or the data
+    // version changed, and remember which match (if any) is "selected" for
+    // the highlight overlay.
+    RebuildSearchMatches(tree, state, dataVersion);
+    const uint64_t searchVersion = SearchVersion(state, dataVersion);
+    const int32_t selectedMatch =
+        (state.searchMatchIdx >= 0 &&
+         state.searchMatchIdx < (int)state.searchMatches.size())
+            ? state.searchMatches[state.searchMatchIdx]
+            : -1;
+
     // Decide whether we must re-render the textures.
     const bool needRender =
         state.builtForVersion != dataVersion ||
+        state.builtSearchVersion != searchVersion ||
         state.builtFocus != state.focusedNode ||
         state.builtDepth != state.maxDepth ||
         state.builtDpi != dpiScale ||
@@ -238,6 +299,15 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
             else top = tree.Roots();
             Squarify(top, tree, { 0, 0, (float)w, (float)h }, 0, state.maxDepth,
                      pad, titleH, cells);
+
+            // Match lookup set for search highlighting (built only when there
+            // is an active search; empty set = no overlay work at all).
+            std::unordered_set<int32_t> matchSet;
+            if (!state.searchMatches.empty()) {
+                matchSet.reserve(state.searchMatches.size());
+                for (int32_t idx : state.searchMatches)
+                    matchSet.insert(idx);
+            }
 
             // Load a font once for cell labels (Segoe UI on Windows, matching the
             // ImGui UI font). Static so it persists across renders.
@@ -307,6 +377,26 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
                     disp->draw(text);
                 }
             }
+            // Search highlight overlay: draw matching cells with a bright
+            // outline (parents first so a selected child stays visible on
+            // top), and the currently selected match with a distinct thick
+            // border. Drawn after the cell loop so overlays aren't covered.
+            if (!matchSet.empty()) {
+                for (const auto& c : cells) {
+                    if (matchSet.find(c.nodeIndex) == matchSet.end())
+                        continue;
+                    const bool selected = (c.nodeIndex == selectedMatch);
+                    sf::RectangleShape hl(sf::Vector2f(std::max(0.0f, c.rect.w - 1),
+                                                       std::max(0.0f, c.rect.h - 1)));
+                    hl.setPosition({ c.rect.x, c.rect.y });
+                    hl.setFillColor(sf::Color::Transparent);
+                    hl.setOutlineThickness(selected ? 2.0f * dpiScale
+                                                    : 1.0f * dpiScale);
+                    hl.setOutlineColor(selected ? sf::Color(255, 220, 40)
+                                                : sf::Color(255, 255, 255, 210));
+                    disp->draw(hl);
+                }
+            }
             disp->display();
 
             // Picking layer (cell -> nodeIndex color), matching display rects.
@@ -323,6 +413,7 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
             pick->display();
 
             state.builtForVersion = dataVersion;
+            state.builtSearchVersion = searchVersion;
             state.builtFocus = state.focusedNode;
             state.builtDepth = state.maxDepth;
             state.builtDpi = dpiScale;
@@ -371,7 +462,8 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
     if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right) && state.focusedNode >= 0)
         state.focusedNode = tree.NodeAt(state.focusedNode).parent;
 
-    // Bottom control bar: Depth combo on the left, Go Up button at right.
+    // Bottom control bar, left to right: [search input (flex width)]
+    // [prev/next match buttons] [compact Depth combo] [Go Up button].
     // Clamp any out-of-range depth to the nearest preset so the combo's
     // preview always matches a selectable option.
     static const struct { const char* label; int depth; } kDepthOptions[] = {
@@ -388,11 +480,50 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
     state.maxDepth = kDepthOptions[depthIdx].depth;
 
     ImGui::Separator();
-    const float upW = ImGui::CalcTextSize("Go Up").x + ImGui::GetStyle().FramePadding.x * 2.0f;
-    // The combo width uses the same scroll-clamped usable width as the image
-    // above, so combo + spacing + button fit exactly without a horizontal bar.
-    ImGui::SetNextItemWidth(std::max(80.0f, usableW - upW - ImGui::GetStyle().ItemSpacing.x));
-    if (ImGui::BeginCombo("Depth", kDepthOptions[depthIdx].label)) {
+    ImGuiStyle& style = ImGui::GetStyle();
+    const float spacing = style.ItemSpacing.x;
+    const float comboW = 110.0f * dpiScale;  // fits "Extreme (12)" + arrow
+    const float upW = ImGui::CalcTextSize("Go Up").x + style.FramePadding.x * 2.0f;
+    const float navBtnW = ImGui::GetFrameHeight(); // square "<" / ">" buttons
+
+    // Cycle focus through the search matches, wrapping around. Focus is
+    // drilled to the match's parent (unless the match is already inside the
+    // focused subtree) so the highlighted cell is actually visible.
+    auto cycleMatch = [&](int dir) {
+        const int count = (int)state.searchMatches.size();
+        if (count == 0)
+            return;
+        state.searchMatchIdx = ((state.searchMatchIdx + dir) % count + count) % count;
+        const int32_t match = state.searchMatches[state.searchMatchIdx];
+        bool visible = (state.focusedNode < 0);
+        for (int32_t p = match; p >= 0 && !visible; p = tree.NodeAt(p).parent)
+            visible = (p == state.focusedNode);
+        if (!visible) {
+            const int32_t parent = tree.NodeAt(match).parent;
+            state.focusedNode = parent;
+        }
+    };
+
+    ImGui::SetNextItemWidth(
+        std::max(80.0f, usableW - comboW - upW - 2.0f * navBtnW - 3.0f * spacing));
+    if (ImGui::InputTextWithHint("##search", "search nodes...", state.search,
+                                 sizeof(state.search))) {
+        state.searchMatchIdx = -1; // text changed; matches rebuild next frame
+    }
+    ImGui::SameLine();
+    if (state.searchMatches.empty())
+        ImGui::BeginDisabled();
+    if (ImGui::Button("<", ImVec2(navBtnW, 0)))
+        cycleMatch(-1);
+    ImGui::SameLine();
+    if (ImGui::Button(">", ImVec2(navBtnW, 0)))
+        cycleMatch(1);
+    if (state.searchMatches.empty())
+        ImGui::EndDisabled();
+
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(comboW);
+    if (ImGui::BeginCombo("##depth", kDepthOptions[depthIdx].label)) {
         for (int i = 0; i < 3; ++i) {
             const bool selected = (i == depthIdx);
             if (ImGui::Selectable(kDepthOptions[i].label, selected))

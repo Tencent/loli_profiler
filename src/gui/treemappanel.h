@@ -13,6 +13,7 @@
 // Pure C++17 + ImGui + SFML. No Qt.
 
 #include <cstdint>
+#include <vector>
 
 namespace sf { class RenderTexture; }
 
@@ -23,6 +24,16 @@ class StacktraceTree;
 struct TreemapState {
     int      focusedNode = -1;   // node drilled into (-1 = roots)
     int      maxDepth = 6;       // levels rendered below focus
+
+    // --- search ---
+    // Case-insensitive substring match on funcName/library. Matches are cached
+    // and only recomputed when the search text or the data version changes.
+    char     search[128] = "";
+    int      searchMatchIdx = -1;            // current match (for next/prev cycling)
+    std::vector<int32_t> searchMatches;      // cached matched node indices
+    uint64_t searchBuiltForVersion = ~0ull;  // data version the cache was built from
+    char     searchBuiltText[128] = "\x01";  // search text the cache was built from
+
     // --- texture cache (owned by the panel implementation) ---
     sf::RenderTexture* displayTex = nullptr;
     sf::RenderTexture* pickTex = nullptr;
@@ -31,6 +42,7 @@ struct TreemapState {
     int      builtFocus = -2;       // focus the texture was built for
     int      builtDepth = -1;       // depth the texture was built for
     float    builtDpi = 0.0f;       // dpi scale the texture was built for
+    uint64_t builtSearchVersion = ~0ull;  // search version the texture was built from
 };
 
 // Draws the treemap for the given (already-built) stacktrace tree. `dataVersion`

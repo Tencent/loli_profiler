@@ -30,6 +30,50 @@ bool ComboFromOptions(const char* label, std::string& current,
     return changed;
 }
 
+// Editable list group: scrolling child of current entries, input + Add button
+// to append, small "x" button per row to remove. Edits `items` in place.
+// `entry` is the caller-owned input buffer (must be separate per list).
+void EditStringList(const char* id, std::vector<std::string>& items,
+                    char* entry, int entrySize, float listHeight,
+                    const char* addHint) {
+    ImGui::PushID(id);
+
+    if (ImGui::BeginChild("##entries", ImVec2(0, listHeight), ImGuiChildFlags_Borders)) {
+        if (items.empty()) {
+            ImGui::TextDisabled("(empty)");
+        } else {
+            for (int i = 0; i < (int)items.size(); i++) {
+                ImGui::PushID(i);
+                ImGui::Bullet();
+                ImGui::SameLine();
+                ImGui::TextUnformatted(items[i].c_str());
+                ImGui::SameLine(ImGui::GetContentRegionAvail().x - 4.0f);
+                if (ImGui::SmallButton("x")) {
+                    items.erase(items.begin() + i);
+                    ImGui::PopID();
+                    break;
+                }
+                ImGui::PopID();
+            }
+        }
+    }
+    ImGui::EndChild();
+
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 60.0f);
+    const bool enterPressed =
+        ImGui::InputTextWithHint("##newentry", addHint, entry, entrySize,
+                                 ImGuiInputTextFlags_EnterReturnsTrue);
+    ImGui::SameLine();
+    const bool addClicked = ImGui::Button("Add", ImVec2(52.0f, 0.0f));
+    if ((enterPressed || addClicked) && entry[0] != '\0') {
+        items.emplace_back(entry);
+        entry[0] = '\0';
+        ImGui::SetKeyboardFocusHere(-1); // keep focus on the input
+    }
+
+    ImGui::PopID();
+}
+
 } // namespace
 
 void RunLaunchDialog::Open(GuiDataBridge* bridge) {
@@ -94,7 +138,7 @@ void RunLaunchDialog::Render() {
     if (!open_)
         return;
 
-    ImGui::SetNextWindowSize(ImVec2(560, 620), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(640, 720), ImGuiCond_FirstUseEver);
     bool open = true;
     if (!ImGui::BeginPopupModal("Run/Launch", &open, ImGuiWindowFlags_NoCollapse)) {
         if (!open)
@@ -146,7 +190,7 @@ void RunLaunchDialog::Render() {
     ImGui::InputTextWithHint("##appsearch", "filter installed apps...",
                              appSearch_, sizeof(appSearch_));
 
-    const float listHeight = 160.0f;
+    const float listHeight = 220.0f;
     if (ImGui::BeginChild("##applist", ImVec2(0, listHeight), ImGuiChildFlags_Borders)) {
         if (selectedDevice_ < 0) {
             ImGui::TextDisabled("Select a device first.");
@@ -175,16 +219,43 @@ void RunLaunchDialog::Render() {
                              subProcess_, sizeof(subProcess_));
 
     // ---- Capture config ----
-    if (ImGui::CollapsingHeader("Capture Configuration")) {
+    if (ImGui::CollapsingHeader("Capture Configuration", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::InputInt("Threshold (bytes)", &config_.threshold);
         if (config_.threshold < 0) config_.threshold = 0;
         ComboFromOptions("Mode",     config_.mode,     {"strict", "nostack", "loose"});
         ComboFromOptions("Build",    config_.build,    {"default", "debug"});
-        ComboFromOptions("Type",     config_.type,     {"white list", "black list"});
+        if (ComboFromOptions("Type", config_.type,     {"white list", "black list"}))
+            ImGui::SetScrollHereY(0.0f); // keep config section visible when list switches
         ComboFromOptions("Arch",     config_.arch,     {"armeabi-v7a", "arm64-v8a", "x86", "x86_64"});
         ComboFromOptions("Compiler", config_.compiler, {"gcc", "clang"});
         ComboFromOptions("Hook",     config_.hook,     {"malloc"});
-        ImGui::TextDisabled("Whitelist/blacklist editing is done in the config file for now.");
+
+        const bool useWhite = (config_.type == "white list");
+        const float entryListHeight = 140.0f;
+
+        // Show the list relevant to the selected type prominently; the other
+        // is still editable below, dimmed.
+        if (useWhite) {
+            ImGui::TextUnformatted("Whitelist (captured only if matching)");
+            EditStringList("##whitelist", config_.whitelist, whiteEntry_,
+                           (int)sizeof(whiteEntry_), entryListHeight,
+                           "add whitelist pattern...");
+            ImGui::Spacing();
+            ImGui::TextDisabled("Blacklist (captured only if NOT matching)");
+            EditStringList("##blacklist", config_.blacklist, blackEntry_,
+                           (int)sizeof(blackEntry_), entryListHeight * 0.6f,
+                           "add blacklist pattern...");
+        } else {
+            ImGui::TextUnformatted("Blacklist (captured only if NOT matching)");
+            EditStringList("##blacklist", config_.blacklist, blackEntry_,
+                           (int)sizeof(blackEntry_), entryListHeight,
+                           "add blacklist pattern...");
+            ImGui::Spacing();
+            ImGui::TextDisabled("Whitelist (captured only if matching)");
+            EditStringList("##whitelist", config_.whitelist, whiteEntry_,
+                           (int)sizeof(whiteEntry_), entryListHeight * 0.6f,
+                           "add whitelist pattern...");
+        }
     }
 
     // ---- Footer ----

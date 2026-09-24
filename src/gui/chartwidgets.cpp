@@ -174,9 +174,9 @@ void DrawMemoryTimelineChart(const GuiSnapshot& snapshot, TimelineView& view) {
     const double vmax = view.zoomMax;
     const double vspan = vmax - vmin;
 
-    // Plot geometry.
-    const float labelW = 76.0f;  // left gutter for Y labels
-    const float labelH = 20.0f;  // bottom gutter for X labels
+    // Plot geometry: keep margins minimal so the chart uses most of the panel.
+    const float labelW = 44.0f;  // slim left gutter for Y value labels
+    const float labelH = 16.0f;  // slim bottom gutter for X time labels
     ImVec2 avail = ImGui::GetContentRegionAvail();
     avail.x = std::max(avail.x, labelW + 40.0f);
     avail.y = std::max(avail.y, labelH + 40.0f);

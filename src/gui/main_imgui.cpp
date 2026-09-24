@@ -89,22 +89,21 @@ void BuildDefaultDockLayout(ImGuiID dockspaceId) {
     ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_DockSpace);
     ImGui::DockBuilderSetNodeSize(dockspaceId, ImGui::GetMainViewport()->Size);
 
-    // Target layout (from the reference):
-    //   TOP    (full width): Timeline
-    //   BOTTOM-LEFT : Stacktrace
-    //   BOTTOM-RIGHT: Treemap / Smaps (tabbed)
-    //   RIGHT (top) : Screenshot
+    // Target layout:
+    //   TOP    : Timeline (left, wide) + Screenshot (right, its own unit)
+    //   BOTTOM : Stacktrace (left) + Treemap/Smaps tabbed (right)
     ImGuiID dockMain = dockspaceId;
-    // Right narrow column for Screenshot.
-    ImGuiID dockRight = ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Right, 0.18f, nullptr, &dockMain);
-    // Top band (Timeline) across the remaining width.
-    ImGuiID dockTop = ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Up, 0.38f, nullptr, &dockMain);
-    // Bottom split: Stacktrace (left) / Treemap (right).
-    ImGuiID dockBottomRight = ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Right, 0.42f, nullptr, &dockMain);
-    ImGuiID dockBottomLeft = dockMain;
+    // Bottom band (Stacktrace + Treemap/Smaps), full width.
+    ImGuiID dockBottom = ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Down, 0.58f, nullptr, &dockMain);
+    // Top band: split Screenshot off to the right (its own unit, not tabbed with Timeline).
+    ImGuiID dockTopRight = ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Right, 0.20f, nullptr, &dockMain);
+    ImGuiID dockTopLeft = dockMain;  // Timeline
+    // Bottom band split: Stacktrace (left) / Treemap+Smaps (right tabbed).
+    ImGuiID dockBottomRight = ImGui::DockBuilderSplitNode(dockBottom, ImGuiDir_Right, 0.42f, nullptr, &dockBottom);
+    ImGuiID dockBottomLeft = dockBottom;  // Stacktrace
 
-    ImGui::DockBuilderDockWindow("Timeline", dockTop);
-    ImGui::DockBuilderDockWindow("Screenshot", dockRight);
+    ImGui::DockBuilderDockWindow("Timeline", dockTopLeft);
+    ImGui::DockBuilderDockWindow("Screenshot", dockTopRight);
     ImGui::DockBuilderDockWindow("Stacktrace", dockBottomLeft);
     ImGui::DockBuilderDockWindow("Treemap", dockBottomRight);
     ImGui::DockBuilderDockWindow("Smaps", dockBottomRight);
@@ -189,59 +188,56 @@ void DrawStacktracePanel(const gui::GuiSnapshot& snapshot, gui::StacktraceTree& 
 
             ImGui::PushID(row.nodeIndex);
 
-            // --- Tree indentation geometry: a single horizontal line per row.
-            // The expander arrow and the function name are placed at an explicit
-            // X offset (startX + depth * stepX) via SetCursorPosX + SameLine, so
-            // the row never wraps onto two lines.
+            // --- Single-line tree row: [indent guides][arrow-or-space][name].
+            // We lay out explicitly so the arrow and name share one line and
+            // leaves align under the parent label (same X as if they had an arrow).
             ImGuiWindow* drawWindow = ImGui::GetCurrentWindow();
-            const float lineHeight = ImGui::GetTextLineHeight();
-            const float stepX = ImGui::GetTreeNodeToLabelSpacing();  // ~indent per depth
-            const float startX = ImGui::GetCursorPosX();
+            ImDrawList* drawList = ImGui::GetWindowDrawList();
+            const float lineHeight = ImGui::GetFrameHeight();  // matches ArrowButton
+            const float stepX = ImGui::GetTreeNodeToLabelSpacing();
+            const float baseX = ImGui::GetCursorPosX();
+            const float rowScreenY = ImGui::GetCursorScreenPos().y;
 
-            // Row body: [arrow][name] on ONE line. InvisibleButton anchors the
-            // whole row (click toggles, hover tooltip) without adding any
-            // indentation-level wrapping that a Selectable/Indent loop causes.
-            const float arrowX = startX + (float)row.depth * stepX;
+            // Indent guide lines: one faint vertical line per ancestor depth, at the
+            // X where that ancestor's arrow sits. Drawn BEFORE the row widgets so
+            // they sit behind the text (no line crossing through the arrow).
+            const ImU32 guideCol = ImGui::GetColorU32(ImGuiCol_TextDisabled, 0.35f);
+            for (int d = 1; d <= row.depth; ++d) {
+                const float gx = baseX + (float)(d - 1) * stepX + lineHeight * 0.5f;
+                const float sx = drawWindow->Pos.x + gx;
+                drawList->AddLine(ImVec2(sx, rowScreenY), ImVec2(sx, rowScreenY + lineHeight),
+                                  guideCol, 1.0f);
+            }
+
+            // Arrow column (always occupies lineHeight width so leaves align).
+            const float arrowX = baseX + (float)row.depth * stepX;
             ImGui::SetCursorPosX(arrowX);
             if (row.hasChildren) {
                 if (ImGui::ArrowButtonEx("##arrow", row.expanded ? ImGuiDir_Down : ImGuiDir_Right,
                                          ImVec2(lineHeight, lineHeight), ImGuiButtonFlags_None)) {
                     tree.SetExpanded(row.nodeIndex, !row.expanded);
                 }
+            } else {
+                // Leaf: reserve the same space so the name aligns with sibling labels.
+                ImGui::Dummy(ImVec2(lineHeight, lineHeight));
             }
-            ImGui::SameLine(0.0f, row.hasChildren ? 0.0f : ImGui::GetStyle().ItemInnerSpacing.x);
+
+            // Function name on the SAME line as the arrow.
+            ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
+            const float nameX = ImGui::GetCursorPosX();
             ImGui::TextUnformatted(tree.PoolStr(node.funcName));
 
-            // Whole-row interaction surface over the Function cell: an
-            // InvisibleButton spanning the cell; clicking toggles expansion when
-            // the row has children, hovering shows the library tooltip.
-            const ImVec2 clickMin = ImVec2(drawWindow->Pos.x + startX,
-                                           drawWindow->DC.CursorPosPrevLine.y);
-            const ImVec2 clickMax = ImVec2(drawWindow->Pos.x + startX +
-                                               ImGui::GetContentRegionAvail().x,
-                                           clickMin.y + lineHeight);
-            if (row.hasChildren) {
-                ImGui::SetCursorScreenPos(clickMin);
-                ImGui::InvisibleButton("##row", ImVec2(clickMax.x - clickMin.x,
-                                                      clickMax.y - clickMin.y));
-                if (ImGui::IsItemHovered() && node.library >= 0)
-                    ImGui::SetTooltip("%s", tree.PoolStr(node.library));
-                if (ImGui::IsItemClicked())
-                    tree.SetExpanded(row.nodeIndex, !row.expanded);
-            } else {
-                if (ImGui::IsItemHovered() && node.library >= 0)
-                    ImGui::SetTooltip("%s", tree.PoolStr(node.library));
-            }
-
-            // --- Indent guide lines: one subtle vertical line per depth level,
-            // matching where the child arrows sit, like a classic tree control.
-            if (row.depth > 0) {
-                ImDrawList* drawList = ImGui::GetWindowDrawList();
-                const ImU32 lineCol = ImGui::GetColorU32(ImGuiCol_Text, 0.18f);
-                const ImVec2 lineTop = ImVec2(drawWindow->Pos.x + arrowX + lineHeight * 0.5f,
-                                              drawWindow->DC.CursorPos.y - lineHeight);
-                drawList->AddLine(lineTop, ImVec2(lineTop.x, lineTop.y + lineHeight), lineCol);
-            }
+            // Row interaction: invisible button over the whole Function cell text
+            // region (click toggles for parents, hover shows library tooltip).
+            ImGui::SetCursorScreenPos(ImVec2(drawWindow->Pos.x + nameX, rowScreenY));
+            const float rowW = drawWindow->Pos.x + ImGui::GetContentRegionAvail().x +
+                               ImGui::GetCursorPosX() - (drawWindow->Pos.x + nameX);
+            ImGui::InvisibleButton("##rowhit", ImVec2(std::max(rowW, lineHeight), lineHeight));
+            const bool rowHover = ImGui::IsItemHovered();
+            if (rowHover && node.library >= 0)
+                ImGui::SetTooltip("%s", tree.PoolStr(node.library));
+            if (row.hasChildren && ImGui::IsItemClicked())
+                tree.SetExpanded(row.nodeIndex, !row.expanded);
 
             ImGui::TableNextColumn();
             ImGui::Text("%s", FormatBytes(node.totalSize).c_str());
@@ -512,9 +508,11 @@ int main(int argc, char** argv) {
                                         ImGuiDir_Up, toolbarHeight,
                                         ImGuiWindowFlags_NoScrollbar |
                                             ImGuiWindowFlags_NoSavedSettings)) {
-            // Center the button group in the strip: vertical centering plus
-            // horizontal centering of the combined button width.
-            ImGui::SetCursorPosY(ImGui::GetStyle().FramePadding.y);
+            // Center the button group: vertically center the button frame height
+            // within the strip, and horizontally center the combined width.
+            const float btnH = ImGui::GetFrameHeight();
+            const float contentH = ImGui::GetContentRegionAvail().y;
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (contentH - btnH) * 0.5f);
             const float runLaunchW = ImGui::CalcTextSize("Run/Launch").x +
                                      ImGui::GetStyle().FramePadding.x * 2.0f;
             const float stopCaptureW = ImGui::CalcTextSize("Stop Capture").x +

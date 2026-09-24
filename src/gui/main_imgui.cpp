@@ -4,6 +4,7 @@
 // GuiDataBridge; no Qt Widgets/Gui.
 
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "imgui-SFML.h"
 
 #include "chartwidgets.h"
@@ -26,9 +27,29 @@
 #include <SFML/Window/VideoMode.hpp>
 
 #include <cstdio>
+#include <cstring>
 #include <string>
 
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <Windows.h>
+#endif
+
 namespace {
+
+// System DPI scale factor (1.0 = 96 DPI). On Windows the process is not
+// auto-scaled by the OS for ImGui content, so we scale the UI explicitly.
+// On macOS/Linux the OS already handles Retina scaling; return 1.0 there.
+float GetSystemDpiScale() {
+#ifdef _WIN32
+    return static_cast<float>(GetDpiForSystem()) / 96.0f;
+#else
+    return 1.0f;
+#endif
+}
+
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -54,6 +75,36 @@ std::string FormatElapsed(int32_t ms) {
     std::snprintf(buf, sizeof(buf), "%02d:%02d:%02d", totalSeconds / 3600,
                   (totalSeconds / 60) % 60, totalSeconds % 60);
     return buf;
+}
+
+// Builds a sensible default dock layout on first run so panels aren't stacked:
+//   left: Capture Status / Console (bottom)
+//   center: Stacktrace (top) + Timeline (bottom)
+//   right: Treemap / Smaps / Screenshot (tabbed)
+void BuildDefaultDockLayout(ImGuiID dockspaceId) {
+    ImGui::DockBuilderRemoveNode(dockspaceId);
+    ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_DockSpace);
+    ImGui::DockBuilderSetNodeSize(dockspaceId, ImGui::GetMainViewport()->Size);
+
+    ImGuiID dockMain = dockspaceId;
+    // left column
+    ImGuiID dockLeft = ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Left, 0.20f, nullptr, &dockMain);
+    // right column
+    ImGuiID dockRight = ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Right, 0.32f, nullptr, &dockMain);
+    // center split: stacktrace (top) / timeline (bottom)
+    ImGuiID dockCenterBottom = ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Down, 0.40f, nullptr, &dockMain);
+    ImGuiID dockCenterTop = dockMain;
+    // left split: status (top) / console (bottom)
+    ImGuiID dockLeftBottom = ImGui::DockBuilderSplitNode(dockLeft, ImGuiDir_Down, 0.55f, nullptr, &dockLeft);
+
+    ImGui::DockBuilderDockWindow("Capture Status", dockLeft);
+    ImGui::DockBuilderDockWindow("Console", dockLeftBottom);
+    ImGui::DockBuilderDockWindow("Stacktrace", dockCenterTop);
+    ImGui::DockBuilderDockWindow("Timeline", dockCenterBottom);
+    ImGui::DockBuilderDockWindow("Treemap", dockRight);
+    ImGui::DockBuilderDockWindow("Smaps", dockRight);
+    ImGui::DockBuilderDockWindow("Screenshot", dockRight);
+    ImGui::DockBuilderFinish(dockspaceId);
 }
 
 // ---------------------------------------------------------------------------
@@ -211,7 +262,18 @@ void DrawConsolePanel(const gui::GuiSnapshot& snapshot, size_t& lastLineCount) {
 
 } // namespace
 
-int main() {
+int main(int argc, char** argv) {
+    // Optional: path to a .loli record to open on startup (for quick inspection).
+    const char* openRecordArg = nullptr;
+    for (int i = 1; i < argc; ++i) {
+        const char* a = argv[i];
+        if ((std::strcmp(a, "--open") == 0 || std::strcmp(a, "-o") == 0) && i + 1 < argc) {
+            openRecordArg = argv[++i];
+        } else if (std::strstr(a, ".loli") != nullptr) {
+            openRecordArg = a;  // bare path ending in .loli
+        }
+    }
+
     sf::ContextSettings settings;
     settings.depthBits = 24;
     settings.stencilBits = 8;
@@ -237,6 +299,16 @@ int main() {
         qtSettings.value("theme", QString::fromStdString(defaultTheme)).toString().toStdString();
     ApplyImGuiThemeByName(currentTheme.c_str());
 
+    // DPI scaling (Fury3D pattern): scale widget sizes AND font density by the
+    // system DPI so the UI isn't tiny on HiDPI displays. ScaleAllSizes is
+    // applied after the theme so the theme's base sizes get scaled too.
+    const float dpiScale = GetSystemDpiScale();
+    if (dpiScale != 1.0f) {
+        ImGuiStyle& style = ImGui::GetStyle();
+        style.FontScaleMain = dpiScale;
+        style.ScaleAllSizes(dpiScale);
+    }
+
     // Core data bridge (owns ADB/stacktrace/screenshot processes; Qt signals
     // are pumped by the Qt event loop integration used elsewhere).
     gui::GuiDataBridge bridge;
@@ -252,6 +324,12 @@ int main() {
     char stacktraceFilter[256] = {0};
     gui::TimelineView timelineView;
     gui::TreemapState treemapState;
+    bool firstFrame = true;
+
+    // Auto-open a record passed on the command line.
+    std::string pendingOpen;
+    if (openRecordArg)
+        pendingOpen = openRecordArg;
 
     sf::Clock deltaClock;
     while (window.isOpen()) {
@@ -268,8 +346,24 @@ int main() {
         // Take a consistent copy of the bridge state for this frame.
         bridge.UpdateSnapshot(snapshot);
 
-        // Root dockspace over the whole viewport
-        ImGui::DockSpaceOverViewport(0, nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
+        // Root dockspace over the whole viewport. On the first frame we lay out
+        // a sensible default arrangement so panels aren't all stacked.
+        const ImGuiID dockspaceId =
+            ImGui::DockSpaceOverViewport(0, nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
+        if (firstFrame) {
+            BuildDefaultDockLayout(dockspaceId);
+            firstFrame = false;
+        }
+
+        // Deferred auto-open: load the record after the first frame so the
+        // bridge and dock layout are fully initialized.
+        if (!pendingOpen.empty()) {
+            if (bridge.LoadRecord(QString::fromStdString(pendingOpen))) {
+                loadedRecordName = pendingOpen;
+                window.setTitle("LoliProfiler - " + loadedRecordName);
+            }
+            pendingOpen.clear();
+        }
 
         // Menu bar
         if (ImGui::BeginMainMenuBar()) {

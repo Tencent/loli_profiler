@@ -805,8 +805,9 @@ int main(int argc, char** argv) {
             // summary reflects the fully-populated UI, not the loading state.
             if (!bridge.IsLoading())
                 framesAfterLoad++;
-            // Exit once we've rendered a healthy number of frames past load.
-            if (!bridge.IsLoading() && framesAfterLoad > 180) {
+            // Exit once we've rendered enough frames past load to capture the
+            // fully-populated UI (a small count is enough for a screenshot).
+            if (!bridge.IsLoading() && framesAfterLoad > 40) {
                 std::printf("[selftest] frames=%d loadingFrames=%d records=%zu treeNodes=%zu treeBuildMs=%.1f worstFrameMs=%.2f\n",
                             framesRendered, loadingFrames, snapshot.records.size(),
                             stacktraceTree.Nodes().size(), lastTreeBuildMs, worstFrameMs);

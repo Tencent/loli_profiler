@@ -21,6 +21,7 @@
 #include <QUuid>
 #include <QMutex>
 
+#include <atomic>
 #include <memory>
 
 #include "guisnapshot.h"
@@ -63,7 +64,15 @@ public:
     void StopCapture();
 
     // ---- record file I/O ----
-    bool LoadRecord(const QString& path);
+    // LoadRecord starts an asynchronous load on a worker thread and returns
+    // immediately. Poll IsLoading()/LoadProgress() from the UI; when IsLoading()
+    // flips to false the new data is published. This keeps the UI responsive on
+    // very large records (hundreds of MB).
+    void LoadRecord(const QString& path);
+    bool IsLoading() const;
+    // 0..1 progress and a short status line while loading.
+    float LoadProgress() const;
+    QString LoadStatus() const;
     bool SaveRecord(const QString& path);
 
     // ---- config ----
@@ -71,8 +80,15 @@ public:
     void SaveCaptureConfig(const CaptureConfigSnapshot& config);
 
     // ---- snapshot access (called from ImGui render thread) ----
-    // Copies the latest state into `out`. Thread-safe.
-    void UpdateSnapshot(GuiSnapshot& out);
+    // Cheap: returns a shared pointer to the current immutable snapshot. The
+    // bridge swaps in a NEW snapshot object only when data actually changes
+    // (on load completion, or on a throttled capture tick), never per frame.
+    // Safe to hold across a frame; do not store long-term.
+    std::shared_ptr<const GuiSnapshot> AcquireSnapshot() const;
+
+    // Monotonic counter bumped each time the published snapshot changes.
+    // Panels compare against a cached value to know when to rebuild views.
+    uint64_t SnapshotVersion() const;
 
     bool IsCapturing() const;
     bool IsConnected() const;
@@ -85,11 +101,11 @@ private slots:
     void OnScreenshotFinished();
     void OnStartAppFinished();
     void OnStartAppError();
+    void OnRecordLoaded();
 
 private:
     void AppendLog(const QString& line);
-    void ReadStacktraceData(const QVector<RawStackInfo>& stacks);
-    void RebuildCallTreeLocked();
+    void PublishSnapshot();  // swap working copy into the published slot
 
 private:
     // Core processes (owned)
@@ -100,16 +116,22 @@ private:
     QVector<AddressProcess*> addrProcesses_;
     QTimer*             mainTimer_ = nullptr;
 
-    // ---- protected by mutex_ (written on Qt thread, read for snapshot) ----
-    mutable QMutex      mutex_;
-    GuiSnapshot         snapshot_;     // the live store
-    // callstack per record uuid -> resolved frames
-    QHash<QUuid, QVector<QPair<HashString, quint64>>> callStackMap_;
-    QHash<QString, QHash<quint64, QString>> symbolMap_; // lib -> addr -> name
-    QSet<QString>       libraries_;
-    QVector<StackRecord> recordsCache_;
-    QHash<quint64, quint32> freeAddrMap_;
-    QHash<QString, SMapsSection> sMapsSections_;
+    // ---- capture live state (Qt thread) ----
+    // Working copy that capture ticks accumulate into; published periodically.
+    std::shared_ptr<GuiSnapshot> working_;
+    // ---- published snapshot (read via AcquireSnapshot) ----
+    mutable QMutex      publishMutex_;
+    std::shared_ptr<const GuiSnapshot> published_;
+    uint64_t            publishVersion_ = 0;
+    // throttle capture publishes to ~4 Hz
+    qint64              lastPublishMs_ = 0;
+
+    // ---- async record loading ----
+    struct LoadResult;  // pimpl-ish, defined in cpp
+    std::atomic<bool>     loading_{false};
+    std::atomic<float>    loadProgress_{0.0f};
+    QString               loadStatus_;
+    mutable QMutex        loadStatusMutex_;
 
     // session bookkeeping
     QString  appPid_;

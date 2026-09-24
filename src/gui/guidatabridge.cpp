@@ -9,6 +9,8 @@
 #include <QDir>
 #include <QCoreApplication>
 #include <QTimer>
+#include <QDateTime>
+#include <QFutureWatcher>
 #include <QtConcurrent>
 
 #include "configdialog.h"
@@ -24,6 +26,20 @@ namespace gui {
 static const quint32 kAppMagic   = 0xA4B3C2D1;
 static const qint32  kAppVersion = 106;
 
+// Result produced by the background record loader. Moved into the bridge on
+// completion (see OnRecordLoaded).
+struct GuiDataBridge::LoadResult {
+    bool ok = false;
+    QString path;
+    QString fileName;
+    QVector<StackRecord> records;
+    QHash<QUuid, QVector<QPair<HashString, quint64>>> callStackMap;
+    QHash<QString, QHash<quint64, QString>> symbolMap;
+    QVector<QVector<QPair<double,double>>> memSeries;
+    QVector<QPair<qint32, QByteArray>> screenshots;
+    QHash<QString, SMapsSection> sMapsSections;
+};
+
 GuiDataBridge::GuiDataBridge(QObject* parent)
     : QObject(parent)
 {
@@ -34,6 +50,9 @@ GuiDataBridge::GuiDataBridge(QObject* parent)
 
     mainTimer_ = new QTimer(this);
     mainTimer_->setInterval(1000);
+
+    working_   = std::make_shared<GuiSnapshot>();
+    published_ = working_;
 
     connect(mainTimer_, &QTimer::timeout, this, &GuiDataBridge::FixedUpdate);
     connect(stacktraceProcess_, &StackTraceProcess::DataReceived,
@@ -49,12 +68,34 @@ GuiDataBridge::GuiDataBridge(QObject* parent)
 GuiDataBridge::~GuiDataBridge() = default;
 
 void GuiDataBridge::AppendLog(const QString& line) {
-    QMutexLocker lock(&mutex_);
-    snapshot_.logLines.push_back(line.toStdString());
-    // keep the console tail bounded
-    if (snapshot_.logLines.size() > 2000)
-        snapshot_.logLines.erase(snapshot_.logLines.begin(),
-                                 snapshot_.logLines.begin() + (snapshot_.logLines.size() - 2000));
+    if (working_)
+        working_->logLines.push_back(line.toStdString());
+}
+
+// ---------------------------------------------------------------------------
+// snapshot publish / acquire
+// ---------------------------------------------------------------------------
+void GuiDataBridge::PublishSnapshot() {
+    QMutexLocker lock(&publishMutex_);
+    published_ = working_;
+    ++publishVersion_;
+}
+
+std::shared_ptr<const GuiSnapshot> GuiDataBridge::AcquireSnapshot() const {
+    QMutexLocker lock(&publishMutex_);
+    return published_;
+}
+
+uint64_t GuiDataBridge::SnapshotVersion() const {
+    QMutexLocker lock(&publishMutex_);
+    return publishVersion_;
+}
+
+bool GuiDataBridge::IsLoading() const { return loading_.load(); }
+float GuiDataBridge::LoadProgress() const { return loadProgress_.load(); }
+QString GuiDataBridge::LoadStatus() const {
+    QMutexLocker lock(&loadStatusMutex_);
+    return loadStatus_;
 }
 
 // ---------------------------------------------------------------------------
@@ -128,40 +169,18 @@ bool GuiDataBridge::StartCapture(const QString& deviceSerial,
     appName_        = appName;
     subProcessName_ = subProcessName;
 
-    // Persist the capture config through the existing settings store so the
-    // injected library + StartAppProcess pick it up (same as the Qt GUI).
-    ConfigDialog::Settings settings;
-    settings.threshold_ = config.threshold;
-    settings.mode_      = QString::fromStdString(config.mode);
-    settings.build_     = QString::fromStdString(config.build);
-    settings.type_      = QString::fromStdString(config.type);
-    settings.arch_      = QString::fromStdString(config.arch);
-    settings.compiler_  = QString::fromStdString(config.compiler);
-    settings.hook_      = QString::fromStdString(config.hook);
-    for (const auto& w : config.whitelist) settings.whitelist_ << QString::fromStdString(w);
-    for (const auto& b : config.blacklist) settings.blacklist_ << QString::fromStdString(b);
-    // NOTE: the core persists settings via ConfigDialog; the bridge assumes the
-    // caller (RunLaunchDialog) has already written them. We read them back here.
-    settings = ConfigDialog::GetCurrentSettings();
+    // Persist capture config, then read back what the core will use.
+    SaveCaptureConfig(config);
+    const ConfigDialog::Settings settings = ConfigDialog::GetCurrentSettings();
 
-    {
-        QMutexLocker lock(&mutex_);
-        snapshot_.capture.capturing = true;
-        snapshot_.capture.connected = false;
-        snapshot_.capture.appName = appName.toStdString();
-        snapshot_.capture.deviceSerial = deviceSerial.toStdString();
-        snapshot_.records.clear();
-        snapshot_.callTree.clear();
-        snapshot_.memTimeline.clear();
-        snapshot_.screenshots.clear();
-        snapshot_.smaps.clear();
-    }
-    callStackMap_.clear();
-    symbolMap_.clear();
-    libraries_.clear();
-    recordsCache_.clear();
-    freeAddrMap_.clear();
-    sMapsSections_.clear();
+    // Fresh working snapshot for the session.
+    working_ = std::make_shared<GuiSnapshot>();
+    working_->capture.capturing = true;
+    working_->capture.connected = false;
+    working_->capture.appName = appName.toStdString();
+    working_->capture.deviceSerial = deviceSerial.toStdString();
+    PublishSnapshot();
+
     time_ = 0;
     lastScreenshotTime_ = 0;
 
@@ -171,8 +190,8 @@ bool GuiDataBridge::StartCapture(const QString& deviceSerial,
     const QString pythonPath = PathUtils::GetPythonExecutablePath();
     if (adbPath.isEmpty() || !QFile::exists(adbPath)) {
         AppendLog("ADB not found. Configure the SDK path in settings.");
-        QMutexLocker lock(&mutex_);
-        snapshot_.capture.capturing = false;
+        working_->capture.capturing = false;
+        PublishSnapshot();
         return false;
     }
 
@@ -184,7 +203,6 @@ bool GuiDataBridge::StartCapture(const QString& deviceSerial,
     stacktraceProcess_->ForwardPort(8000);
     startAppProcess_->SetPythonPath(pythonPath);
     startAppProcess_->SetExecutablePath(adbPath);
-    // Launch (not attach) by default; inject/attach toggle is a RunLaunchDialog option.
     startAppProcess_->StartApp(appName_, subProcessName_,
                                settings.compiler_, settings.arch_,
                                /*interceptMode=*/false, /*dialog=*/nullptr);
@@ -203,9 +221,11 @@ void GuiDataBridge::StopCapture() {
     if (screenshotProcess_->IsRunning())
         screenshotProcess_->Process()->kill();
 
-    QMutexLocker lock(&mutex_);
-    snapshot_.capture.capturing = false;
-    snapshot_.capture.connected = false;
+    if (working_) {
+        working_->capture.capturing = false;
+        working_->capture.connected = false;
+    }
+    PublishSnapshot();
 }
 
 void GuiDataBridge::FixedUpdate() {
@@ -225,62 +245,52 @@ void GuiDataBridge::FixedUpdate() {
         AppendLog("Connecting to application server ...");
     }
     time_++;
+
+    // Throttled publish so the UI refreshes ~1 Hz during capture.
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (now - lastPublishMs_ >= 1000) {
+        lastPublishMs_ = now;
+        if (working_)
+            working_->capture.elapsedMs = time_ * 1000;
+        PublishSnapshot();
+    }
 }
 
 // ---------------------------------------------------------------------------
-// core signal handlers (run on Qt thread)
+// core signal handlers (run on Qt thread) — mutate working_, publish is throttled
 // ---------------------------------------------------------------------------
 void GuiDataBridge::OnStacktraceData() {
-    QMutexLocker lock(&mutex_);
+    if (!working_)
+        return;
     const auto& stacks = stacktraceProcess_->GetStackInfo();
-    const auto& frees  = stacktraceProcess_->GetFreeInfo();
-    for (const auto& f : frees)
-        freeAddrMap_.insert(f.second, f.first);
-
     const bool isNoStack = ConfigDialog::IsNoStackMode();
     for (const auto& stack : stacks) {
-        auto it = freeAddrMap_.find(stack.addr_);
-        if (it != freeAddrMap_.end() && stack.seq_ < it.value())
-            continue;  // freed record
-
-        StackRecord record;
-        record.uuid_ = QUuid::createUuid();
-        record.seq_  = stack.seq_;
-        record.time_ = static_cast<qint32>(stack.time_);
-        record.size_ = static_cast<qint32>(stack.size_);
-        record.addr_ = stack.addr_;
-        if (isNoStack) {
-            record.library_ = HashString(stack.library_);
-        } else {
-            auto& callstack = callStackMap_[record.uuid_];
-            for (auto addr : stack.stacktraces_)
-                callstack.append(qMakePair(QString(), addr));
-        }
-        recordsCache_.push_back(record);
-
         RecordSnapshot rs;
-        rs.seq = record.seq_;
-        rs.timeMs = record.time_;
-        rs.size = record.size_;
-        rs.addr = record.addr_;
-        rs.funcAddr = record.funcAddr_;
-        rs.library = record.library_.Get().toStdString();
-        snapshot_.records.push_back(std::move(rs));
+        rs.seq = stack.seq_;
+        rs.timeMs = static_cast<int32_t>(stack.time_);
+        rs.size = static_cast<int32_t>(stack.size_);
+        rs.addr = stack.addr_;
+        rs.funcAddr = 0;
+        rs.library = isNoStack ? stack.library_.Get().toStdString() : std::string();
+        working_->records.push_back(std::move(rs));
+        // frames are resolved on demand for capture; left empty here.
+        working_->recordFrames.emplace_back();
     }
-    snapshot_.capture.recordCount = snapshot_.records.size();
-    snapshot_.capture.connected = stacktraceProcess_->IsConnected();
-    snapshot_.capture.elapsedMs = time_ * 1000;
+    working_->capture.recordCount = working_->records.size();
+    working_->capture.connected = stacktraceProcess_->IsConnected();
 }
 
 void GuiDataBridge::OnStacktraceConnectionLost() {
     AppendLog("Stacktrace connection lost.");
-    QMutexLocker lock(&mutex_);
-    snapshot_.capture.connected = false;
+    if (working_)
+        working_->capture.connected = false;
+    PublishSnapshot();
 }
 
 void GuiDataBridge::OnMemInfoFinished() {
+    if (!working_)
+        return;
     const auto& info = memInfoProcess_->GetMemInfo();
-    QMutexLocker lock(&mutex_);
     MemInfoSample s;
     s.timeMs     = time_ * 1000;
     s.total      = info.Total;
@@ -289,35 +299,26 @@ void GuiDataBridge::OnMemInfoFinished() {
     s.eglMtrack  = info.EGLmtrack;
     s.glMtrack   = info.GLmtrack;
     s.unknown    = info.Unknown;
-    snapshot_.memTimeline.push_back(s);
+    working_->memTimeline.push_back(s);
 }
 
 void GuiDataBridge::OnScreenshotFinished() {
+    if (!working_)
+        return;
     const QByteArray bytes = screenshotProcess_->GetScreenshotBytes();
     if (bytes.isEmpty())
         return;
-    QMutexLocker lock(&mutex_);
     ScreenshotSnapshot ss;
     ss.timeMs = time_ * 1000;
     ss.jpegBytes.assign(bytes.begin(), bytes.end());
-    snapshot_.screenshots.push_back(std::move(ss));
+    working_->screenshots.push_back(std::move(ss));
+    PublishSnapshot();  // screenshots are cheap; publish promptly
 }
 
 void GuiDataBridge::OnStartAppFinished() {}
 void GuiDataBridge::OnStartAppError() {
     AppendLog("Failed to start application.");
 }
-
-// ---------------------------------------------------------------------------
-// snapshot access
-// ---------------------------------------------------------------------------
-void GuiDataBridge::UpdateSnapshot(GuiSnapshot& out) {
-    QMutexLocker lock(&mutex_);
-    out = snapshot_;
-}
-
-bool GuiDataBridge::IsCapturing() const { return isCapturing_; }
-bool GuiDataBridge::IsConnected() const { return isConnected_; }
 
 // ---------------------------------------------------------------------------
 // config
@@ -355,146 +356,212 @@ void GuiDataBridge::SaveCaptureConfig(const CaptureConfigSnapshot& config) {
 }
 
 // ---------------------------------------------------------------------------
-// record file I/O (reuses the exact .loli QDataStream layout)
+// record file I/O (async load reusing the exact .loli QDataStream layout)
 // ---------------------------------------------------------------------------
-bool GuiDataBridge::LoadRecord(const QString& path) {
-    QFile file(path);
-    if (!file.open(QFile::ReadOnly))
-        return false;
-    QDataStream stream(&file);
+void GuiDataBridge::LoadRecord(const QString& path) {
+    if (loading_.load())
+        return;  // a load is already in flight
+    loading_.store(true);
+    loadProgress_.store(0.0f);
+    {
+        QMutexLocker lock(&loadStatusMutex_);
+        loadStatus_ = "Opening...";
+    }
 
-    quint32 magic;
-    stream >> magic;
-    if (magic != kAppMagic)
-        return false;
-    qint32 version;
-    stream >> version;
-    if (version != kAppVersion)
-        return false;
+    std::atomic<float>* progress = &loadProgress_;
+    auto future = QtConcurrent::run([path, progress]() -> std::shared_ptr<LoadResult> {
+        auto result = std::make_shared<LoadResult>();
+        result->path = path;
+        result->fileName = QFileInfo(path).fileName();
 
-    // meminfo series
-    qint32 maxMemInfoValue;
-    stream >> maxMemInfoValue;
-    qint32 seriesCount;
-    stream >> seriesCount;
-    QVector<QVector<QPair<double,double>>> series(seriesCount);
-    for (int i = 0; i < seriesCount; i++) {
-        int pointsCount;
-        stream >> pointsCount;
-        for (int j = 0; j < pointsCount; j++) {
-            QPointF point;
-            stream >> point;
-            series[i].push_back(qMakePair(point.x(), point.y()));
+        QFile file(path);
+        if (!file.open(QFile::ReadOnly))
+            return result;
+        const qint64 fileSize = file.size();
+        QDataStream stream(&file);
+
+        quint32 magic;
+        stream >> magic;
+        if (magic != kAppMagic)
+            return result;
+        qint32 version;
+        stream >> version;
+        if (version != kAppVersion)
+            return result;
+
+        auto setProgress = [&](qint64 pos) {
+            if (fileSize > 0)
+                progress->store((float)pos / (float)fileSize);
+        };
+
+        // meminfo series
+        qint32 maxMemInfoValue;
+        stream >> maxMemInfoValue;
+        qint32 seriesCount;
+        stream >> seriesCount;
+        result->memSeries.resize(seriesCount);
+        for (int i = 0; i < seriesCount; i++) {
+            int pointsCount;
+            stream >> pointsCount;
+            auto& series = result->memSeries[i];
+            series.reserve(pointsCount);
+            for (int j = 0; j < pointsCount; j++) {
+                QPointF point;
+                stream >> point;
+                series.push_back(qMakePair(point.x(), point.y()));
+            }
         }
-    }
+        setProgress(file.pos());
 
-    HashString::hashmap_.clear();
-    stream >> HashString::hashmap_;
+        // string intern table (shared static; read on worker is safe because
+        // we rebuild it on the Qt thread before use — here we just consume).
+        QHash<quint32, QString> hashmap;
+        stream >> hashmap;
+        HashString::hashmap_ = hashmap;
+        setProgress(file.pos());
 
-    // records
-    QVector<StackRecord> records;
-    QSet<QString> libraries;
-    qint32 value;
-    stream >> value;
-    records.reserve(value);
-    for (int i = 0; i < value; i++) {
-        StackRecord record;
-        QString str;
-        stream >> str;
-        record.uuid_ = QUuid::fromString(str);
-        stream >> record.seq_ >> record.time_ >> record.size_
-               >> record.addr_ >> record.funcAddr_ >> record.library_.hashcode_;
-        if (!record.library_.Get().isEmpty())
-            libraries.insert(record.library_.Get());
-        records.push_back(record);
-    }
-
-    // callstack map
-    QHash<QUuid, QVector<QPair<HashString, quint64>>> callStackMap;
-    stream >> value;
-    for (int i = 0; i < value; i++) {
-        QString uuid;
-        qint32 len;
-        stream >> uuid >> len;
-        QVector<QPair<HashString, quint64>> callstack;
-        for (int j = 0; j < len; j++) {
-            QPair<HashString, quint64> pair;
-            stream >> pair.first.hashcode_ >> pair.second;
-            callstack.push_back(pair);
+        // records
+        qint32 value;
+        stream >> value;
+        result->records.reserve(value);
+        for (int i = 0; i < value; i++) {
+            StackRecord record;
+            QString str;
+            stream >> str;
+            record.uuid_ = QUuid::fromString(str);
+            stream >> record.seq_ >> record.time_ >> record.size_
+                   >> record.addr_ >> record.funcAddr_ >> record.library_.hashcode_;
+            result->records.push_back(record);
+            if ((i & 0xFFFF) == 0)
+                setProgress(file.pos());
         }
-        callStackMap.insert(QUuid::fromString(uuid), callstack);
-    }
 
-    // symbol map
-    QHash<QString, QHash<quint64, QString>> symbolMap;
-    stream >> value;
-    for (int i = 0; i < value; i++) {
-        QString lib;
-        stream >> lib;
-        qint32 size;
-        stream >> size;
-        auto& map = symbolMap[lib];
-        for (int j = 0; j < size; j++) {
-            quint64 key;
+        // callstack map
+        stream >> value;
+        result->callStackMap.reserve(value);
+        for (int i = 0; i < value; i++) {
+            QString uuid;
+            qint32 len;
+            stream >> uuid >> len;
+            QVector<QPair<HashString, quint64>> callstack;
+            callstack.reserve(len);
+            for (int j = 0; j < len; j++) {
+                QPair<HashString, quint64> pair;
+                stream >> pair.first.hashcode_ >> pair.second;
+                callstack.push_back(pair);
+            }
+            result->callStackMap.insert(QUuid::fromString(uuid), callstack);
+            if ((i & 0x3FFF) == 0)
+                setProgress(file.pos());
+        }
+
+        // symbol map
+        stream >> value;
+        for (int i = 0; i < value; i++) {
+            QString lib;
+            stream >> lib;
+            qint32 size;
+            stream >> size;
+            auto& map = result->symbolMap[lib];
+            map.reserve(size);
+            for (int j = 0; j < size; j++) {
+                quint64 key;
+                QString name;
+                stream >> key >> name;
+                map[key] = name;
+            }
+        }
+        setProgress(file.pos());
+
+        // freeaddr map (read + discard; only used during capture filtering)
+        stream >> value;
+        for (int i = 0; i < value; i++) {
+            quint64 addr; quint32 seq;
+            stream >> addr >> seq;
+        }
+
+        // screenshots
+        stream >> value;
+        result->screenshots.reserve(value);
+        for (int i = 0; i < value; i++) {
+            qint32 time;
+            QByteArray ba;
+            stream >> time >> ba;
+            result->screenshots.push_back(qMakePair(time, ba));
+        }
+
+        // smaps
+        stream >> value;
+        result->sMapsSections.reserve(value);
+        for (int i = 0; i < value; i++) {
             QString name;
-            stream >> key >> name;
-            map[key] = name;
+            stream >> name;
+            SMapsSection section;
+            qint32 size;
+            stream >> size;
+            section.addrs_.reserve(size);
+            for (int j = 0; j < size; j++) {
+                quint64 start, end, offset;
+                stream >> start >> end >> offset;
+                section.addrs_.push_back(SMapsSectionAddr(start, end, offset));
+            }
+            stream >> section.virtual_ >> section.rss_ >> section.pss_
+                   >> section.privateClean_ >> section.privateDirty_
+                   >> section.sharedClean_ >> section.sharedDirty_;
+            result->sMapsSections.insert(name, section);
         }
-    }
 
-    // freeaddr map
-    QHash<quint64, quint32> freeAddrMap;
-    stream >> value;
-    for (int i = 0; i < value; i++) {
-        quint64 addr;
-        quint32 seq;
-        stream >> addr >> seq;
-        freeAddrMap.insert(addr, seq);
-    }
+        setProgress(fileSize);
+        result->ok = true;
+        return result;
+    });
 
-    // screenshots
-    QVector<QPair<qint32, QByteArray>> screenshots;
-    stream >> value;
-    screenshots.reserve(value);
-    for (int i = 0; i < value; i++) {
-        qint32 time;
-        QByteArray ba;
-        stream >> time >> ba;
-        screenshots.push_back(qMakePair(time, ba));
-    }
+    auto* watcher = new QFutureWatcher<std::shared_ptr<LoadResult>>(this);
+    connect(watcher, &QFutureWatcherBase::finished, this, [this, watcher]() {
+        OnRecordLoaded();
+        watcher->deleteLater();
+    });
+    watcher->setFuture(future);
+}
 
-    // smaps
-    QHash<QString, SMapsSection> sMapsSections;
-    stream >> value;
-    for (int i = 0; i < value; i++) {
-        QString name;
-        stream >> name;
-        SMapsSection section;
-        qint32 size;
-        stream >> size;
-        for (int j = 0; j < size; j++) {
-            quint64 start, end, offset;
-            stream >> start >> end >> offset;
-            section.addrs_.push_back(SMapsSectionAddr(start, end, offset));
+void GuiDataBridge::OnRecordLoaded() {
+    // The sender is the QFutureWatcher we created in LoadRecord. qobject_cast
+    // on the templated watcher requires Q_OBJECT, so use static_cast — we own
+    // the sender and know its exact type.
+    auto* watcher = static_cast<QFutureWatcher<std::shared_ptr<LoadResult>>*>(sender());
+    std::shared_ptr<LoadResult> result = watcher ? watcher->result() : nullptr;
+
+    loading_.store(false);
+    if (!result || !result->ok) {
+        AppendLog("Failed to load record file.");
+        {
+            QMutexLocker lock(&loadStatusMutex_);
+            loadStatus_.clear();
         }
-        stream >> section.virtual_ >> section.rss_ >> section.pss_
-               >> section.privateClean_ >> section.privateDirty_
-               >> section.sharedClean_ >> section.sharedDirty_;
-        sMapsSections.insert(name, section);
+        return;
     }
 
-    // Commit into the snapshot store.
-    QMutexLocker lock(&mutex_);
-    callStackMap_  = callStackMap;
-    symbolMap_     = symbolMap;
-    libraries_     = libraries;
-    freeAddrMap_   = freeAddrMap;
-    sMapsSections_ = sMapsSections;
-    recordsCache_  = records;
+    // Build a fresh snapshot from the loaded data (Qt thread now).
+    auto snap = std::make_shared<GuiSnapshot>();
 
-    snapshot_.records.clear();
-    snapshot_.records.reserve(records.size());
-    for (const auto& r : records) {
+    const auto& records = result->records;
+    snap->records.reserve(records.size());
+    snap->recordFrames.resize(records.size());
+
+    // resolve symbols helper
+    const auto& symbolMap = result->symbolMap;
+    auto resolve = [&](const QString& lib, quint64 addr) -> QString {
+        auto libIt = symbolMap.find(lib);
+        if (libIt != symbolMap.end()) {
+            auto nameIt = libIt.value().find(addr);
+            if (nameIt != libIt.value().end() && !nameIt.value().isEmpty())
+                return nameIt.value();
+        }
+        return QString("0x%1").arg(addr, 0, 16);
+    };
+
+    for (int i = 0; i < records.size(); i++) {
+        const auto& r = records[i];
         RecordSnapshot rs;
         rs.seq = r.seq_;
         rs.timeMs = r.time_;
@@ -502,38 +569,55 @@ bool GuiDataBridge::LoadRecord(const QString& path) {
         rs.addr = r.addr_;
         rs.funcAddr = r.funcAddr_;
         rs.library = r.library_.Get().toStdString();
-        snapshot_.records.push_back(std::move(rs));
+        snap->records.push_back(std::move(rs));
+
+        auto csIt = result->callStackMap.find(r.uuid_);
+        if (csIt != result->callStackMap.end()) {
+            const auto& callstack = csIt.value();
+            auto& frames = snap->recordFrames[i];
+            frames.reserve(callstack.size());
+            for (int j = callstack.size() - 1; j >= 0; j--) {
+                const QString lib = callstack[j].first.Get();
+                const quint64 addr = callstack[j].second;
+                StackFrameSnapshot f;
+                f.library = lib.toStdString();
+                f.funcAddr = addr;
+                f.funcName = resolve(lib, addr).toStdString();
+                frames.push_back(std::move(f));
+            }
+        }
     }
 
-    // meminfo series -> timeline (series order fixed: Total, NativeHeap, GfxDev, EGL, GL, Unknown)
-    snapshot_.memTimeline.clear();
-    if (!series.isEmpty()) {
-        int count = series[0].size();
+    // meminfo series -> timeline
+    if (!result->memSeries.isEmpty()) {
+        const auto& s0 = result->memSeries[0];
+        int count = s0.size();
+        snap->memTimeline.reserve(count);
         for (int j = 0; j < count; j++) {
             MemInfoSample s;
-            s.timeMs = static_cast<int32_t>(series[0][j].first);
-            s.total      = series.value(0).value(j).second;
-            s.nativeHeap = series.value(1).value(j).second;
-            s.gfxDev     = series.value(2).value(j).second;
-            s.eglMtrack  = series.value(3).value(j).second;
-            s.glMtrack   = series.value(4).value(j).second;
-            s.unknown    = series.value(5).value(j).second;
-            snapshot_.memTimeline.push_back(s);
+            s.timeMs = static_cast<int32_t>(s0.value(j).first);
+            s.total      = (uint32_t)result->memSeries.value(0).value(j).second;
+            s.nativeHeap = (uint32_t)result->memSeries.value(1).value(j).second;
+            s.gfxDev     = (uint32_t)result->memSeries.value(2).value(j).second;
+            s.eglMtrack  = (uint32_t)result->memSeries.value(3).value(j).second;
+            s.glMtrack   = (uint32_t)result->memSeries.value(4).value(j).second;
+            s.unknown    = (uint32_t)result->memSeries.value(5).value(j).second;
+            snap->memTimeline.push_back(s);
         }
     }
 
     // screenshots
-    snapshot_.screenshots.clear();
-    for (const auto& sc : screenshots) {
+    snap->screenshots.reserve(result->screenshots.size());
+    for (const auto& sc : result->screenshots) {
         ScreenshotSnapshot ss;
         ss.timeMs = sc.first;
         ss.jpegBytes.assign(sc.second.begin(), sc.second.end());
-        snapshot_.screenshots.push_back(std::move(ss));
+        snap->screenshots.push_back(std::move(ss));
     }
 
     // smaps
-    snapshot_.smaps.clear();
-    for (auto it = sMapsSections.begin(); it != sMapsSections.end(); ++it) {
+    snap->smaps.reserve(result->sMapsSections.size());
+    for (auto it = result->sMapsSections.begin(); it != result->sMapsSections.end(); ++it) {
         SMapsSectionSnapshot s;
         s.name = it.key().toStdString();
         s.virtualSize = it.value().virtual_;
@@ -543,16 +627,25 @@ bool GuiDataBridge::LoadRecord(const QString& path) {
         s.sharedDirty = it.value().sharedDirty_;
         s.privateClean = it.value().privateClean_;
         s.privateDirty = it.value().privateDirty_;
-        snapshot_.smaps.push_back(std::move(s));
+        snap->smaps.push_back(std::move(s));
     }
 
-    snapshot_.capture.capturing = false;
-    snapshot_.capture.connected = false;
-    snapshot_.capture.recordCount = snapshot_.records.size();
-    snapshot_.capture.appName = QFileInfo(file).fileName().toStdString();
+    snap->capture.capturing = false;
+    snap->capture.connected = false;
+    snap->capture.recordCount = snap->records.size();
+    snap->capture.appName = result->fileName.toStdString();
+    snap->logLines = working_ ? working_->logLines : std::vector<std::string>{};
 
-    RebuildCallTreeLocked();
-    return true;
+    working_ = snap;
+    PublishSnapshot();
+
+    {
+        QMutexLocker lock(&loadStatusMutex_);
+        loadStatus_.clear();
+    }
+    AppendLog(QString("Loaded %1 (%2 records).")
+                  .arg(result->fileName)
+                  .arg(snap->records.size()));
 }
 
 bool GuiDataBridge::SaveRecord(const QString& path) {
@@ -560,47 +653,6 @@ bool GuiDataBridge::SaveRecord(const QString& path) {
     // as MainWindow::SaveToFile. Left unimplemented until capture-save is wired.
     (void)path;
     return false;
-}
-
-void GuiDataBridge::RebuildCallTreeLocked() {
-    // Resolve each record's callstack (root-first) into StackFrameSnapshot so
-    // the ImGui StacktraceTree can aggregate and render. Symbol names come from
-    // symbolMap_ (populated from the record file or nm resolution); unresolved
-    // addresses fall back to a hex string, like MainWindow::TryAddNewAddress.
-    const auto& records = snapshot_.records;
-    snapshot_.recordFrames.clear();
-    snapshot_.recordFrames.resize(records.size());
-
-    auto resolve = [&](const QString& lib, quint64 addr) -> QString {
-        auto libIt = symbolMap_.find(lib);
-        if (libIt != symbolMap_.end()) {
-            auto nameIt = libIt.value().find(addr);
-            if (nameIt != libIt.value().end() && !nameIt.value().isEmpty())
-                return nameIt.value();
-        }
-        return QString("0x%1").arg(addr, 0, 16);
-    };
-
-    // We iterate recordsCache_ (which carries uuid_ -> callStackMap_).
-    for (int i = 0; i < recordsCache_.size(); i++) {
-        const auto& record = recordsCache_[i];
-        auto csIt = callStackMap_.find(record.uuid_);
-        if (csIt == callStackMap_.end())
-            continue;
-        const auto& callstack = csIt.value();
-        auto& frames = snapshot_.recordFrames[i];
-        frames.reserve(callstack.size());
-        // callstack is leaf-first (innermost frame first); emit root-first.
-        for (int j = callstack.size() - 1; j >= 0; j--) {
-            const QString lib = callstack[j].first.Get();
-            const quint64 addr = callstack[j].second;
-            StackFrameSnapshot f;
-            f.library = lib.toStdString();
-            f.funcAddr = addr;
-            f.funcName = resolve(lib, addr).toStdString();
-            frames.push_back(std::move(f));
-        }
-    }
 }
 
 } // namespace gui

@@ -22,6 +22,7 @@
 
 #include <SFML/Graphics/RenderWindow.hpp>
 #include <SFML/Graphics/Texture.hpp>
+#include <SFML/Graphics/Image.hpp>
 #include <SFML/System/Clock.hpp>
 #include <SFML/Window/ContextSettings.hpp>
 #include <SFML/Window/Event.hpp>
@@ -266,10 +267,16 @@ int main(int argc, char** argv) {
     // Headless perf harness: render a bounded number of frames and auto-exit so
     // we can measure load/interactivity from scripts without manual clicking.
     bool selfTest = false;
+    // Screenshot harness: after the selftest frame budget, dump the window to a
+    // PNG so we can visually verify rendering from scripts.
+    std::string screenshotPath;
     for (int i = 1; i < argc; ++i) {
         const char* a = argv[i];
         if (std::strcmp(a, "--selftest") == 0) {
             selfTest = true;
+        } else if (std::strcmp(a, "--screenshot") == 0 && i + 1 < argc) {
+            screenshotPath = argv[++i];
+            selfTest = true;  // screenshot implies selftest (bounded frames + exit)
         } else if ((std::strcmp(a, "--open") == 0 || std::strcmp(a, "-o") == 0) && i + 1 < argc) {
             openRecordArg = argv[++i];
         } else if (std::strstr(a, ".loli") != nullptr) {
@@ -349,6 +356,7 @@ int main(int argc, char** argv) {
     double lastTreeBuildMs = 0.0;
     double worstFrameMs = 0.0;
     bool wasLoading = false;
+    int framesAfterLoad = 0;
 
     // Adopt the worker-built aggregated tree when the snapshot version changes.
     // The tree arrives pre-built (interned strings) inside the snapshot, so this
@@ -502,7 +510,7 @@ int main(int argc, char** argv) {
 
         if (ImGui::Begin("Treemap")) {
             rebuildTreeIfNeeded();
-            gui::DrawTreemapPanel(stacktraceTree, treemapState, bridge.SnapshotVersion());
+            gui::DrawTreemapPanel(stacktraceTree, treemapState, bridge.SnapshotVersion(), dpiScale);
         }
         ImGui::End();
 
@@ -545,31 +553,50 @@ int main(int argc, char** argv) {
             }
         }
 
+        // Headless self-test bookkeeping (before display so we can capture the
+        // final frame reliably from the back buffer).
+        bool captureScreenshotNow = false;
+        if (selfTest) {
+            framesRendered++;
+            if (bridge.IsLoading())
+                loadingFrames++;
+            // Count frames rendered AFTER loading finishes, so the screenshot /
+            // summary reflects the fully-populated UI, not the loading state.
+            if (!bridge.IsLoading())
+                framesAfterLoad++;
+            // Exit once we've rendered a healthy number of frames past load.
+            if (!bridge.IsLoading() && framesAfterLoad > 180) {
+                std::printf("[selftest] frames=%d loadingFrames=%d records=%zu treeNodes=%zu treeBuildMs=%.1f worstFrameMs=%.2f\n",
+                            framesRendered, loadingFrames, snapshot.records.size(),
+                            stacktraceTree.Nodes().size(), lastTreeBuildMs, worstFrameMs);
+                std::fflush(stdout);
+                captureScreenshotNow = !screenshotPath.empty();
+            }
+        }
+
         window.clear();
         ImGui::SFML::Render(window);
         window.display();
 
         const double frameMs = frameClock.getElapsedTime().asSeconds() * 1000.0;
-        // Headless self-test: run a bounded number of frames after the record
-        // finishes loading, then exit cleanly so scripts can time the whole run.
-        if (selfTest) {
-            framesRendered++;
-            if (bridge.IsLoading())
-                loadingFrames++;
-            if (frameMs > worstFrameMs)
-                worstFrameMs = frameMs;
-            // Exit once we've rendered a healthy number of frames past load.
-            if (!bridge.IsLoading() && framesRendered > 240) {
-                std::printf("[selftest] frames=%d loadingFrames=%d records=%zu treeNodes=%zu treeBuildMs=%.1f worstFrameMs=%.2f\n",
-                            framesRendered, loadingFrames, snapshot.records.size(),
-                            stacktraceTree.Nodes().size(), lastTreeBuildMs, worstFrameMs);
-                std::fflush(stdout);
-                window.close();
+        if (selfTest && frameMs > worstFrameMs)
+            worstFrameMs = frameMs;
+
+        // Capture the just-presented frame from the front buffer, then exit.
+        if (captureScreenshotNow) {
+            sf::Texture tex;
+            if (tex.resize(window.getSize())) {
+                tex.update(window);
+                if (tex.copyToImage().saveToFile(screenshotPath))
+                    std::printf("[selftest] screenshot saved: %s\n", screenshotPath.c_str());
+                else
+                    std::fprintf(stderr, "[selftest] FAILED to save screenshot %s\n", screenshotPath.c_str());
             }
-            // Safety cap: never hang the harness.
-            if (framesRendered > 20000)
-                window.close();
+            window.close();
         }
+        // Safety cap: never hang the harness.
+        if (selfTest && framesRendered > 20000)
+            window.close();
     }
 
     FileDialogs::Shutdown();

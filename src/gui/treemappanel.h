@@ -30,15 +30,16 @@ struct TreemapState {
     uint64_t builtForVersion = 0;   // data version the texture was built from
     int      builtFocus = -2;       // focus the texture was built for
     int      builtDepth = -1;       // depth the texture was built for
+    float    builtDpi = 0.0f;       // dpi scale the texture was built for
 };
 
 // Draws the treemap for the given (already-built) stacktrace tree. `dataVersion`
 // should be the bridge snapshot version so the texture refreshes on new data.
-// Call between ImGui::Begin/End of the Treemap window. The sf::RenderTexture
-// pointers in `state` are lazily created and must be freed by the caller at
-// shutdown via FreeTreemapState().
+// `dpiScale` scales cell separation/borders/text for HiDPI. Call between
+// ImGui::Begin/End of the Treemap window. The sf::RenderTexture pointers in
+// `state` are lazily created; free them at shutdown via FreeTreemapState().
 void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
-                      uint64_t dataVersion);
+                      uint64_t dataVersion, float dpiScale = 1.0f);
 
 // Frees the cached textures. Call once at shutdown.
 void FreeTreemapState(TreemapState& state);

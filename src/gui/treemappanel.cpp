@@ -48,54 +48,90 @@ double WorstAspect(const std::vector<double>& row, double groupSum, double propo
     return std::max((len2 * maxA) / sum2, sum2 / (len2 * minA));
 }
 
+// Squarified treemap layout (Bruls-Huizing-van Wijk). Lays out `items` into
+// `rect`, producing one Cell per item at `depth`, then recurses into each cell's
+// children at depth+1. `gap` insets every cell so cells never touch (separation).
 void Squarify(const std::vector<int32_t>& items, const StacktraceTree& tree,
-              Rect rect, int depth, int maxDepth, std::vector<Cell>& out) {
-    if (items.empty() || rect.w <= 1.0f || rect.h <= 1.0f)
+              Rect rect, int depth, int maxDepth, float gap, std::vector<Cell>& out) {
+    if (items.empty())
         return;
-    double total = 0.0;
-    for (int32_t idx : items) total += (double)tree.NodeAt(idx).totalSize;
-    if (total <= 0.0) return;
 
-    const bool horizontal = rect.w >= rect.h;
-    const double length = horizontal ? rect.h : rect.w;
-
-    std::vector<int32_t> remaining = items;
-    while (!remaining.empty()) {
-        std::vector<double> rowAreas;
-        std::vector<int32_t> rowItems;
-        double groupSum = 0.0, worst = 1e300;
-        while (!remaining.empty()) {
-            int32_t idx = remaining.front();
-            double area = (double)tree.NodeAt(idx).totalSize;
-            double newWorst = WorstAspect(rowAreas, groupSum, area, length);
-            if (newWorst > worst && !rowAreas.empty()) break;
-            rowAreas.push_back(area);
-            rowItems.push_back(idx);
-            groupSum += area;
-            worst = newWorst;
-            remaining.erase(remaining.begin());
-        }
-        double rowWidth = groupSum / length;
-        double offset = horizontal ? rect.y : rect.x;
-        for (size_t k = 0; k < rowItems.size(); k++) {
-            double h = rowAreas[k] / rowWidth;
+    // Emit a cell for each item and recurse into children.
+    auto layoutRow = [&](const std::vector<int32_t>& row, Rect rowRect) {
+        const bool horizontal = rowRect.w >= rowRect.h;
+        double rowSum = 0.0;
+        for (int32_t idx : row) rowSum += (double)tree.NodeAt(idx).totalSize;
+        if (rowSum <= 0.0) return;
+        const double cross = horizontal ? rowRect.w : rowRect.h;  // fixed dimension
+        double offset = horizontal ? rowRect.y : rowRect.x;
+        for (int32_t idx : row) {
+            const double frac = (double)tree.NodeAt(idx).totalSize / rowSum;
+            const double span = (horizontal ? rowRect.h : rowRect.w) * frac;
             Rect cell = horizontal
-                ? Rect{ rect.x, (float)offset, (float)rowWidth, (float)h }
-                : Rect{ (float)offset, rect.y, (float)h, (float)rowWidth };
-            offset += h;
-            out.push_back({ rowItems[k], depth, cell });
-            if (depth + 1 < maxDepth) {
-                const auto& node = tree.NodeAt(rowItems[k]);
-                if (!node.children.empty())
-                    Squarify(node.children, tree, { cell.x + 2, cell.y + 2, cell.w - 4, cell.h - 4 },
-                             depth + 1, maxDepth, out);
+                ? Rect{ rowRect.x, (float)offset, (float)rowRect.w, (float)span }
+                : Rect{ (float)offset, rowRect.y, (float)span, (float)rowRect.h };
+            offset += span;
+            // Inset by gap for separation.
+            Rect g{ cell.x + gap, cell.y + gap, cell.w - 2 * gap, cell.h - 2 * gap };
+            if (g.w > 1.0f && g.h > 1.0f) {
+                out.push_back({ idx, depth, g });
+                if (depth + 1 < maxDepth) {
+                    const auto& node = tree.NodeAt(idx);
+                    if (!node.children.empty())
+                        Squarify(node.children, tree, g, depth + 1, maxDepth, gap, out);
+                }
             }
         }
-        Rect rest = horizontal
-            ? Rect{ rect.x + (float)rowWidth, rect.y, rect.w - (float)rowWidth, rect.h }
-            : Rect{ rect.x, rect.y + (float)rowWidth, rect.w, rect.h - (float)rowWidth };
-        Squarify(remaining, tree, rest, depth, maxDepth, out);
-        break;  // Squarify above consumed the rest; loop guard
+        (void)cross;
+    };
+
+    // Work on a copy sorted by descending size (stable squarify input).
+    std::vector<int32_t> sorted = items;
+    std::sort(sorted.begin(), sorted.end(), [&](int32_t a, int32_t b) {
+        return tree.NodeAt(a).totalSize > tree.NodeAt(b).totalSize;
+    });
+
+    Rect remaining = rect;
+    size_t i = 0;
+    while (i < sorted.size() && remaining.w > 2 * gap + 1 && remaining.h > 2 * gap + 1) {
+        const bool horizontal = remaining.w >= remaining.h;
+        const double length = horizontal ? remaining.h : remaining.w;
+        double total = 0.0;
+        for (size_t k = i; k < sorted.size(); k++)
+            total += (double)tree.NodeAt(sorted[k]).totalSize;
+        if (total <= 0.0) break;
+
+        // Greedily pack a row while the worst aspect ratio keeps improving.
+        std::vector<int32_t> row;
+        std::vector<double> rowAreas;
+        double rowSum = 0.0, worst = 1e300;
+        size_t j = i;
+        while (j < sorted.size()) {
+            double area = (double)tree.NodeAt(sorted[j]).totalSize;
+            double newWorst = WorstAspect(rowAreas, rowSum, area, length);
+            if (newWorst > worst && !row.empty()) break;
+            row.push_back(sorted[j]);
+            rowAreas.push_back(area);
+            rowSum += area;
+            worst = newWorst;
+            j++;
+        }
+
+        // Carve the row off the remaining rect.
+        const double rowFrac = rowSum / total;
+        Rect rowRect, rest;
+        if (horizontal) {
+            const float rowW = (float)(remaining.w * rowFrac);
+            rowRect = { remaining.x, remaining.y, rowW, remaining.h };
+            rest    = { remaining.x + rowW, remaining.y, remaining.w - rowW, remaining.h };
+        } else {
+            const float rowH = (float)(remaining.h * rowFrac);
+            rowRect = { remaining.x, remaining.y, remaining.w, rowH };
+            rest    = { remaining.x, remaining.y + rowH, remaining.w, remaining.h - rowH };
+        }
+        layoutRow(row, rowRect);
+        remaining = rest;
+        i = j;
     }
 }
 
@@ -112,7 +148,7 @@ sf::RenderTexture* EnsureTexture(sf::RenderTexture*& tex, int w, int h) {
 } // namespace
 
 void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
-                      uint64_t dataVersion) {
+                      uint64_t dataVersion, float dpiScale) {
     if (tree.Nodes().empty()) {
         ImGui::TextUnformatted("No data. Load a record or run a capture.");
         return;
@@ -120,7 +156,7 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
 
     // Controls (cheap widgets above the image).
     bool controlsChanged = false;
-    if (ImGui::SliderInt("Depth", &state.maxDepth, 1, 10))
+    if (ImGui::SliderInt("Depth", &state.maxDepth, 1, 12))
         controlsChanged = true;
     if (state.focusedNode >= 0) {
         ImGui::SameLine();
@@ -141,6 +177,7 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
         state.builtForVersion != dataVersion ||
         state.builtFocus != state.focusedNode ||
         state.builtDepth != state.maxDepth ||
+        state.builtDpi != dpiScale ||
         state.texW != w || state.texH != h ||
         state.displayTex == nullptr || state.pickTex == nullptr ||
         controlsChanged;
@@ -152,12 +189,20 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
             state.texW = w;
             state.texH = h;
 
+            // Inter-cell gap + border scale with DPI so separation stays visible
+            // on HiDPI displays.
+            const float gap = 2.0f * dpiScale;
+            const float fontSize = 12.0f * dpiScale;
+
             // Compute layout once.
             std::vector<Cell> cells;
             std::vector<int32_t> top;
             if (state.focusedNode >= 0) top.push_back(state.focusedNode);
             else top = tree.Roots();
-            Squarify(top, tree, { 0, 0, (float)w, (float)h }, 0, state.maxDepth, cells);
+            Squarify(top, tree, { 0, 0, (float)w, (float)h }, 0, state.maxDepth, gap, cells);
+            std::fprintf(stderr, "[treemap] cells=%zu top=%zu focus=%d depth=%d w=%d h=%d gap=%.1f\n",
+                         cells.size(), top.size(), state.focusedNode, state.maxDepth, w, h, gap);
+            std::fflush(stderr);
 
             // Display layer.
             disp->clear(sf::Color(24, 24, 28));
@@ -172,31 +217,35 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
 
             for (const auto& c : cells) {
                 const auto& node = tree.NodeAt(c.nodeIndex);
-                sf::RectangleShape r(sf::Vector2f(c.rect.w - 1, c.rect.h - 1));
+                sf::RectangleShape r(sf::Vector2f(std::max(0.0f, c.rect.w - 1),
+                                                  std::max(0.0f, c.rect.h - 1)));
                 r.setPosition({ c.rect.x, c.rect.y });
                 r.setFillColor(DisplayColor(node.id, c.depth));
                 r.setOutlineThickness(1.0f);
-                r.setOutlineColor(sf::Color(16, 16, 16));
+                r.setOutlineColor(sf::Color(10, 10, 12));
                 disp->draw(r);
 
-                // Cell label (top depth levels, only where the cell is big enough).
-                if (fontLoaded && c.rect.w > 40.0f && c.rect.h > 16.0f && c.depth <= 2) {
+                // Cell label: any depth, where the cell is big enough for text.
+                const float minW = 30.0f * dpiScale;
+                const float minH = (fontSize + 4.0f);
+                if (fontLoaded && c.rect.w > minW && c.rect.h > minH) {
                     const char* name = tree.PoolStr(node.funcName);
                     sf::Text text(font, sf::String::fromUtf8(name, name + std::strlen(name)),
-                                  12u);
-                    text.setPosition({ c.rect.x + 3.0f, c.rect.y + 1.0f });
+                                  (unsigned)fontSize);
+                    text.setPosition({ c.rect.x + 3.0f * dpiScale, c.rect.y + 1.0f * dpiScale });
                     text.setFillColor(sf::Color(255, 255, 255, 235));
                     // Clip: skip drawing if the text is wider than the cell.
-                    if (text.getLocalBounds().size.x < c.rect.w - 6.0f)
+                    if (text.getLocalBounds().size.x < c.rect.w - 6.0f * dpiScale)
                         disp->draw(text);
                 }
             }
             disp->display();
 
-            // Picking layer (cell -> nodeIndex color).
+            // Picking layer (cell -> nodeIndex color), matching display rects.
             pick->clear(sf::Color::Black);
             for (const auto& c : cells) {
-                sf::RectangleShape r(sf::Vector2f(c.rect.w - 1, c.rect.h - 1));
+                sf::RectangleShape r(sf::Vector2f(std::max(0.0f, c.rect.w - 1),
+                                                  std::max(0.0f, c.rect.h - 1)));
                 r.setPosition({ c.rect.x, c.rect.y });
                 r.setFillColor(PickColor(c.nodeIndex));
                 pick->draw(r);
@@ -206,6 +255,7 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
             state.builtForVersion = dataVersion;
             state.builtFocus = state.focusedNode;
             state.builtDepth = state.maxDepth;
+            state.builtDpi = dpiScale;
         }
     }
 

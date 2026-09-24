@@ -18,6 +18,7 @@
 
 #include <QSettings>
 #include <QString>
+#include <QCoreApplication>
 
 #include <SFML/Graphics/RenderWindow.hpp>
 #include <SFML/Graphics/Texture.hpp>
@@ -28,6 +29,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <chrono>
 #include <string>
 
 #ifdef _WIN32
@@ -87,10 +89,10 @@ void BuildDefaultDockLayout(ImGuiID dockspaceId) {
     ImGui::DockBuilderSetNodeSize(dockspaceId, ImGui::GetMainViewport()->Size);
 
     ImGuiID dockMain = dockspaceId;
-    // left column
+    // left column (~20% of total width)
     ImGuiID dockLeft = ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Left, 0.20f, nullptr, &dockMain);
-    // right column
-    ImGuiID dockRight = ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Right, 0.32f, nullptr, &dockMain);
+    // right column (~32% of total width => 0.32 / 0.80 of what remains)
+    ImGuiID dockRight = ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Right, 0.40f, nullptr, &dockMain);
     // center split: stacktrace (top) / timeline (bottom)
     ImGuiID dockCenterBottom = ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Down, 0.40f, nullptr, &dockMain);
     ImGuiID dockCenterTop = dockMain;
@@ -120,17 +122,13 @@ void DrawCaptureStatusPanel(const gui::GuiSnapshot& snapshot) {
     ImGui::Text("Elapsed:  %s", FormatElapsed(cap.elapsedMs).c_str());
 }
 
+// The tree is rebuilt OUTSIDE this function (version-gated on SnapshotVersion)
+// so it never blocks the frame loop more than necessary.
 void DrawStacktracePanel(const gui::GuiSnapshot& snapshot, gui::StacktraceTree& tree,
-                         size_t& builtRecordCount, char* filterBuf, size_t filterBufSize) {
+                         char* filterBuf, size_t filterBufSize) {
     if (snapshot.records.empty()) {
         ImGui::TextUnformatted("No allocation records loaded.");
         return;
-    }
-
-    // Rebuild the aggregated tree only when the record set grows (new data).
-    if (snapshot.records.size() != builtRecordCount) {
-        tree.Rebuild(snapshot.records, snapshot.recordFrames);
-        builtRecordCount = snapshot.records.size();
     }
 
     // Toolbar: filter + expand/collapse + stats.
@@ -265,14 +263,26 @@ void DrawConsolePanel(const gui::GuiSnapshot& snapshot, size_t& lastLineCount) {
 int main(int argc, char** argv) {
     // Optional: path to a .loli record to open on startup (for quick inspection).
     const char* openRecordArg = nullptr;
+    // Headless perf harness: render a bounded number of frames and auto-exit so
+    // we can measure load/interactivity from scripts without manual clicking.
+    bool selfTest = false;
     for (int i = 1; i < argc; ++i) {
         const char* a = argv[i];
-        if ((std::strcmp(a, "--open") == 0 || std::strcmp(a, "-o") == 0) && i + 1 < argc) {
+        if (std::strcmp(a, "--selftest") == 0) {
+            selfTest = true;
+        } else if ((std::strcmp(a, "--open") == 0 || std::strcmp(a, "-o") == 0) && i + 1 < argc) {
             openRecordArg = argv[++i];
         } else if (std::strstr(a, ".loli") != nullptr) {
             openRecordArg = a;  // bare path ending in .loli
         }
     }
+
+    // Qt application object. The core profiling processes (QProcess/QTcpSocket/
+    // QTimer) and the async record loader deliver results via Qt signals, which
+    // require a QCoreApplication event loop. We create it here and pump it each
+    // frame (processEvents) instead of exec(), so the SFML/ImGui loop stays in
+    // control of rendering.
+    QCoreApplication qtApp(argc, argv);
 
     sf::ContextSettings settings;
     settings.depthBits = 24;
@@ -305,14 +315,23 @@ int main(int argc, char** argv) {
     const float dpiScale = GetSystemDpiScale();
     if (dpiScale != 1.0f) {
         ImGuiStyle& style = ImGui::GetStyle();
-        style.FontScaleMain = dpiScale;
         style.ScaleAllSizes(dpiScale);
+
+        // Rasterize the font at the scaled pixel size instead of scaling the
+        // small default atlas (which makes text blocky on HiDPI).
+        ImFontAtlas* fonts = io.Fonts;
+        fonts->Clear();
+        ImFont* font = fonts->AddFontFromFileTTF("C:/Windows/Fonts/segoeui.ttf",
+                                                 13.0f * dpiScale);
+        if (!font)
+            font = fonts->AddFontDefault();
+        io.FontDefault = font;
+        ImGui::SFML::UpdateFontTexture();
     }
 
     // Core data bridge (owns ADB/stacktrace/screenshot processes; Qt signals
     // are pumped by the Qt event loop integration used elsewhere).
     gui::GuiDataBridge bridge;
-    gui::GuiSnapshot snapshot;
     gui::RunLaunchDialog runLaunchDialog;
 
     std::string loadedRecordName;
@@ -320,11 +339,29 @@ int main(int argc, char** argv) {
     size_t uploadedScreenshotCount = 0;
     size_t lastConsoleLineCount = 0;
     gui::StacktraceTree stacktraceTree;
-    size_t stacktraceBuiltRecords = 0;
+    uint64_t stacktraceBuiltVersion = 0;  // bridge.SnapshotVersion() the tree was built from
     char stacktraceFilter[256] = {0};
     gui::TimelineView timelineView;
     gui::TreemapState treemapState;
     bool firstFrame = true;
+    int framesRendered = 0;
+    int loadingFrames = 0;
+    double lastTreeBuildMs = 0.0;
+    double worstFrameMs = 0.0;
+
+    // Rebuild the aggregated tree only when the published snapshot version
+    // changes (new data), never per frame. This keeps the UI responsive.
+    auto rebuildTreeIfNeeded = [&]() {
+        const uint64_t v = bridge.SnapshotVersion();
+        if (v != stacktraceBuiltVersion) {
+            const gui::GuiSnapshot& snap = *bridge.AcquireSnapshot();
+            const auto t0 = std::chrono::steady_clock::now();
+            stacktraceTree.Rebuild(snap.records, snap.recordFrames);
+            const auto t1 = std::chrono::steady_clock::now();
+            lastTreeBuildMs = std::chrono::duration<double, std::milli>(t1 - t0).count();
+            stacktraceBuiltVersion = v;
+        }
+    };
 
     // Auto-open a record passed on the command line.
     std::string pendingOpen;
@@ -332,7 +369,13 @@ int main(int argc, char** argv) {
         pendingOpen = openRecordArg;
 
     sf::Clock deltaClock;
+    sf::Clock frameClock;
     while (window.isOpen()) {
+        frameClock.restart();
+
+        // Pump the Qt event loop so core-process and async-loader signals fire.
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 8);
+
         while (const auto event = window.pollEvent()) {
             ImGui::SFML::ProcessEvent(window, *event);
 
@@ -343,8 +386,14 @@ int main(int argc, char** argv) {
 
         ImGui::SFML::Update(window, deltaClock.restart());
 
-        // Take a consistent copy of the bridge state for this frame.
-        bridge.UpdateSnapshot(snapshot);
+        // Use the latest published bridge snapshot for this frame (immutable,
+        // safe to hold across the frame).
+        std::shared_ptr<const gui::GuiSnapshot> frameSnapshot = bridge.AcquireSnapshot();
+        static const std::shared_ptr<const gui::GuiSnapshot> emptySnapshot(
+            new gui::GuiSnapshot());
+        if (!frameSnapshot)
+            frameSnapshot = emptySnapshot;
+        const gui::GuiSnapshot& snapshot = *frameSnapshot;
 
         // Root dockspace over the whole viewport. On the first frame we lay out
         // a sensible default arrangement so panels aren't all stacked.
@@ -358,10 +407,9 @@ int main(int argc, char** argv) {
         // Deferred auto-open: load the record after the first frame so the
         // bridge and dock layout are fully initialized.
         if (!pendingOpen.empty()) {
-            if (bridge.LoadRecord(QString::fromStdString(pendingOpen))) {
-                loadedRecordName = pendingOpen;
-                window.setTitle("LoliProfiler - " + loadedRecordName);
-            }
+            bridge.LoadRecord(QString::fromStdString(pendingOpen));
+            loadedRecordName = pendingOpen;
+            window.setTitle("LoliProfiler - " + loadedRecordName);
             pendingOpen.clear();
         }
 
@@ -373,10 +421,9 @@ int main(int argc, char** argv) {
                 }
                 if (ImGui::MenuItem("Open Record...")) {
                     if (auto path = FileDialogs::OpenFile({{"Loli Record", "loli"}})) {
-                        if (bridge.LoadRecord(QString::fromStdString(*path))) {
-                            loadedRecordName = *path;
-                            window.setTitle("LoliProfiler - " + loadedRecordName);
-                        }
+                        bridge.LoadRecord(QString::fromStdString(*path));
+                        loadedRecordName = *path;
+                        window.setTitle("LoliProfiler - " + loadedRecordName);
                     }
                 }
                 if (ImGui::BeginMenu("Themes")) {
@@ -401,9 +448,13 @@ int main(int argc, char** argv) {
             ImGui::EndMainMenuBar();
         }
 
-        // Toolbar: Run/Launch + Stop Capture
-        if (ImGui::Begin("Toolbar", nullptr,
-                         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar)) {
+        // Fixed toolbar strip at the top, directly under the menubar and above
+        // the dockspace. Attached to the main viewport; it does not dock/float.
+        const float toolbarHeight = ImGui::GetFrameHeightWithSpacing();
+        if (ImGui::BeginViewportSideBar("##MainToolBar", ImGui::GetMainViewport(),
+                                        ImGuiDir_Up, toolbarHeight,
+                                        ImGuiWindowFlags_NoScrollbar |
+                                            ImGuiWindowFlags_NoSavedSettings)) {
             if (ImGui::Button("Run/Launch")) {
                 runLaunchDialog.Open(&bridge);
             }
@@ -428,7 +479,8 @@ int main(int argc, char** argv) {
         ImGui::End();
 
         if (ImGui::Begin("Stacktrace")) {
-            DrawStacktracePanel(snapshot, stacktraceTree, stacktraceBuiltRecords,
+            rebuildTreeIfNeeded();
+            DrawStacktracePanel(snapshot, stacktraceTree,
                                 stacktraceFilter, sizeof(stacktraceFilter));
         }
         ImGui::End();
@@ -439,6 +491,7 @@ int main(int argc, char** argv) {
         ImGui::End();
 
         if (ImGui::Begin("Treemap")) {
+            rebuildTreeIfNeeded();
             gui::DrawTreemapPanel(stacktraceTree, treemapState);
         }
         ImGui::End();
@@ -458,9 +511,46 @@ int main(int argc, char** argv) {
         }
         ImGui::End();
 
+        // Loading overlay: modal progress while a record parses on the worker
+        // thread, so the UI never appears frozen.
+        if (bridge.IsLoading()) {
+            ImGui::OpenPopup("Loading Record");
+        }
+        if (ImGui::BeginPopupModal("Loading Record", nullptr,
+                                   ImGuiWindowFlags_AlwaysAutoResize |
+                                   ImGuiWindowFlags_NoMove)) {
+            ImGui::TextUnformatted("Loading record, please wait...");
+            const float progress = bridge.LoadProgress();
+            ImGui::ProgressBar(progress, ImVec2(360, 0));
+            ImGui::Text("%.0f%%", progress * 100.0f);
+            ImGui::EndPopup();
+        }
+
         window.clear();
         ImGui::SFML::Render(window);
         window.display();
+
+        const double frameMs = frameClock.getElapsedTime().asSeconds() * 1000.0;
+        // Headless self-test: run a bounded number of frames after the record
+        // finishes loading, then exit cleanly so scripts can time the whole run.
+        if (selfTest) {
+            framesRendered++;
+            if (bridge.IsLoading())
+                loadingFrames++;
+            if (frameMs > worstFrameMs)
+                worstFrameMs = frameMs;
+            // Exit once we've rendered a healthy number of frames past load.
+            if (!bridge.IsLoading() && framesRendered > 240) {
+                std::printf("[selftest] frames=%d loadingFrames=%d records=%zu treeNodes=%zu treeBuildMs=%.1f worstFrameMs=%.2f\n",
+                            framesRendered, loadingFrames, snapshot.records.size(),
+                            stacktraceTree.Nodes().size(), lastTreeBuildMs, worstFrameMs);
+                std::fflush(stdout);
+                window.close();
+            }
+            // Safety cap: never hang the harness.
+            if (framesRendered > 20000)
+                window.close();
+        }
     }
 
     FileDialogs::Shutdown();

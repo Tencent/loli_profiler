@@ -12,7 +12,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
+#include <string>
 #include <vector>
 
 namespace gui {
@@ -21,6 +23,21 @@ namespace {
 
 struct Rect { float x, y, w, h; };
 struct Cell { int32_t nodeIndex; int32_t depth; Rect rect; };
+
+// Formats bytes into a human-readable string ("564.3 MB"), matching the
+// original Qt treemap title ("<size>: <name>").
+std::string FormatBytes(uint64_t bytes) {
+    static const char* units[] = {"B", "KB", "MB", "GB"};
+    double value = static_cast<double>(bytes);
+    int unit = 0;
+    while (value >= 1024.0 && unit < 3) {
+        value /= 1024.0;
+        ++unit;
+    }
+    char buf[64];
+    std::snprintf(buf, sizeof(buf), unit == 0 ? "%.0f %s" : "%.1f %s", value, units[unit]);
+    return buf;
+}
 
 // Deterministic display color from node id, shaded by depth.
 sf::Color DisplayColor(uint64_t id, int depth) {
@@ -48,21 +65,30 @@ double WorstAspect(const std::vector<double>& row, double groupSum, double propo
     return std::max((len2 * maxA) / sum2, sum2 / (len2 * minA));
 }
 
+// Title strip height: font line plus a little padding, DPI-scaled.
+float TitleHeight(float fontSize, float dpiScale) {
+    return fontSize + 4.0f * dpiScale;
+}
+
 // Squarified treemap layout (Bruls-Huizing-van Wijk). Lays out `items` into
-// `rect`, producing one Cell per item at `depth`, then recurses into each cell's
-// children at depth+1. `gap` insets every cell so cells never touch (separation).
+// `rect`, producing one Cell per item at `depth`, then recurses into each
+// cell's children. Unlike a flat squarify, EVERY node (including parents)
+// emits its own visible cell: the cell's rect is kept whole, a title strip is
+// reserved at its top, and the children are laid out in the remaining body
+// area below the strip — matching the original Qt nested treemap.
+// `pad` insets children inside the parent's body so borders stay visible.
 void Squarify(const std::vector<int32_t>& items, const StacktraceTree& tree,
-              Rect rect, int depth, int maxDepth, float gap, std::vector<Cell>& out) {
+              Rect rect, int depth, int maxDepth, float pad, float titleH,
+              std::vector<Cell>& out) {
     if (items.empty())
         return;
 
-    // Emit a cell for each item and recurse into children.
+    // Emit a cell for each item and recurse into children inside its body.
     auto layoutRow = [&](const std::vector<int32_t>& row, Rect rowRect) {
         const bool horizontal = rowRect.w >= rowRect.h;
         double rowSum = 0.0;
         for (int32_t idx : row) rowSum += (double)tree.NodeAt(idx).totalSize;
         if (rowSum <= 0.0) return;
-        const double cross = horizontal ? rowRect.w : rowRect.h;  // fixed dimension
         double offset = horizontal ? rowRect.y : rowRect.x;
         for (int32_t idx : row) {
             const double frac = (double)tree.NodeAt(idx).totalSize / rowSum;
@@ -71,18 +97,24 @@ void Squarify(const std::vector<int32_t>& items, const StacktraceTree& tree,
                 ? Rect{ rowRect.x, (float)offset, (float)rowRect.w, (float)span }
                 : Rect{ (float)offset, rowRect.y, (float)span, (float)rowRect.h };
             offset += span;
-            // Inset by gap for separation.
-            Rect g{ cell.x + gap, cell.y + gap, cell.w - 2 * gap, cell.h - 2 * gap };
-            if (g.w > 1.0f && g.h > 1.0f) {
-                out.push_back({ idx, depth, g });
-                if (depth + 1 < maxDepth) {
-                    const auto& node = tree.NodeAt(idx);
-                    if (!node.children.empty())
-                        Squarify(node.children, tree, g, depth + 1, maxDepth, gap, out);
+
+            // The cell rect is the node's OWN rect (frame + title drawn here).
+            if (cell.w <= 1.0f || cell.h <= 1.0f)
+                continue;
+            out.push_back({ idx, depth, cell });
+
+            // Children are laid out in the body area below the title strip.
+            if (depth + 1 < maxDepth) {
+                const auto& node = tree.NodeAt(idx);
+                if (!node.children.empty()) {
+                    Rect body{ cell.x + pad, cell.y + titleH,
+                               cell.w - 2 * pad, cell.h - titleH - pad };
+                    if (body.w > 2 * pad + 1 && body.h > 2 * pad + 1)
+                        Squarify(node.children, tree, body, depth + 1, maxDepth,
+                                 pad, titleH, out);
                 }
             }
         }
-        (void)cross;
     };
 
     // Work on a copy sorted by descending size (stable squarify input).
@@ -93,7 +125,7 @@ void Squarify(const std::vector<int32_t>& items, const StacktraceTree& tree,
 
     Rect remaining = rect;
     size_t i = 0;
-    while (i < sorted.size() && remaining.w > 2 * gap + 1 && remaining.h > 2 * gap + 1) {
+    while (i < sorted.size() && remaining.w > 2 && remaining.h > 2) {
         const bool horizontal = remaining.w >= remaining.h;
         const double length = horizontal ? remaining.h : remaining.w;
         double total = 0.0;
@@ -177,23 +209,19 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
             state.texW = w;
             state.texH = h;
 
-            // Inter-cell gap + border scale with DPI so separation stays visible
+            // Child padding + border scale with DPI so separation stays visible
             // on HiDPI displays.
-            const float gap = 2.0f * dpiScale;
+            const float pad = 2.0f * dpiScale;
             const float fontSize = 12.0f * dpiScale;
+            const float titleH = TitleHeight(fontSize, dpiScale);
 
-            // Compute layout once.
+            // Compute layout once (nested cells with title strips).
             std::vector<Cell> cells;
             std::vector<int32_t> top;
             if (state.focusedNode >= 0) top.push_back(state.focusedNode);
             else top = tree.Roots();
-            Squarify(top, tree, { 0, 0, (float)w, (float)h }, 0, state.maxDepth, gap, cells);
-            std::fprintf(stderr, "[treemap] cells=%zu top=%zu focus=%d depth=%d w=%d h=%d gap=%.1f\n",
-                         cells.size(), top.size(), state.focusedNode, state.maxDepth, w, h, gap);
-            std::fflush(stderr);
-
-            // Display layer.
-            disp->clear(sf::Color(24, 24, 28));
+            Squarify(top, tree, { 0, 0, (float)w, (float)h }, 0, state.maxDepth,
+                     pad, titleH, cells);
 
             // Load a font once for cell labels (Segoe UI on Windows, matching the
             // ImGui UI font). Static so it persists across renders.
@@ -203,34 +231,48 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
                 fontLoaded = font.openFromFile("C:/Windows/Fonts/segoeui.ttf");
             }
 
+            // Display layer.
+            disp->clear(sf::Color(24, 24, 28));
+
             for (const auto& c : cells) {
                 const auto& node = tree.NodeAt(c.nodeIndex);
-                sf::RectangleShape r(sf::Vector2f(std::max(0.0f, c.rect.w - 1),
-                                                  std::max(0.0f, c.rect.h - 1)));
-                r.setPosition({ c.rect.x, c.rect.y });
-                r.setFillColor(DisplayColor(node.id, c.depth));
-                r.setOutlineThickness(1.0f);
-                r.setOutlineColor(sf::Color(10, 10, 12));
-                disp->draw(r);
+                sf::Color base = DisplayColor(node.id, c.depth);
 
-                // Title band: every cell that can fit text gets a title. A darker
-                // band sits behind the label (like the reference treemap), and the
-                // text is truncated with an ellipsis to fit the cell width — never
-                // silently dropped.
-                const float titleH = fontSize + 4.0f * dpiScale;
-                if (fontLoaded && c.rect.h > titleH + 2.0f && c.rect.w > 4.0f * dpiScale) {
-                    // Darker title strip at the top of the cell.
+                // Body fill (slightly darkened so the frame/title read on top).
+                sf::RectangleShape body(sf::Vector2f(std::max(0.0f, c.rect.w - 1),
+                                                     std::max(0.0f, c.rect.h - 1)));
+                body.setPosition({ c.rect.x, c.rect.y });
+                sf::Color bodyCol = sf::Color((uint8_t)(base.r * 0.82f),
+                                              (uint8_t)(base.g * 0.82f),
+                                              (uint8_t)(base.b * 0.82f), 255);
+                body.setFillColor(bodyCol);
+                disp->draw(body);
+
+                // Title strip at the top of the cell (darker band), matching the
+                // original Qt treemap's nested look.
+                if (c.rect.h > titleH + 2.0f && c.rect.w > 4.0f * dpiScale) {
                     sf::RectangleShape band(sf::Vector2f(c.rect.w - 1, titleH));
                     band.setPosition({ c.rect.x, c.rect.y });
-                    sf::Color bandCol = DisplayColor(node.id, c.depth);
-                    bandCol = sf::Color((uint8_t)(bandCol.r * 0.55f), (uint8_t)(bandCol.g * 0.55f),
-                                        (uint8_t)(bandCol.b * 0.55f), 255);
+                    sf::Color bandCol = sf::Color((uint8_t)(base.r * 0.55f),
+                                                  (uint8_t)(base.g * 0.55f),
+                                                  (uint8_t)(base.b * 0.55f), 255);
                     band.setFillColor(bandCol);
                     disp->draw(band);
+                }
 
-                    // Truncate the label with an ellipsis to fit the cell width.
-                    const char* name = tree.PoolStr(node.funcName);
-                    std::string label = name ? name : "";
+                // Border so nesting is clearly visible.
+                sf::RectangleShape frame(sf::Vector2f(std::max(0.0f, c.rect.w - 1),
+                                                      std::max(0.0f, c.rect.h - 1)));
+                frame.setPosition({ c.rect.x, c.rect.y });
+                frame.setFillColor(sf::Color::Transparent);
+                frame.setOutlineThickness(1.0f);
+                frame.setOutlineColor(sf::Color(15, 15, 18));
+                disp->draw(frame);
+
+                // Title text "<size>: <name>", truncated with "..." to fit.
+                if (fontLoaded && c.rect.h > titleH + 2.0f && c.rect.w > 4.0f * dpiScale) {
+                    std::string label = FormatBytes(node.totalSize) + ": " +
+                                        (tree.PoolStr(node.funcName) ? tree.PoolStr(node.funcName) : "");
                     const float availW = c.rect.w - 6.0f * dpiScale;
                     const unsigned fsize = (unsigned)std::max(8.0f, fontSize);
                     auto textW = [&](const std::string& s) {
@@ -252,6 +294,8 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
             disp->display();
 
             // Picking layer (cell -> nodeIndex color), matching display rects.
+            // Parents are drawn first, then children on top, so a pixel resolves
+            // to the deepest (innermost) cell under the cursor.
             pick->clear(sf::Color::Black);
             for (const auto& c : cells) {
                 sf::RectangleShape r(sf::Vector2f(std::max(0.0f, c.rect.w - 1),
@@ -299,8 +343,8 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
         ImGui::Text("%s", tree.PoolStr(node.funcName));
         if (node.library >= 0)
             ImGui::TextDisabled("%s", tree.PoolStr(node.library));
-        ImGui::Text("%llu bytes, %u allocs",
-                    (unsigned long long)node.totalSize, node.allocCount);
+        ImGui::Text("%s, %u allocs",
+                    FormatBytes(node.totalSize).c_str(), node.allocCount);
         if (!node.children.empty())
             ImGui::TextDisabled("(click to zoom, right-click to go up)");
         ImGui::EndTooltip();
@@ -311,12 +355,11 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
     if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right) && state.focusedNode >= 0)
         state.focusedNode = tree.NodeAt(state.focusedNode).parent;
 
-    // Bottom control bar: Depth slider + Up button.
+    // Bottom control bar: Depth slider stretched full width, Up button at right.
     ImGui::Separator();
-    ImGui::SetNextItemWidth(160.0f * dpiScale);
-    if (ImGui::SliderInt("Depth", &state.maxDepth, 1, 12)) {
-        // depth change forces a re-render (tracked via builtDepth).
-    }
+    const float upW = ImGui::CalcTextSize("Up").x + ImGui::GetStyle().FramePadding.x * 2.0f;
+    ImGui::SetNextItemWidth(std::max(50.0f, ImGui::GetContentRegionAvail().x - upW - ImGui::GetStyle().ItemSpacing.x));
+    ImGui::SliderInt("Depth", &state.maxDepth, 1, 12);
     ImGui::SameLine();
     if (state.focusedNode < 0)
         ImGui::BeginDisabled();
@@ -325,10 +368,6 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
     }
     if (state.focusedNode < 0)
         ImGui::EndDisabled();
-    if (state.focusedNode >= 0) {
-        ImGui::SameLine();
-        ImGui::TextDisabled("| %s", tree.PoolStr(tree.NodeAt(state.focusedNode).funcName));
-    }
 }
 
 void FreeTreemapState(TreemapState& state) {

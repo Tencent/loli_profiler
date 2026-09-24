@@ -126,6 +126,9 @@ void StacktraceTree::BuildFromRecords(
         return nodes_[a].totalSize > nodes_[b].totalSize;
     });
 
+    // Re-apply the current sort in case the user picked a different key.
+    ApplySort();
+
     RebuildVisible();
 }
 
@@ -188,6 +191,37 @@ void StacktraceTree::AppendVisible(int32_t nodeIndex, int32_t depth) {
             continue;
         AppendVisible(child, depth + 1);
     }
+}
+
+void StacktraceTree::SetSort(int column, bool descending) {
+    sortColumn_ = column;
+    sortDescending_ = descending;
+    ApplySort();
+    RebuildVisible();
+}
+
+void StacktraceTree::ApplySort() {
+    auto keyLess = [&](int32_t a, int32_t b) {
+        const Node& na = nodes_[a];
+        const Node& nb = nodes_[b];
+        if (sortColumn_ == 1) {
+            if (na.allocCount != nb.allocCount)
+                return na.allocCount < nb.allocCount;
+        } else {
+            if (na.totalSize != nb.totalSize)
+                return na.totalSize < nb.totalSize;
+        }
+        // Stable, deterministic tie-break on the pool index so equal-key nodes
+        // keep a consistent order.
+        return na.funcName < nb.funcName;
+    };
+    // sortDescending_ == true means the LARGEST values come first.
+    auto cmp = [&](int32_t a, int32_t b) {
+        return sortDescending_ ? keyLess(b, a) : keyLess(a, b);
+    };
+    for (auto& node : nodes_)
+        std::sort(node.children.begin(), node.children.end(), cmp);
+    std::sort(roots_.begin(), roots_.end(), cmp);
 }
 
 bool StacktraceTree::MatchesFilterRecursive(int32_t nodeIndex) const {

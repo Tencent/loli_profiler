@@ -154,23 +154,12 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
         return;
     }
 
-    // Controls (cheap widgets above the image).
-    bool controlsChanged = false;
-    if (ImGui::SliderInt("Depth", &state.maxDepth, 1, 12))
-        controlsChanged = true;
-    if (state.focusedNode >= 0) {
-        ImGui::SameLine();
-        if (ImGui::SmallButton("Up")) {
-            state.focusedNode = tree.NodeAt(state.focusedNode).parent;
-            controlsChanged = true;
-        }
-        ImGui::SameLine();
-        ImGui::TextDisabled("| %s", tree.PoolStr(tree.NodeAt(state.focusedNode).funcName));
-    }
+    // Reserve a bottom bar for the controls (Depth slider + Up button).
+    const float controlBarH = ImGui::GetFrameHeightWithSpacing();
 
     ImVec2 avail = ImGui::GetContentRegionAvail();
     const int w = std::max(8, (int)avail.x);
-    const int h = std::max(8, (int)avail.y);
+    const int h = std::max(8, (int)(avail.y - controlBarH));
 
     // Decide whether we must re-render the textures.
     const bool needRender =
@@ -179,8 +168,7 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
         state.builtDepth != state.maxDepth ||
         state.builtDpi != dpiScale ||
         state.texW != w || state.texH != h ||
-        state.displayTex == nullptr || state.pickTex == nullptr ||
-        controlsChanged;
+        state.displayTex == nullptr || state.pickTex == nullptr;
 
     if (needRender) {
         sf::RenderTexture* disp = EnsureTexture(state.displayTex, w, h);
@@ -225,18 +213,40 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
                 r.setOutlineColor(sf::Color(10, 10, 12));
                 disp->draw(r);
 
-                // Cell label: any depth, where the cell is big enough for text.
-                const float minW = 30.0f * dpiScale;
-                const float minH = (fontSize + 4.0f);
-                if (fontLoaded && c.rect.w > minW && c.rect.h > minH) {
+                // Title band: every cell that can fit text gets a title. A darker
+                // band sits behind the label (like the reference treemap), and the
+                // text is truncated with an ellipsis to fit the cell width — never
+                // silently dropped.
+                const float titleH = fontSize + 4.0f * dpiScale;
+                if (fontLoaded && c.rect.h > titleH + 2.0f && c.rect.w > 4.0f * dpiScale) {
+                    // Darker title strip at the top of the cell.
+                    sf::RectangleShape band(sf::Vector2f(c.rect.w - 1, titleH));
+                    band.setPosition({ c.rect.x, c.rect.y });
+                    sf::Color bandCol = DisplayColor(node.id, c.depth);
+                    bandCol = sf::Color((uint8_t)(bandCol.r * 0.55f), (uint8_t)(bandCol.g * 0.55f),
+                                        (uint8_t)(bandCol.b * 0.55f), 255);
+                    band.setFillColor(bandCol);
+                    disp->draw(band);
+
+                    // Truncate the label with an ellipsis to fit the cell width.
                     const char* name = tree.PoolStr(node.funcName);
-                    sf::Text text(font, sf::String::fromUtf8(name, name + std::strlen(name)),
-                                  (unsigned)fontSize);
+                    std::string label = name ? name : "";
+                    const float availW = c.rect.w - 6.0f * dpiScale;
+                    const unsigned fsize = (unsigned)std::max(8.0f, fontSize);
+                    auto textW = [&](const std::string& s) {
+                        sf::Text t(font, sf::String::fromUtf8(s.begin(), s.end()), fsize);
+                        return t.getLocalBounds().size.x;
+                    };
+                    if (!label.empty() && textW(label) > availW) {
+                        const std::string ell = "...";
+                        while (label.size() > 1 && textW(label + ell) > availW)
+                            label.pop_back();
+                        label += ell;
+                    }
+                    sf::Text text(font, sf::String::fromUtf8(label.begin(), label.end()), fsize);
                     text.setPosition({ c.rect.x + 3.0f * dpiScale, c.rect.y + 1.0f * dpiScale });
-                    text.setFillColor(sf::Color(255, 255, 255, 235));
-                    // Clip: skip drawing if the text is wider than the cell.
-                    if (text.getLocalBounds().size.x < c.rect.w - 6.0f * dpiScale)
-                        disp->draw(text);
+                    text.setFillColor(sf::Color(255, 255, 255, 240));
+                    disp->draw(text);
                 }
             }
             disp->display();
@@ -300,6 +310,25 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
     }
     if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right) && state.focusedNode >= 0)
         state.focusedNode = tree.NodeAt(state.focusedNode).parent;
+
+    // Bottom control bar: Depth slider + Up button.
+    ImGui::Separator();
+    ImGui::SetNextItemWidth(160.0f * dpiScale);
+    if (ImGui::SliderInt("Depth", &state.maxDepth, 1, 12)) {
+        // depth change forces a re-render (tracked via builtDepth).
+    }
+    ImGui::SameLine();
+    if (state.focusedNode < 0)
+        ImGui::BeginDisabled();
+    if (ImGui::SmallButton("Up")) {
+        state.focusedNode = tree.NodeAt(state.focusedNode).parent;
+    }
+    if (state.focusedNode < 0)
+        ImGui::EndDisabled();
+    if (state.focusedNode >= 0) {
+        ImGui::SameLine();
+        ImGui::TextDisabled("| %s", tree.PoolStr(tree.NodeAt(state.focusedNode).funcName));
+    }
 }
 
 void FreeTreemapState(TreemapState& state) {

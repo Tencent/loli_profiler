@@ -174,33 +174,6 @@ void DrawMemoryTimelineChart(const GuiSnapshot& snapshot, TimelineView& view) {
     const double vmax = view.zoomMax;
     const double vspan = vmax - vmin;
 
-    // Header line: sample count + view info + reset button.
-    ImGui::Text("Samples: %zu", samples.size());
-    ImGui::SameLine();
-    ImGui::TextDisabled("View: %.1fs - %.1fs", vmin / 1000.0, vmax / 1000.0);
-    ImGui::SameLine();
-    if (ImGui::SmallButton("Reset View")) {
-        view.userZoomed = false;
-        view.zoomMin = t0;
-        view.zoomMax = t1;
-    }
-    ImGui::SameLine();
-    if (view.hasSelection)
-        ImGui::TextDisabled("Sel: %.1fs - %.1fs", view.selStartMs / 1000.0, view.selEndMs / 1000.0);
-    ImGui::SameLine();
-    if (ImGui::SmallButton("Clear Selection")) {
-        view.hasSelection = false;
-    }
-
-    // Legend with colored markers.
-    for (int k = 0; k < kTimelineSeriesCount; ++k) {
-        if (k > 0)
-            ImGui::SameLine();
-        ImGui::TextColored(ImColor(kTimelineSeries[k].color), "%s", "\xE2\x96\xA0"); // small square
-        ImGui::SameLine(0.0f, 2.0f);
-        ImGui::TextUnformatted(kTimelineSeries[k].name);
-    }
-
     // Plot geometry.
     const float labelW = 76.0f;  // left gutter for Y labels
     const float labelH = 20.0f;  // bottom gutter for X labels
@@ -350,10 +323,19 @@ void DrawMemoryTimelineChart(const GuiSnapshot& snapshot, TimelineView& view) {
 
     dl->PopClipRect();
 
-    // Right-click clears the selection (pan also uses right-drag; a click
-    // without motion produces a tiny/zero drag delta, so it still clears).
+    // Right-click context menu: Reset View / Clear Selection.
     if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
-        view.hasSelection = false;
+        ImGui::OpenPopup("##timeline_ctx");
+    if (ImGui::BeginPopup("##timeline_ctx")) {
+        if (ImGui::MenuItem("Reset View")) {
+            view.userZoomed = false;
+            view.zoomMin = t0;
+            view.zoomMax = t1;
+        }
+        if (ImGui::MenuItem("Clear Selection"))
+            view.hasSelection = false;
+        ImGui::EndPopup();
+    }
 
     // Rubber-band: left-drag selects a [from,to] time range.
     if (hovered) {

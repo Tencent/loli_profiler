@@ -80,6 +80,13 @@ public:
     void SetFilter(const std::string& text);
     const std::string& Filter() const { return filter_; }
 
+    // Sort each node's children (and the roots) by the chosen key — column 0 =
+    // Size (totalSize), column 1 = Count (allocCount) — ascending/descending,
+    // then rebuild the visible rows. Default: Size, descending.
+    void SetSort(int column, bool descending);
+    int SortColumn() const { return sortColumn_; }
+    bool SortDescending() const { return sortDescending_; }
+
     const std::vector<VisibleRow>& VisibleRows() const { return visibleRows_; }
     const Node& NodeAt(int32_t index) const { return nodes_[index]; }
     const std::vector<Node>& Nodes() const { return nodes_; }
@@ -96,6 +103,7 @@ private:
     void AppendVisible(int32_t nodeIndex, int32_t depth);
     bool MatchesFilterRecursive(int32_t nodeIndex) const;
     int32_t Intern(const std::string& s);
+    void ApplySort();  // re-sort children/roots by sortColumn_/sortDescending_
 
 private:
     std::vector<Node>        nodes_;
@@ -104,6 +112,8 @@ private:
     std::unordered_set<uint64_t> expandedIds_;
     std::string              filter_;
     uint64_t                 nextId_ = 1;
+    int                      sortColumn_ = 0;      // 0 = Size, 1 = Count
+    bool                     sortDescending_ = true;
 
     // string interning
     std::vector<std::string> pool_;

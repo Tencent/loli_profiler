@@ -29,8 +29,8 @@ struct TimelineView {
     bool   userZoomed = false;
 
     // Rubber-band time-range selection (ms). hasSelection is false until the
-    // user completes a left-drag; selection is cleared by right-click or the
-    // "Clear Selection" button.
+    // user completes a left-drag; selection is cleared via the plot's
+    // right-click context menu.
     double selStartMs = 0.0;
     double selEndMs = 0.0;
     bool   hasSelection = false;
@@ -41,7 +41,8 @@ struct TimelineView {
 };
 
 // Renders snapshot.memTimeline as a multi-series line chart with axes,
-// gridlines, legend, hover tooltip and wheel-zoom / drag-pan interaction.
+// gridlines, hover tooltip and wheel-zoom / drag-pan interaction; Reset View
+// and Clear Selection live in the plot's right-click context menu.
 // Call between ImGui::Begin/End; uses an InvisibleButton to capture input.
 void DrawMemoryTimelineChart(const GuiSnapshot& snapshot, TimelineView& view);
 

@@ -496,7 +496,7 @@ int main(int argc, char** argv) {
 
         if (ImGui::Begin("Treemap")) {
             rebuildTreeIfNeeded();
-            gui::DrawTreemapPanel(stacktraceTree, treemapState);
+            gui::DrawTreemapPanel(stacktraceTree, treemapState, bridge.SnapshotVersion());
         }
         ImGui::End();
 
@@ -558,6 +558,7 @@ int main(int argc, char** argv) {
     }
 
     FileDialogs::Shutdown();
+    gui::FreeTreemapState(treemapState);
     ImGui::SFML::Shutdown();
     return 0;
 }

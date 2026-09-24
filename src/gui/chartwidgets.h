@@ -27,6 +27,17 @@ struct TimelineView {
     double zoomMin = -1.0; // view start (ms), negative = full range
     double zoomMax = -1.0; // view end (ms)
     bool   userZoomed = false;
+
+    // Rubber-band time-range selection (ms). hasSelection is false until the
+    // user completes a left-drag; selection is cleared by right-click or the
+    // "Clear Selection" button.
+    double selStartMs = 0.0;
+    double selEndMs = 0.0;
+    bool   hasSelection = false;
+
+    // Transient rubber-band drag state: X of drag start (screen coords), -1
+    // when not dragging.
+    float  dragStartX = -1.0f;
 };
 
 // Renders snapshot.memTimeline as a multi-series line chart with axes,

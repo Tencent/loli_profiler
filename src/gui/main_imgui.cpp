@@ -58,6 +58,12 @@ float GetSystemDpiScale() {
 // Small helpers
 // ---------------------------------------------------------------------------
 
+// Console log cache: InputTextMultiline holds a FIXED-size buffer, so the log
+// must be capped. We keep only the tail of the log (both a byte and a line
+// cap) so the widget never slows down on huge captures.
+constexpr size_t kConsoleMaxBufferBytes = 64 * 1024;
+constexpr size_t kConsoleMaxLines = 4000;
+
 // Formats bytes into a human-readable string (up to "1023.9 KB").
 std::string FormatBytes(uint64_t bytes) {
     static const char* units[] = {"B", "KB", "MB", "GB"};
@@ -168,27 +174,53 @@ void DrawStacktracePanel(const gui::GuiSnapshot& snapshot, gui::StacktraceTree& 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
 
-            // Indent + expander. Use Selectable spanning for row interaction.
             ImGui::PushID(row.nodeIndex);
+
+            // --- Tree indentation geometry (used by the expander arrow and the
+            // vertical indent guide lines so the hierarchy reads as a real tree).
+            ImGuiWindow* drawWindow = ImGui::GetCurrentWindow();
+            const float lineHeight = ImGui::GetTextLineHeight();
+            const float stepX = ImGui::GetTreeNodeToLabelSpacing();  // ~indent per depth
+            const float baseX = ImGui::GetCursorPosX();              // arrow column
+            const float labelX = baseX + (float)(row.depth + 1) * stepX;
+
+            // --- Expander arrow: an ArrowButton on the arrow column. Clicking
+            // it toggles the node; a transparent label Selectable below covers
+            // the whole row and ALSO toggles when the row has children.
+            ImGui::SetCursorPosX(baseX + (float)row.depth * stepX);
             if (row.hasChildren) {
-                const char* arrow = row.expanded ? "[-]" : "[+]";
-                ImGui::TextUnformatted(arrow);
-                if (ImGui::IsItemClicked())
+                if (ImGui::ArrowButtonEx("##arrow", row.expanded ? ImGuiDir_Down : ImGuiDir_Right,
+                                         ImVec2(lineHeight, lineHeight), ImGuiButtonFlags_None)) {
                     tree.SetExpanded(row.nodeIndex, !row.expanded);
-                ImGui::SameLine();
-            } else {
-                ImGui::TextUnformatted(" ");
-                ImGui::SameLine();
+                }
+                if (ImGui::IsItemHovered() && node.library >= 0)
+                    ImGui::SetTooltip("%s", tree.PoolStr(node.library));
             }
-            // indent by depth
-            for (int d = 0; d < row.depth; ++d) {
-                ImGui::Indent(14.0f);
-            }
-            ImGui::TextUnformatted(tree.PoolStr(node.funcName));
+
+            // --- Row label Selectable. Disabled (and SkipItem so it doesn't
+            // draw/cost anything) when the row has no children.
+            if (!row.hasChildren)
+                ImGui::BeginDisabled();
+            ImGui::SetCursorPosX(labelX);
+            const bool selected = row.expanded;  // highlight expanded rows, like TreeNode
+            ImGui::Selectable(tree.PoolStr(node.funcName), selected,
+                              ImGuiSelectableFlags_SpanAllColumns);
+            if (!row.hasChildren)
+                ImGui::EndDisabled();
             if (ImGui::IsItemHovered() && node.library >= 0)
                 ImGui::SetTooltip("%s", tree.PoolStr(node.library));
-            for (int d = 0; d < row.depth; ++d) {
-                ImGui::Unindent(14.0f);
+            if (row.hasChildren && ImGui::IsItemClicked())
+                tree.SetExpanded(row.nodeIndex, !row.expanded);
+
+            // --- Indent guide lines: one subtle vertical line per depth level,
+            // matching where the child arrows sit, like a classic tree control.
+            if (row.depth > 0) {
+                ImDrawList* drawList = ImGui::GetWindowDrawList();
+                const ImU32 lineCol = ImGui::GetColorU32(ImGuiCol_Text, 0.18f);
+                const float x = drawWindow->Pos.x + baseX + (float)row.depth * stepX +
+                                lineHeight * 0.5f;
+                drawList->AddLine(ImVec2(x, drawWindow->DC.CursorPos.y),
+                                  ImVec2(x, drawWindow->DC.CursorPos.y + lineHeight), lineCol);
             }
 
             ImGui::TableNextColumn();
@@ -235,28 +267,65 @@ void DrawScreenshotPanel(const gui::GuiSnapshot& snapshot, sf::Texture& texture,
     }
 }
 
-void DrawConsolePanel(const gui::GuiSnapshot& snapshot, size_t& lastLineCount) {
-    const bool autoScroll = snapshot.logLines.size() != lastLineCount;
-    lastLineCount = snapshot.logLines.size();
+// Renders the console as a single read-only multiline text field, so the log
+// is selectable and copyable (Ctrl+C). The joined buffer is cached in
+// `consoleBuf` and only rebuilt (from the tail of the log) when the line count
+// changes; `lastLineCount` tracks that. New lines auto-scroll to the bottom
+// until the user scrolls up.
+void DrawConsolePanel(const gui::GuiSnapshot& snapshot, size_t& lastLineCount,
+                      std::string& consoleBuf) {
+    const size_t lineCount = snapshot.logLines.size();
+    const bool autoScroll = lineCount != lastLineCount;
+    lastLineCount = lineCount;
 
-    const float footer = ImGui::GetStyle().ItemSpacing.y + ImGui::GetFrameHeightWithSpacing();
-    if (ImGui::BeginChild("console_scroll", ImVec2(0, -footer), ImGuiChildFlags_None,
-                          ImGuiWindowFlags_HorizontalScrollbar)) {
-        ImGuiListClipper clipper;
-        clipper.Begin(static_cast<int>(snapshot.logLines.size()));
-        while (clipper.Step()) {
-            for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; ++i)
-                ImGui::TextUnformatted(snapshot.logLines[i].c_str());
+    if (lineCount == 0) {
+        consoleBuf.clear();
+        ImGui::TextUnformatted("(no log output)");
+        return;
+    }
+
+    if (consoleBuf.empty()) {
+        // Cap: InputTextMultiline holds a FIXED-size buffer, so keep only the
+        // tail of the log (kConsoleMaxBufferBytes / kConsoleMaxLines) — the
+        // widget slows down proportionally to the buffer size, and unbounded
+        // growth would eventually blow past the fixed buffer.
+        const size_t startLine =
+            lineCount > kConsoleMaxLines ? lineCount - kConsoleMaxLines : 0;
+        consoleBuf.reserve(std::min(kConsoleMaxBufferBytes + 64, (size_t)4096));
+        for (size_t i = startLine; i < lineCount; ++i) {
+            consoleBuf += snapshot.logLines[i];
+            consoleBuf += '\n';
+        }
+        if (consoleBuf.size() > kConsoleMaxBufferBytes) {
+            consoleBuf.erase(0, consoleBuf.size() - kConsoleMaxBufferBytes);
+            consoleBuf.erase(0, consoleBuf.find('\n') + 1);  // drop partial first line
         }
     }
-    const bool stickToBottom = autoScroll && ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 4.0f;
-    ImGui::EndChild();
 
-    if (autoScroll || stickToBottom)
-        ImGui::SetScrollY(ImGui::GetScrollMaxY());
+    const float footer = ImGui::GetStyle().ItemSpacing.y + ImGui::GetFrameHeightWithSpacing();
+    // ReadOnly + NoUndoRedo gives selection + Ctrl+C copy for free. CallbackAlways
+    // lets us force the caret (and thus the scroll) to the end on the frames new
+    // lines arrive, without the widget needing keyboard focus.
+    ImGuiInputTextFlags flags = ImGuiInputTextFlags_ReadOnly |
+                                ImGuiInputTextFlags_NoUndoRedo |
+                                ImGuiInputTextFlags_CallbackAlways;
+
+    bool scrollToBottom = autoScroll;  // sticky: user can scroll up to detach
+    auto onEdit = [](ImGuiInputTextCallbackData* data) -> int {
+        if (data->EventFlag == ImGuiInputTextFlags_CallbackAlways &&
+            *static_cast<bool*>(data->UserData)) {
+            data->SelectionStart = data->SelectionEnd = data->CursorPos = data->BufTextLen;
+        }
+        return 0;
+    };
+
+    ImGui::SetNextItemWidth(-1.0f);
+    ImGui::InputTextMultiline("##console", const_cast<char*>(consoleBuf.c_str()),
+                              consoleBuf.size() + 1, ImVec2(0, -footer), flags, onEdit,
+                              &scrollToBottom);
 
     ImGui::Separator();
-    ImGui::Text("%zu lines", snapshot.logLines.size());
+    ImGui::Text("%zu lines", lineCount);
 }
 
 } // namespace
@@ -345,11 +414,20 @@ int main(int argc, char** argv) {
     sf::Texture screenshotTexture;
     size_t uploadedScreenshotCount = 0;
     size_t lastConsoleLineCount = 0;
+    std::string consoleBuf;  // cached joined log text for DrawConsolePanel
     gui::StacktraceTree stacktraceTree;
     uint64_t stacktraceBuiltVersion = 0;  // bridge.SnapshotVersion() the tree was built from
     char stacktraceFilter[256] = {0};
     gui::TimelineView timelineView;
     gui::TreemapState treemapState;
+    // Dockable panel visibility, toggled from the Window menu.
+    bool showCaptureStatus = true;
+    bool showStacktrace = true;
+    bool showTimeline = true;
+    bool showTreemap = true;
+    bool showSmaps = true;
+    bool showScreenshot = true;
+    bool showConsole = true;
     bool firstFrame = true;
     int framesRendered = 0;
     int loadingFrames = 0;
@@ -458,6 +536,16 @@ int main(int argc, char** argv) {
                 }
                 ImGui::EndMenu();
             }
+            if (ImGui::BeginMenu("Window")) {
+                ImGui::MenuItem("Capture Status", nullptr, &showCaptureStatus);
+                ImGui::MenuItem("Stacktrace", nullptr, &showStacktrace);
+                ImGui::MenuItem("Timeline", nullptr, &showTimeline);
+                ImGui::MenuItem("Treemap", nullptr, &showTreemap);
+                ImGui::MenuItem("Smaps", nullptr, &showSmaps);
+                ImGui::MenuItem("Screenshot", nullptr, &showScreenshot);
+                ImGui::MenuItem("Console", nullptr, &showConsole);
+                ImGui::EndMenu();
+            }
             ImGui::EndMainMenuBar();
         }
 
@@ -471,8 +559,17 @@ int main(int argc, char** argv) {
                                         ImGuiDir_Up, toolbarHeight,
                                         ImGuiWindowFlags_NoScrollbar |
                                             ImGuiWindowFlags_NoSavedSettings)) {
-            // Vertically center the buttons in the strip.
+            // Center the button group in the strip: vertical centering plus
+            // horizontal centering of the combined button width.
             ImGui::SetCursorPosY(ImGui::GetStyle().FramePadding.y);
+            const float runLaunchW = ImGui::CalcTextSize("Run/Launch").x +
+                                     ImGui::GetStyle().FramePadding.x * 2.0f;
+            const float stopCaptureW = ImGui::CalcTextSize("Stop Capture").x +
+                                       ImGui::GetStyle().FramePadding.x * 2.0f;
+            const float buttonsWidth = runLaunchW + stopCaptureW +
+                                       ImGui::GetStyle().ItemSpacing.x;
+            const float toolbarWidth = ImGui::GetContentRegionAvail().x;
+            ImGui::SetCursorPosX((toolbarWidth - buttonsWidth) * 0.5f);
             if (ImGui::Button("Run/Launch")) {
                 runLaunchDialog.Open(&bridge);
             }
@@ -491,41 +588,41 @@ int main(int argc, char** argv) {
         runLaunchDialog.Render();
 
         // Dockable panels
-        if (ImGui::Begin("Capture Status")) {
+        if (showCaptureStatus && ImGui::Begin("Capture Status")) {
             DrawCaptureStatusPanel(snapshot);
         }
         ImGui::End();
 
-        if (ImGui::Begin("Stacktrace")) {
+        if (showStacktrace && ImGui::Begin("Stacktrace")) {
             rebuildTreeIfNeeded();
             DrawStacktracePanel(snapshot, stacktraceTree,
                                 stacktraceFilter, sizeof(stacktraceFilter));
         }
         ImGui::End();
 
-        if (ImGui::Begin("Timeline")) {
+        if (showTimeline && ImGui::Begin("Timeline")) {
             gui::DrawMemoryTimelineChart(snapshot, timelineView);
         }
         ImGui::End();
 
-        if (ImGui::Begin("Treemap")) {
+        if (showTreemap && ImGui::Begin("Treemap")) {
             rebuildTreeIfNeeded();
             gui::DrawTreemapPanel(stacktraceTree, treemapState, bridge.SnapshotVersion(), dpiScale);
         }
         ImGui::End();
 
-        if (ImGui::Begin("Smaps")) {
+        if (showSmaps && ImGui::Begin("Smaps")) {
             gui::DrawSmapsPanel(snapshot);
         }
         ImGui::End();
 
-        if (ImGui::Begin("Screenshot")) {
+        if (showScreenshot && ImGui::Begin("Screenshot")) {
             DrawScreenshotPanel(snapshot, screenshotTexture, uploadedScreenshotCount);
         }
         ImGui::End();
 
-        if (ImGui::Begin("Console")) {
-            DrawConsolePanel(snapshot, lastConsoleLineCount);
+        if (showConsole && ImGui::Begin("Console")) {
+            DrawConsolePanel(snapshot, lastConsoleLineCount, consoleBuf);
         }
         ImGui::End();
 

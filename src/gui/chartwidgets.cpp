@@ -184,6 +184,13 @@ void DrawMemoryTimelineChart(const GuiSnapshot& snapshot, TimelineView& view) {
         view.zoomMin = t0;
         view.zoomMax = t1;
     }
+    ImGui::SameLine();
+    if (view.hasSelection)
+        ImGui::TextDisabled("Sel: %.1fs - %.1fs", view.selStartMs / 1000.0, view.selEndMs / 1000.0);
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Clear Selection")) {
+        view.hasSelection = false;
+    }
 
     // Legend with colored markers.
     for (int k = 0; k < kTimelineSeriesCount; ++k) {
@@ -214,20 +221,22 @@ void DrawMemoryTimelineChart(const GuiSnapshot& snapshot, TimelineView& view) {
         return;
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
+    // Uniform plot background: one solid fill covering the whole plot area
+    // edge-to-edge, then gridlines at a consistent low alpha on top of it.
     dl->PushClipRect(plotMin, plotMax, true);
     dl->AddRectFilled(plotMin, plotMax, IM_COL32(25, 28, 34, 255));
 
-    const ImU32 gridCol = IM_COL32(255, 255, 255, 28);
+    const ImU32 gridCol = IM_COL32(255, 255, 255, 26);
     const ImU32 axisCol = IM_COL32(255, 255, 255, 70);
 
     // Background gridlines.
     for (int i = 1; i < 5; ++i) {
         const float y = plotMin.y + plotH * static_cast<float>(i) / 5.0f;
-        dl->AddLine(ImVec2(plotMin.x, y), ImVec2(plotMax.x, y), gridCol);
+        dl->AddLine(ImVec2(plotMin.x, y), ImVec2(plotMax.x, y), gridCol, 1.0f);
     }
     for (int i = 1; i < 8; ++i) {
         const float x = plotMin.x + plotW * static_cast<float>(i) / 8.0f;
-        dl->AddLine(ImVec2(x, plotMin.y), ImVec2(x, plotMax.y), gridCol);
+        dl->AddLine(ImVec2(x, plotMin.y), ImVec2(x, plotMax.y), gridCol, 1.0f);
     }
     dl->AddRect(plotMin, plotMax, axisCol);
 
@@ -288,6 +297,20 @@ void DrawMemoryTimelineChart(const GuiSnapshot& snapshot, TimelineView& view) {
         }
     }
 
+    // Persistent selection: translucent highlight band + edge lines.
+    if (view.hasSelection) {
+        const float sx0 = timeToX(std::max(view.selStartMs, vmin));
+        const float sx1 = timeToX(std::min(view.selEndMs, vmax));
+        if (sx1 > sx0) {
+            dl->AddRectFilled(ImVec2(sx0, plotMin.y), ImVec2(sx1, plotMax.y),
+                              IM_COL32(255, 220, 90, 44));
+            dl->AddLine(ImVec2(sx0, plotMin.y), ImVec2(sx0, plotMax.y),
+                        IM_COL32(255, 220, 90, 150), 1.5f);
+            dl->AddLine(ImVec2(sx1, plotMin.y), ImVec2(sx1, plotMax.y),
+                        IM_COL32(255, 220, 90, 150), 1.5f);
+        }
+    }
+
     // Hover: nearest sample tooltip.
     if (hovered) {
         const ImVec2 mouse = ImGui::GetIO().MousePos;
@@ -314,7 +337,41 @@ void DrawMemoryTimelineChart(const GuiSnapshot& snapshot, TimelineView& view) {
         ImGui::EndTooltip();
     }
 
+    // Rubber-band drag overlay (drawn last so it sits above everything).
+    if (view.dragStartX >= 0.0f) {
+        const ImVec2 mouse = ImGui::GetIO().MousePos;
+        dl->AddRectFilled(ImVec2(view.dragStartX, plotMin.y), ImVec2(mouse.x, plotMax.y),
+                          IM_COL32(100, 160, 255, 50));
+        dl->AddLine(ImVec2(view.dragStartX, plotMin.y), ImVec2(view.dragStartX, plotMax.y),
+                    IM_COL32(100, 160, 255, 180), 1.5f);
+        dl->AddLine(ImVec2(mouse.x, plotMin.y), ImVec2(mouse.x, plotMax.y),
+                    IM_COL32(100, 160, 255, 180), 1.5f);
+    }
+
     dl->PopClipRect();
+
+    // Right-click clears the selection (pan also uses right-drag; a click
+    // without motion produces a tiny/zero drag delta, so it still clears).
+    if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+        view.hasSelection = false;
+
+    // Rubber-band: left-drag selects a [from,to] time range.
+    if (hovered) {
+        if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+            view.dragStartX = ImGui::GetIO().MousePos.x;
+        }
+        if (ImGui::IsMouseReleased(ImGuiMouseButton_Left) && view.dragStartX >= 0.0f) {
+            const ImVec2 mouse = ImGui::GetIO().MousePos;
+            const float dragMinX = std::min(view.dragStartX, mouse.x);
+            const float dragMaxX = std::max(view.dragStartX, mouse.x);
+            if (dragMaxX - dragMinX > 4.0f) {
+                view.selStartMs = vmin + static_cast<double>(dragMinX - plotMin.x) / plotW * vspan;
+                view.selEndMs = vmin + static_cast<double>(dragMaxX - plotMin.x) / plotW * vspan;
+                view.hasSelection = true;
+            }
+            view.dragStartX = -1.0f;
+        }
+    }
 
     // Zoom: mouse wheel around cursor.
     if (hovered) {
@@ -337,11 +394,10 @@ void DrawMemoryTimelineChart(const GuiSnapshot& snapshot, TimelineView& view) {
         }
     }
 
-    // Pan: right or middle mouse drag.
+    // Pan: middle mouse drag (left-drag is rubber-band selection).
     if (hovered) {
-        const bool rmb = ImGui::IsMouseDragging(ImGuiMouseButton_Right);
         const bool mmb = ImGui::IsMouseDragging(ImGuiMouseButton_Middle);
-        if (rmb || mmb) {
+        if (mmb) {
             const float dx = ImGui::GetIO().MouseDelta.x;
             if (std::fabs(dx) > 0.0f) {
                 const double dt = -static_cast<double>(dx) / plotW * vspan;

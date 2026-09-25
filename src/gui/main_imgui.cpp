@@ -338,7 +338,7 @@ void DrawStacktracePanel(const gui::GuiSnapshot& snapshot, gui::StacktraceTree& 
     // Filter bar pinned to the BOTTOM of the panel, full width.
     ImGui::Separator();
     ImGui::SetNextItemWidth(-1.0f);
-    if (ImGui::InputTextWithHint("##treefilter", "filter function/library...",
+    if (ImGui::InputTextWithHint("##treefilter", "search nodes...",
                                  filterBuf, filterBufSize)) {
         tree.SetFilter(filterBuf);
     }
@@ -711,8 +711,7 @@ int main(int argc, char** argv) {
 
         // Dockable panels
         if (showStacktrace && ImGui::Begin("Stacktrace", nullptr,
-                                         ImGuiWindowFlags_NoScrollbar |
-                                         ImGuiWindowFlags_NoScrollWithMouse)) {
+                                         ImGuiWindowFlags_NoScrollbar)) {
             rebuildTreeIfNeeded();
             DrawStacktracePanel(snapshot, stacktraceTree,
                                 stacktraceFilter, sizeof(stacktraceFilter),

@@ -121,7 +121,7 @@ void BuildDefaultDockLayout(ImGuiID dockspaceId) {
     ImGuiID dockMain = dockspaceId;
     // Give the bottom band a fixed initial height. The opposite (top) node is
     // central, so it receives subsequent viewport height changes.
-    const float bottomHeight = std::min(180.0f, dockSize.y * 0.35f);
+    const float bottomHeight = std::min(360.0f, dockSize.y * 0.5f);
     ImGuiID dockBottom = 0;
     ImGuiID dockTop = 0;
     ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Down,
@@ -162,9 +162,9 @@ void DrawStacktracePanel(const gui::GuiSnapshot& snapshot, gui::StacktraceTree& 
     // size of (avail - filterBarH); the filter then sits at the bottom with no
     // overflow, so the host window never grows a second scrollbar.
     const ImGuiStyle& barStyle = ImGui::GetStyle();
-    const float filterBarH = ImGui::GetFrameHeightWithSpacing() +
+    const float filterBarH = ImGui::GetFrameHeight() +
                              2.0f * barStyle.ItemSpacing.y +
-                             barStyle.SeparatorSize + 2.0f;
+                             barStyle.SeparatorSize + 1.0f;
     const ImVec2 tableSize(-FLT_MIN, ImMax(1.0f, ImGui::GetContentRegionAvail().y - filterBarH));
 
     // Tree table: flat visible rows rendered via clipper for large datasets.

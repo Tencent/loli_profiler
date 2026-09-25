@@ -233,12 +233,12 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
 
     // Reserve the bottom bar for the controls (search + Depth combo + Go Up
     // button). Its true height is: ItemSpacing + Separator + ItemSpacing +
-    // one frame row. Add a couple of px of slack for float->int truncation so
-    // image + bar always fit the content region exactly (no v-scrollbar).
+    // one frame row. Keep one pixel of slack for rounding while placing the
+    // controls close to the bottom padding of the docked window.
     const ImGuiStyle& barStyle = ImGui::GetStyle();
-    const float controlBarH = ImGui::GetFrameHeightWithSpacing() +
+    const float controlBarH = ImGui::GetFrameHeight() +
                               2.0f * barStyle.ItemSpacing.y +
-                              barStyle.SeparatorSize + 2.0f;
+                              barStyle.SeparatorSize + 1.0f;
 
     ImVec2 avail = ImGui::GetContentRegionAvail();
     const float usableW = std::max(8.0f, avail.x);

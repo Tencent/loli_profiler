@@ -112,17 +112,23 @@ std::string FormatCallstackNode(const gui::StacktraceTree::Node& node,
 void BuildDefaultDockLayout(ImGuiID dockspaceId) {
     ImGui::DockBuilderRemoveNode(dockspaceId);
     ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_DockSpace);
-    ImGui::DockBuilderSetNodeSize(dockspaceId, ImGui::GetMainViewport()->Size);
+    const ImVec2 dockSize = ImGui::GetMainViewport()->WorkSize;
+    ImGui::DockBuilderSetNodeSize(dockspaceId, dockSize);
 
     // Target layout (reversed so the stretch-friendly panels are on top):
     //   TOP    : Stacktrace (left) + Treemap/Smaps tabbed (right)  [stretch]
     //   BOTTOM : Timeline (left, wide) + Screenshot (right, its own unit)
     ImGuiID dockMain = dockspaceId;
-    // Top band (Stacktrace + Treemap/Smaps), full width.
-    ImGuiID dockTop = ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Up, 0.62f, nullptr, &dockMain);
+    // Give the bottom band a fixed initial height. The opposite (top) node is
+    // central, so it receives subsequent viewport height changes.
+    const float bottomHeight = std::min(180.0f, dockSize.y * 0.35f);
+    ImGuiID dockBottom = 0;
+    ImGuiID dockTop = 0;
+    ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Down,
+                                bottomHeight / dockSize.y, &dockBottom, &dockTop);
     // Bottom band: split Screenshot off to the right (its own unit).
-    ImGuiID dockBottomRight = ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Right, 0.20f, nullptr, &dockMain);
-    ImGuiID dockBottomLeft = dockMain;  // Timeline
+    ImGuiID dockBottomRight = ImGui::DockBuilderSplitNode(dockBottom, ImGuiDir_Right, 0.20f, nullptr, &dockBottom);
+    ImGuiID dockBottomLeft = dockBottom;  // Timeline
     // Top band split: Stacktrace (left) / Treemap+Smaps (right tabbed).
     ImGuiID dockTopRight = ImGui::DockBuilderSplitNode(dockTop, ImGuiDir_Right, 0.42f, nullptr, &dockTop);
     ImGuiID dockTopLeft = dockTop;  // Stacktrace
@@ -161,29 +167,30 @@ void DrawStacktracePanel(const gui::GuiSnapshot& snapshot, gui::StacktraceTree& 
                              barStyle.SeparatorSize + 2.0f;
     const ImVec2 tableSize(-FLT_MIN, ImMax(1.0f, ImGui::GetContentRegionAvail().y - filterBarH));
 
-    // --- Item 2a (REVERTED): the previous auto-content-width logic (measuring
-    // the widest visible name every frame and feeding it to the table as a
-    // queued per-frame width write) made the Size column follow the mouse
-    // forever after any separator interaction, and never settled. It has been
-    // removed entirely; the Function column is now a plain WidthStretch column.
-    // If auto-sizing Function is wanted later, reintroduce it WITHOUT any
-    // per-frame width write / ResizedColumn manipulation.
-
     // Tree table: flat visible rows rendered via clipper for large datasets.
     // Sortable: clicking Size / Count re-sorts each node's children by that key.
-    // ScrollX so deeply-nested / long function names stay reachable horizontally.
+    // Fixed columns let the Function/Size separator expand the table's inner
+    // width, with ScrollX exposing names beyond the viewport.
+    // The old saved stretch-column layout can restore a swapped visual order
+    // after changing Function to fixed width. Keep manual resizing for this
+    // session, but start each launch with the intended column order.
     const ImGuiTableFlags flags =
         ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY |
-        ImGuiTableFlags_ScrollX | ImGuiTableFlags_Resizable | ImGuiTableFlags_Sortable;
-    if (!ImGui::BeginTable("stacktrace_tree", 4, flags, tableSize)) {
+        ImGuiTableFlags_ScrollX | ImGuiTableFlags_Resizable | ImGuiTableFlags_Sortable |
+        ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoSavedSettings;
+    if (!ImGui::BeginTable("stacktrace_tree_v3", 4, flags, tableSize)) {
         return;
     }
     ImGui::TableSetupScrollFreeze(0, 1);
-    // Function: plain WidthStretch — it absorbs the slack and fills the panel.
-    ImGui::TableSetupColumn("Function", ImGuiTableColumnFlags_WidthStretch |
+    const ImGuiStyle& tableStyle = ImGui::GetStyle();
+    const float otherColumnsWidth = 110.0f + 80.0f + 120.0f;
+    const float functionWidth = std::max(180.0f,
+        ImGui::GetContentRegionAvail().x - otherColumnsWidth -
+        tableStyle.ScrollbarSize - 8.0f * tableStyle.CellPadding.x - 20.0f);
+    ImGui::TableSetupColumn("Function", ImGuiTableColumnFlags_WidthFixed |
                                             ImGuiTableColumnFlags_NoSort |
                                             ImGuiTableColumnFlags_NoHeaderLabel,
-                            1.0f, 0);
+                            functionWidth, 0);
     // Default to descending (largest first) for both sortable columns.
     ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed |
                                         ImGuiTableColumnFlags_PreferSortDescending, 110.0f, 1);
@@ -287,9 +294,10 @@ void DrawStacktracePanel(const gui::GuiSnapshot& snapshot, gui::StacktraceTree& 
             // region — left-click toggles expansion for parents, right-click opens
             // the context menu (records the nodeIndex; rows are clipper-transient).
             ImGui::SetCursorScreenPos(ImVec2(drawWindow->Pos.x + nameX, rowScreenY));
-            const float rowW = drawWindow->Pos.x + ImGui::GetContentRegionAvail().x +
-                               ImGui::GetCursorPosX() - (drawWindow->Pos.x + nameX);
-            ImGui::InvisibleButton("##rowhit", ImVec2(std::max(rowW, lineHeight), lineHeight));
+            const float rowW = cellRect.Max.x - ImGui::GetCursorScreenPos().x;
+            ImGui::InvisibleButton("##rowhit", ImVec2(std::max(rowW, 1.0f), lineHeight));
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+                ImGui::SetTooltip("%s", tree.PoolStr(node.funcName));
             if (row.hasChildren && ImGui::IsItemClicked())
                 tree.SetExpanded(row.nodeIndex, !row.expanded);
             if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) {

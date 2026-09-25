@@ -155,7 +155,10 @@ void DrawStacktracePanel(const gui::GuiSnapshot& snapshot, gui::StacktraceTree& 
     // bottom filter bar's height up front by giving the table an explicit outer
     // size of (avail - filterBarH); the filter then sits at the bottom with no
     // overflow, so the host window never grows a second scrollbar.
-    const float filterBarH = ImGui::GetFrameHeightWithSpacing();
+    const ImGuiStyle& barStyle = ImGui::GetStyle();
+    const float filterBarH = ImGui::GetFrameHeightWithSpacing() +
+                             2.0f * barStyle.ItemSpacing.y +
+                             barStyle.SeparatorSize + 2.0f;
     const ImVec2 tableSize(-FLT_MIN, ImMax(1.0f, ImGui::GetContentRegionAvail().y - filterBarH));
 
     // --- Item 2a (REVERTED): the previous auto-content-width logic (measuring
@@ -699,7 +702,9 @@ int main(int argc, char** argv) {
         }
 
         // Dockable panels
-        if (showStacktrace && ImGui::Begin("Stacktrace")) {
+        if (showStacktrace && ImGui::Begin("Stacktrace", nullptr,
+                                         ImGuiWindowFlags_NoScrollbar |
+                                         ImGuiWindowFlags_NoScrollWithMouse)) {
             rebuildTreeIfNeeded();
             DrawStacktracePanel(snapshot, stacktraceTree,
                                 stacktraceFilter, sizeof(stacktraceFilter),
@@ -716,7 +721,9 @@ int main(int argc, char** argv) {
             ImGui::End();
         }
 
-        if (showTreemap && ImGui::Begin("Treemap")) {
+        if (showTreemap && ImGui::Begin("Treemap", nullptr,
+                                      ImGuiWindowFlags_NoScrollbar |
+                                      ImGuiWindowFlags_NoScrollWithMouse)) {
             rebuildTreeIfNeeded();
             gui::DrawTreemapPanel(stacktraceTree, treemapState, bridge.SnapshotVersion(), dpiScale);
         }

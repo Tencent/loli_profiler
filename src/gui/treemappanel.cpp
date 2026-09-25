@@ -240,21 +240,8 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
                               2.0f * barStyle.ItemSpacing.y +
                               barStyle.SeparatorSize + 2.0f;
 
-    // Size the image to the true client width. GetContentRegionAvail() can lag
-    // a frame behind scrollbar visibility, which would let an image a few px
-    // too wide force a horizontal scrollbar (which in turn steals vertical
-    // space and clips the bar). Reserve the scrollbar width only while
-    // scrolling is actually in effect (ScrollMax from the previous frame);
-    // once the content fits, the image spans the full content width.
-    ImGuiWindow* win = GImGui->CurrentWindow;
-    const float styleScrollbarW = GImGui->Style.ScrollbarSize;
-    const float padLeft = win->WindowPadding.x;
-    const float padRight = win->WindowPadding.x;
-    const bool reserveVScrollbar = (win->Flags & ImGuiWindowFlags_NoScrollbar) == 0 &&
-                                   win->ScrollMax.y > 0.0f;
-    const float usableW = std::max(8.0f, win->Size.x - padLeft - padRight -
-                                         (reserveVScrollbar ? styleScrollbarW : 0.0f));
     ImVec2 avail = ImGui::GetContentRegionAvail();
+    const float usableW = std::max(8.0f, avail.x);
     const int w = std::max(8, (int)usableW);
     const int h = std::max(8, (int)(avail.y - controlBarH));
 
@@ -279,33 +266,27 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
         state.displayTex == nullptr || state.pickTex == nullptr;
     const bool sizeChanged = (state.texW != w || state.texH != h);
 
-    // Resize throttle: a dock-separator drag resizes every frame. Re-rendering
-    // the offscreen texture each frame is expensive, so we debounce size-driven
-    // re-renders — only re-render once the size has been stable for the debounce
-    // window, showing the stale texture (stretched) in between. Data changes
-    // (load, focus, depth, search, dpi) still re-render immediately.
+    // Resize throttle: remember when the requested size last changed, then
+    // render once that same size has remained stable for the debounce window.
     const double now = ImGui::GetTime();
     bool needRender = dataChanged;
-    if (sizeChanged) {
-        if (state.texW == 0 || state.texH == 0) {
-            needRender = true;  // first render
-        } else {
-            // Size is changing: record the pending size and the time; only render
-            // once the size has stopped changing for the debounce window.
-            state.pendingW = w;
-            state.pendingH = h;
-            state.lastResizeTimeSec = now;
-        }
-    } else if (state.pendingW > 0 &&
-               (now - state.lastResizeTimeSec) >= TreemapState::kResizeDebounceSec) {
-        // Settled: render the pending (final) size.
+    if (sizeChanged && (state.pendingW != w || state.pendingH != h)) {
+        state.pendingW = w;
+        state.pendingH = h;
+        state.lastResizeTimeSec = now;
+    }
+    if (sizeChanged &&
+        (state.texW == 0 || state.texH == 0 ||
+         (now - state.lastResizeTimeSec) >= TreemapState::kResizeDebounceSec)) {
         needRender = true;
+    }
+    if (!sizeChanged) {
+        state.pendingW = state.pendingH = 0;
     }
 
     if (needRender) {
-        // Use the pending (settled) size if we have one, else the current size.
-        const int rw = (state.pendingW > 0) ? state.pendingW : w;
-        const int rh = (state.pendingH > 0) ? state.pendingH : h;
+        const int rw = w;
+        const int rh = h;
         state.pendingW = state.pendingH = 0;
         sf::RenderTexture* disp = EnsureTexture(state.displayTex, rw, rh);
         sf::RenderTexture* pick = EnsureTexture(state.pickTex, rw, rh);

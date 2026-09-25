@@ -244,11 +244,11 @@ void DrawStacktracePanel(const gui::GuiSnapshot& snapshot, gui::StacktraceTree& 
             // --- Single-line tree row: [indent guides][arrow-or-space][name].
             // We lay out explicitly so the arrow and name share one line and
             // leaves align under the parent label (same X as if they had an arrow).
-            ImGuiWindow* drawWindow = ImGui::GetCurrentWindow();
             ImDrawList* drawList = ImGui::GetWindowDrawList();
             const float lineHeight = ImGui::GetFrameHeight();  // matches ArrowButton
             const float stepX = ImGui::GetTreeNodeToLabelSpacing();
             const float baseX = ImGui::GetCursorPosX();
+            const float rowScreenX = ImGui::GetCursorScreenPos().x;
             const float rowScreenY = ImGui::GetCursorScreenPos().y;
 
             // Indent guide lines: one faint vertical line per ancestor depth, at the
@@ -256,8 +256,8 @@ void DrawStacktracePanel(const gui::GuiSnapshot& snapshot, gui::StacktraceTree& 
             // they sit behind the text (no line crossing through the arrow).
             const ImU32 guideCol = ImGui::GetColorU32(ImGuiCol_TextDisabled, 0.35f);
             for (int d = 1; d <= row.depth; ++d) {
-                const float gx = baseX + (float)(d - 1) * stepX + lineHeight * 0.5f;
-                const float sx = drawWindow->Pos.x + gx;
+                const float sx = rowScreenX + (float)(d - 1) * stepX +
+                                 lineHeight * 0.5f;
                 drawList->AddLine(ImVec2(sx, rowScreenY), ImVec2(sx, rowScreenY + lineHeight),
                                   guideCol, 1.0f);
             }
@@ -280,11 +280,11 @@ void DrawStacktracePanel(const gui::GuiSnapshot& snapshot, gui::StacktraceTree& 
             // nodes' names aren't cut off by the cell clip rect. This is the
             // fix for label clipping on deep trees — see ImGui #3823 analysis.
             ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
-            const float nameX = ImGui::GetCursorPosX();
+            const float nameScreenX = ImGui::GetCursorScreenPos().x;
             // The Function column's right edge in screen coords.
             const ImGuiTable* tbl = ImGui::GetCurrentTable();
             const ImRect cellRect = ImGui::TableGetCellBgRect(tbl, tbl->CurrentColumn);
-            ImGui::PushClipRect(ImVec2(drawWindow->Pos.x + nameX, rowScreenY),
+            ImGui::PushClipRect(ImVec2(nameScreenX, rowScreenY),
                                 ImVec2(cellRect.Max.x, rowScreenY + lineHeight),
                                 true);
             ImGui::TextUnformatted(tree.PoolStr(node.funcName));
@@ -293,7 +293,7 @@ void DrawStacktracePanel(const gui::GuiSnapshot& snapshot, gui::StacktraceTree& 
             // Row interaction: invisible button over the whole Function cell text
             // region — left-click toggles expansion for parents, right-click opens
             // the context menu (records the nodeIndex; rows are clipper-transient).
-            ImGui::SetCursorScreenPos(ImVec2(drawWindow->Pos.x + nameX, rowScreenY));
+            ImGui::SetCursorScreenPos(ImVec2(nameScreenX, rowScreenY));
             const float rowW = cellRect.Max.x - ImGui::GetCursorScreenPos().x;
             ImGui::InvisibleButton("##rowhit", ImVec2(std::max(rowW, 1.0f), lineHeight));
             if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))

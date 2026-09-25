@@ -534,6 +534,15 @@ int main(int argc, char** argv) {
             frameSnapshot = emptySnapshot;
         const gui::GuiSnapshot& snapshot = *frameSnapshot;
 
+        auto openRecordDialog = [&]() {
+            auto path = FileDialogs::OpenFile({{"Loli Record", "loli"}});
+            // NFD blocks the SFML frame loop, so the key-up for Ctrl+O may be
+            // consumed by the native dialog. A stale Ctrl suppresses wheel
+            // scrolling in ImGui until the window loses and regains focus.
+            ImGui::GetIO().ClearInputKeys();
+            return path;
+        };
+
         // Root dockspace over the whole viewport. On the first frame we lay out
         // a sensible default arrangement so panels aren't all stacked.
         const ImGuiID dockspaceId =
@@ -559,7 +568,7 @@ int main(int argc, char** argv) {
                     runLaunchDialog.Open(&bridge);
                 }
                 if (ImGui::MenuItem("Open Record...", "Ctrl+O")) {
-                    if (auto path = FileDialogs::OpenFile({{"Loli Record", "loli"}})) {
+                    if (auto path = openRecordDialog()) {
                         bridge.LoadRecord(QString::fromStdString(*path));
                         loadedRecordName = *path;
                         window.setTitle("LoliProfiler - " + loadedRecordName);
@@ -592,7 +601,7 @@ int main(int argc, char** argv) {
             ImGuiIO& io = ImGui::GetIO();
             const bool mod = io.KeyCtrl || io.KeySuper;
             if (mod && ImGui::IsKeyPressed(ImGuiKey_O, false)) {
-                if (auto path = FileDialogs::OpenFile({{"Loli Record", "loli"}})) {
+                if (auto path = openRecordDialog()) {
                     bridge.LoadRecord(QString::fromStdString(*path));
                     loadedRecordName = *path;
                     window.setTitle("LoliProfiler - " + loadedRecordName);

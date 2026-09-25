@@ -43,6 +43,16 @@ struct TreemapState {
     int      builtDepth = -1;       // depth the texture was built for
     float    builtDpi = 0.0f;       // dpi scale the texture was built for
     uint64_t builtSearchVersion = ~0ull;  // search version the texture was built from
+
+    // --- resize throttle ---
+    // Re-rendering the offscreen texture is expensive (Squarify + 2 draw passes
+    // over thousands of cells). During a dock-separator drag the size changes
+    // every frame; we debounce so we re-render only after the size has been
+    // stable for `resizeDebounceMs`, showing the stale texture stretched in the
+    // meantime. `lastResizeTimeSec` is ImGui::GetTime() of the last size change.
+    double   lastResizeTimeSec = 0.0;
+    int      pendingW = 0, pendingH = 0;  // size waiting to be rendered
+    static constexpr double kResizeDebounceSec = 0.12;  // 120 ms
 };
 
 // Draws the treemap for the given (already-built) stacktrace tree. `dataVersion`

@@ -270,21 +270,48 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
             : -1;
 
     // Decide whether we must re-render the textures.
-    const bool needRender =
+    const bool dataChanged =
         state.builtForVersion != dataVersion ||
         state.builtSearchVersion != searchVersion ||
         state.builtFocus != state.focusedNode ||
         state.builtDepth != state.maxDepth ||
         state.builtDpi != dpiScale ||
-        state.texW != w || state.texH != h ||
         state.displayTex == nullptr || state.pickTex == nullptr;
+    const bool sizeChanged = (state.texW != w || state.texH != h);
+
+    // Resize throttle: a dock-separator drag resizes every frame. Re-rendering
+    // the offscreen texture each frame is expensive, so we debounce size-driven
+    // re-renders — only re-render once the size has been stable for the debounce
+    // window, showing the stale texture (stretched) in between. Data changes
+    // (load, focus, depth, search, dpi) still re-render immediately.
+    const double now = ImGui::GetTime();
+    bool needRender = dataChanged;
+    if (sizeChanged) {
+        if (state.texW == 0 || state.texH == 0) {
+            needRender = true;  // first render
+        } else {
+            // Size is changing: record the pending size and the time; only render
+            // once the size has stopped changing for the debounce window.
+            state.pendingW = w;
+            state.pendingH = h;
+            state.lastResizeTimeSec = now;
+        }
+    } else if (state.pendingW > 0 &&
+               (now - state.lastResizeTimeSec) >= TreemapState::kResizeDebounceSec) {
+        // Settled: render the pending (final) size.
+        needRender = true;
+    }
 
     if (needRender) {
-        sf::RenderTexture* disp = EnsureTexture(state.displayTex, w, h);
-        sf::RenderTexture* pick = EnsureTexture(state.pickTex, w, h);
+        // Use the pending (settled) size if we have one, else the current size.
+        const int rw = (state.pendingW > 0) ? state.pendingW : w;
+        const int rh = (state.pendingH > 0) ? state.pendingH : h;
+        state.pendingW = state.pendingH = 0;
+        sf::RenderTexture* disp = EnsureTexture(state.displayTex, rw, rh);
+        sf::RenderTexture* pick = EnsureTexture(state.pickTex, rw, rh);
         if (disp && pick) {
-            state.texW = w;
-            state.texH = h;
+            state.texW = rw;
+            state.texH = rh;
 
             // Child padding + border scale with DPI so separation stays visible
             // on HiDPI displays.
@@ -297,7 +324,7 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
             std::vector<int32_t> top;
             if (state.focusedNode >= 0) top.push_back(state.focusedNode);
             else top = tree.Roots();
-            Squarify(top, tree, { 0, 0, (float)w, (float)h }, 0, state.maxDepth,
+            Squarify(top, tree, { 0, 0, (float)rw, (float)rh }, 0, state.maxDepth,
                      pad, titleH, cells);
 
             // Match lookup set for search highlighting (built only when there
@@ -427,14 +454,18 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
     ImVec2 origin = ImGui::GetCursorScreenPos();
     ImGui::Image(*state.displayTex, ImVec2((float)w, (float)h));
 
-    // Picking: map mouse to a node via the pick texture pixel.
+    // Picking: map mouse to a node via the pick texture pixel. The texture may be
+    // a different size than the displayed image while a resize is debounced, so
+    // scale the pixel coords into texture space.
     ImVec2 mouse = ImGui::GetIO().MousePos;
     const bool hovered = ImGui::IsItemHovered();
     int32_t hoveredNode = -1;
     if (hovered && state.pickTex) {
-        const int px = (int)(mouse.x - origin.x);
-        const int py = (int)(mouse.y - origin.y);
-        if (px >= 0 && py >= 0 && px < w && py < h) {
+        const float sx = (float)state.texW / (float)w;
+        const float sy = (float)state.texH / (float)h;
+        const int px = (int)((mouse.x - origin.x) * sx);
+        const int py = (int)((mouse.y - origin.y) * sy);
+        if (px >= 0 && py >= 0 && px < state.texW && py < state.texH) {
             sf::Image img = state.pickTex->getTexture().copyToImage();
             sf::Color c = img.getPixel({ (unsigned)px, (unsigned)py });
             uint32_t v = (uint32_t)c.r | ((uint32_t)c.g << 8) | ((uint32_t)c.b << 16);

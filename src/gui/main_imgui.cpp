@@ -158,34 +158,13 @@ void DrawStacktracePanel(const gui::GuiSnapshot& snapshot, gui::StacktraceTree& 
     const float filterBarH = ImGui::GetFrameHeightWithSpacing();
     const ImVec2 tableSize(-FLT_MIN, ImMax(1.0f, ImGui::GetContentRegionAvail().y - filterBarH));
 
-    // --- Item 2a: auto-size the Function column to fit the widest visible row.
-    // Track the max content width (depth*indent + arrow + name) across ALL rows
-    // and feed it as the Function column's stretch weight, so the Function column
-    // is at least as wide as the deepest/longest visible name. Overflow is
-    // reachable via the horizontal scrollbar. The max name width is cached per
-    // node so the full O(N) scan only runs when expansion/filter/sort changes.
-    const auto& rows = tree.VisibleRows();
-    static ImGuiID lastVisibleSignature = 0;
-    static float maxNameW = 0.0f;
-    const float stepX = ImGui::GetTreeNodeToLabelSpacing();
-    const float cellPadX = ImGui::GetStyle().CellPadding.x;
-    const float frameH = ImGui::GetFrameHeight();
-    const ImGuiID visibleSignature = ImHashStr("stacktrace_tree", 0, (ImGuiID)(intptr_t)&tree);
-    if (visibleSignature != lastVisibleSignature) {
-        maxNameW = 0.0f;
-        for (size_t r = 0; r < rows.size(); ++r) {
-            const auto& row = rows[r];
-            const auto& node = tree.NodeAt(row.nodeIndex);
-            const float nameW = ImGui::CalcTextSize(tree.PoolStr(node.funcName)).x;
-            const float contentW = stepX + (float)row.depth * stepX +
-                                   ImGui::GetStyle().ItemInnerSpacing.x + nameW;
-            if (contentW > maxNameW)
-                maxNameW = contentW;
-        }
-        lastVisibleSignature = visibleSignature;
-    }
-    // Function column minimum content width (stretch weight = min pixel width).
-    const float funcMinW = maxNameW + cellPadX * 2.0f;
+    // --- Item 2a (REVERTED): the previous auto-content-width logic (measuring
+    // the widest visible name every frame and feeding it to the table as a
+    // queued per-frame width write) made the Size column follow the mouse
+    // forever after any separator interaction, and never settled. It has been
+    // removed entirely; the Function column is now a plain WidthStretch column.
+    // If auto-sizing Function is wanted later, reintroduce it WITHOUT any
+    // per-frame width write / ResizedColumn manipulation.
 
     // Tree table: flat visible rows rendered via clipper for large datasets.
     // Sortable: clicking Size / Count re-sorts each node's children by that key.
@@ -197,42 +176,19 @@ void DrawStacktracePanel(const gui::GuiSnapshot& snapshot, gui::StacktraceTree& 
         return;
     }
     ImGui::TableSetupScrollFreeze(0, 1);
-    // Function: WidthStretch so it ABSORBS any manual resize (the Size/Count/
-    // Library columns are WidthFixed and keep their widths). The stretch weight
-    // is our computed min content width, so the column is always at least wide
-    // enough to show the full deepest/longest visible name.
+    // Function: plain WidthStretch — it absorbs the slack and fills the panel.
     ImGui::TableSetupColumn("Function", ImGuiTableColumnFlags_WidthStretch |
                                             ImGuiTableColumnFlags_NoSort |
                                             ImGuiTableColumnFlags_NoHeaderLabel,
-                            funcMinW, 0);
+                            1.0f, 0);
     // Default to descending (largest first) for both sortable columns.
     ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed |
                                         ImGuiTableColumnFlags_PreferSortDescending, 110.0f, 1);
     ImGui::TableSetupColumn("Count", ImGuiTableColumnFlags_WidthFixed |
                                          ImGuiTableColumnFlags_PreferSortDescending, 80.0f, 2);
-    // Library: trailing WidthFixed so the Function/Size separator drag widens
-    // only Function (the fixed columns keep their widths; the stretch column
-    // takes/absorbs the delta).
     ImGui::TableSetupColumn("Library", ImGuiTableColumnFlags_WidthFixed |
-                                           ImGuiTableColumnFlags_NoSort, 0.0f, 3);
+                                           ImGuiTableColumnFlags_NoSort, 120.0f, 3);
     ImGui::TableHeadersRow();
-
-    // --- Item 2a (cont.): keep the Function column wide enough for the content.
-    // The user may drag the Function/Size separator; only enlarge (never shrink)
-    // toward the measured content width so a manual narrow choice isn't yanked
-    // back while it is active. We feed the request through the queued-resize
-    // fields, which BeginTable applies before layout locks, so this never fights
-    // a live resize interaction.
-    if (ImGuiTable* table = ImGui::GetCurrentTable()) {
-        const ImGuiTableColumn& funcCol = table->Columns[0];
-        if (!(table->ResizedColumn == 0 && ImGui::IsMouseDragging(0))) {
-            const float curW = funcCol.WidthRequest;
-            if (funcMinW > curW + 0.5f) {
-                table->ResizedColumn = 0;
-                table->ResizedColumnNextWidth = funcMinW;
-            }
-        }
-    }
 
     // Consume sort specs: Size (default, desc) and Count are sortable; the
     // Function column is marked NoSort so clicks there are ignored. On the very
@@ -262,6 +218,7 @@ void DrawStacktracePanel(const gui::GuiSnapshot& snapshot, gui::StacktraceTree& 
         }
     }
 
+    const auto& rows = tree.VisibleRows();
     ImGuiListClipper clipper;
     clipper.Begin(static_cast<int>(rows.size()));
     while (clipper.Step()) {
@@ -308,10 +265,20 @@ void DrawStacktracePanel(const gui::GuiSnapshot& snapshot, gui::StacktraceTree& 
                 ImGui::Dummy(ImVec2(lineHeight, lineHeight));
             }
 
-            // Function name on the SAME line as the arrow.
+            // Function name on the SAME line as the arrow. Clip to the FULL
+            // Function-column width (not the post-indent text start) so deep
+            // nodes' names aren't cut off by the cell clip rect. This is the
+            // fix for label clipping on deep trees — see ImGui #3823 analysis.
             ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
             const float nameX = ImGui::GetCursorPosX();
+            // The Function column's right edge in screen coords.
+            const ImGuiTable* tbl = ImGui::GetCurrentTable();
+            const ImRect cellRect = ImGui::TableGetCellBgRect(tbl, tbl->CurrentColumn);
+            ImGui::PushClipRect(ImVec2(drawWindow->Pos.x + nameX, rowScreenY),
+                                ImVec2(cellRect.Max.x, rowScreenY + lineHeight),
+                                true);
             ImGui::TextUnformatted(tree.PoolStr(node.funcName));
+            ImGui::PopClipRect();
 
             // Row interaction: invisible button over the whole Function cell text
             // region — left-click toggles expansion for parents, right-click opens
@@ -358,6 +325,7 @@ void DrawStacktracePanel(const gui::GuiSnapshot& snapshot, gui::StacktraceTree& 
     ImGui::EndTable();
 
     // Filter bar pinned to the BOTTOM of the panel, full width.
+    ImGui::Separator();
     ImGui::SetNextItemWidth(-1.0f);
     if (ImGui::InputTextWithHint("##treefilter", "filter function/library...",
                                  filterBuf, filterBufSize)) {

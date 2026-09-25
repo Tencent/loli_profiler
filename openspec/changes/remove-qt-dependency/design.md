@@ -25,6 +25,11 @@ Key existing structures to preserve behavior:
 
 ## Decisions
 
+**Global rules for every Qt replacement:**
+- **Prefer SFML's facilities** first (it's already vendored). Sockets → SFML. If SFML doesn't cover a need, prefer a small vendored library next.
+- **Before writing anything from scratch, surface the choice to the user first** — do not hand-roll a dependency without asking.
+- **Reproduce the Qt original's behavior step-for-step** wherever a Qt flow encodes real ordering (launch sequence, device setup, serialization). See D10.
+
 ### D1: Containers — direct STL substitution
 Replace `QString`→`std::string` (UTF-8), `QVector`→`std::vector`, `QHash`/`QSet`→`std::unordered_map`/`std::unordered_set`, `QStringList`→`std::vector<std::string>`, `QPair`→`std::pair`. Mechanical, file-by-file. `HashString`'s intern table becomes `std::unordered_map<uint32_t, std::string>` (keep the `qHash`-compatible hashcodes **only** where they're persisted in `.loli` — see D3).
 

@@ -5,19 +5,28 @@
 
 ## 2. Qt-free foundation helpers (alongside Qt, no behavior change)
 
-- [ ] 2.1 `ProcessRunner`: cross-platform subprocess (CreateProcess/posix_spawn), pipes for stdout/stderr, blocking wait + timeout, async completion callback, kill
-- [ ] 2.2 `DeviceChannel`: TCP client/listener over SFML sockets mimicking QTcpSocket usage in the stacktrace channel
+Preference rule for ALL helpers: use SFML's facilities first; if SFML can't cover it, prefer a small vendored library; only write from scratch as a last resort — and ask the user before writing anything from scratch.
+
+- [ ] 2.1 Process runner replacing QProcess. SFML has no process API — evaluate vendored `reproc`/`tiny-process-library` first; in-house (CreateProcess/posix_spawn + pipes) only if neither fits, after asking the user. Needs: program/args/cwd, stdout+stderr capture, blocking wait + timeout, async notify, kill.
+- [ ] 2.2 `DeviceChannel`: TCP client/listener over **SFML sockets** (`sf::TcpSocket`/`sf::TcpListener`) mimicking QTcpSocket usage in the stacktrace channel
 - [ ] 2.3 `EventBus`/callback queue: std::function handlers + thread-safe queue pumped by the GUI frame loop / CLI loop
-- [ ] 2.4 INI/JSON config store (in-house) for app settings; keep `loli3.conf` format as-is
+- [ ] 2.4 Config store for app settings: prefer a tiny vendored INI/JSON lib over in-house (ask first if in-house); keep `loli3.conf` format as-is
 - [ ] 2.5 Thread-pool / std::async wrapper for parallel translation
 - [ ] 2.6 Record identity: replace QUuid with a std-based id (confirm .loli uuid-string compatibility)
 
 ## 3. .loli serializer (highest risk — do early with tests)
 
 - [ ] 3.1 Confirm exact QDataStream byte encodings (QString UTF-16, QUuid string, QHash/QVector/QByteArray/QPointF, qint/quint) from Qt 5.15 source + sample bytes
-- [ ] 3.2 Implement `LoliReader`/`LoliWriter` reproducing the byte layout exactly (magic 0xA4B3C2D1, version 106, documented field order)
-- [ ] 3.3 Byte-level + load-verification tests against `2026.09.14-11.24.23.loli` and `6s_heap_0919.loli` (record counts + aggregates match Qt reader)
-- [ ] 3.4 Implement ImGui GUI `SaveRecord` on the new serializer (replace stub); save→reload round-trip test
+- [ ] 3.2 Build a **differential test**: a Qt-based reference writer/reader emits a known set of values (every field type in .loli: qint32/quint32/quint64, QString, QByteArray, QHash, QVector, QPointF, QUuid-string, nested structures), and asserts the new `LoliWriter`/`LoliReader` produce byte-identical buffers / identical parsed values
+- [ ] 3.3 Implement `LoliReader`/`LoliWriter` reproducing the byte layout exactly (magic 0xA4B3C2D1, version 106, documented field order), validated by the differential test
+- [ ] 3.4 Byte-level + load-verification against `2026.09.14-11.24.23.loli` and `6s_heap_0919.loli` (record counts + aggregates match Qt reader)
+- [ ] 3.5 Implement ImGui GUI `SaveRecord` on the new serializer (replace stub); save→reload round-trip test
+
+## 3b. Launch-flow parity harness
+
+- [ ] 3b.1 Extract the Qt `on_launchPushButton_clicked` sequence into a documented step list (see design D10) and write the Qt-free launch driver to reproduce it step-for-step
+- [ ] 3b.2 Verify the launch steps against a real device: push libloli.so, root check, push loli.conf, port forward, StartApp — in the same order as the Qt original
+- [ ] 3b.3 Replace the two Qt `QMessageBox` prompts (Launch vs Attach; Enable Data Optimization) with ImGui dialog options/settings that produce the same `enableInject`/`useCache` outcomes
 
 ## 4. Port core to Qt-free (bottom-up, build green each step)
 

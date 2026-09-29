@@ -97,12 +97,12 @@ analysis) is untouched.
 
 - [x] 10.1 Restore Attach in the ImGui launch dialog and pass the selected option to `LaunchDriver`; rebuild verified. Device behavior remains part of 9.7.
 - [x] 10.2 Run the Windows VS2022 build with local NDK and produce a verified `dist/LoliProfiler-windows.zip`; extraction and bundled `agentcli` auto-conversion passed. Fresh-machine validation remains part of 7.4.
-- [x] 10.3 Remove active Qt CMake targets and orphaned Qt GUI source files while retaining historical differential references outside the build.
+- [x] 10.3 Remove active Qt CMake targets and orphaned Qt GUI source files. Temporary C++ migration harnesses were removed during final cleanup.
 - [ ] 10.4 Run Qt-free CLI dump/compare against old Qt golden output. Offline smoke passed on `6s_heap_0919.loli`: dump includes `UDataTable::Serialize`, and self-compare reports zero changed/new allocations; exact Qt text parity is unverified.
 - [ ] 10.5 Verify capture/session ownership under stop, save, load, and new-capture transitions. The detached save/load threads and watcher-thread session mutations are removed, and ProcessRunner reuse now joins prior watchers; runtime regression remains.
 - [x] 10.6 Restore the old CLI's `--dump ... --out file.db` SQLite export. The Python `loli` auto-conversion and search work; the large iOS sample exports to an integrity-checked 436,293-node database.
 - [ ] 10.7 Verify the repaired ImGui launch completion callback on a real device; the previous `joinable()` check could never signal successful injection.
-- [x] 10.8 Make CLI `--enable-memory-optimization` retain only persistent allocations while capturing; default CLI capture keeps all records. Synthetic alloc/free, moved/in-place realloc, and delayed-event cases pass `CliRetentionTest`. Device validation remains in 9.7.
+- [x] 10.8 Make CLI `--enable-memory-optimization` retain only persistent allocations while capturing; default CLI capture keeps all records. Synthetic alloc/free, moved/in-place realloc, and delayed-event cases passed the migration regression check. Device validation remains in 9.7.
 - [x] 10.9 Make the Python build driver and docs support macOS/Linux Qt-free targets and the `agentcli` layout without whole-tree cleanup. Real platform builds remain in 11.6.
 
 ## 11. Naming, presentation, and release polish

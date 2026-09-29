@@ -35,8 +35,8 @@ Qt-compatible seconds; allocation record times remain milliseconds.
 
 `llvm-symbolizer` translated 109,464 distinct addresses. It selects the
 outermost named DWARF inline frame for each captured PC, matching the old
-GUI's one-frame-per-PC nearest-symbol tree. The focused
-`SymbolizerInlineTest` verifies `0x129b22dc` maps to
+GUI's one-frame-per-PC nearest-symbol tree. Focused symbolizer validation
+verified that `0x129b22dc` maps to
 `UDataTable::LoadStructData`, with inlined `TSet::Reserve` and
 `TMapBase::Reserve` beneath it in DWARF.
 

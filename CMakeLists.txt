@@ -13,7 +13,7 @@ if(MSVC)
 endif()
 
 
-# Option to build the new Dear ImGui-based GUI (experimental)
+# Option to build the Dear ImGui desktop GUI.
 option(BUILD_IMGUI_GUI "Build ImGui GUI application" ON)
 
 # Qt-free core sources shared by the CLI and ImGui GUI.
@@ -166,22 +166,8 @@ endif()
 
 
 # ============================================================================
-# CLI executable, Qt-free (LoliProfilerCLI - task 5.1)
+# CLI executable, Qt-free (LoliProfilerCLI)
 # ============================================================================
-# Regression for duplicate basenames in smaps (Android linker namespaces).
-add_executable(SmapsBiasTest EXCLUDE_FROM_ALL
-    openspec/changes/remove-qt-dependency/tests/smaps_bias_test.cpp)
-target_include_directories(SmapsBiasTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-set_target_properties(SmapsBiasTest PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
-add_executable(CliRetentionTest EXCLUDE_FROM_ALL
-    openspec/changes/remove-qt-dependency/tests/cli_retention_test.cpp)
-target_link_libraries(CliRetentionTest PRIVATE LoliCore)
-set_target_properties(CliRetentionTest PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
-add_executable(SymbolizerInlineTest EXCLUDE_FROM_ALL
-    openspec/changes/remove-qt-dependency/tests/symbolizer_inline_test.cpp)
-target_link_libraries(SymbolizerInlineTest PRIVATE LoliCore)
-set_target_properties(SymbolizerInlineTest PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
-
 # Headless capture + --dump/--compare entirely on LoliCore (design D12: the
 # same capture APIs the ImGui GUI consumes).
 option(BUILD_QTFREE_CLI "Build the Qt-free CLI executable" ON)
@@ -208,7 +194,7 @@ if(BUILD_QTFREE_CLI AND BUILD_QTFREE_CORE AND LOLI_QTFREE_SRCS)
 endif()
 
 # ============================================================================
-# ImGui GUI Application (LoliProfilerImGui) - experimental, SFML + Dear ImGui
+# ImGui GUI Application (LoliProfilerImGui) - SFML + Dear ImGui
 # ============================================================================
 if(BUILD_IMGUI_GUI)
 

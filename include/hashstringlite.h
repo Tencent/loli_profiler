@@ -12,8 +12,7 @@
 // to what the Qt build produced. The Qt build used qHash(QString) from Qt
 // 5.14.1 with the default seed (0): a deterministic fold over the string's
 // UTF-16 code units, h = h * 31 + unit (verified empirically against a Qt
-// 5.14.1 probe and recorded in
-// openspec/changes/remove-qt-dependency/tests/hashstring_hashtest.cpp).
+// 5.14.1 probe during the Qt removal).
 //
 // Note: the global QHash seed (qGlobalQHashSeed, randomized per process since
 // Qt 5.6) only affects container-internal rehashing; direct qHash(QString)

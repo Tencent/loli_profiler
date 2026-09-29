@@ -1,5 +1,5 @@
 // LoliProfilerImGui - Dear ImGui + SFML application shell.
-// This is the entry point for the experimental ImGui-based GUI.
+// Entry point for the ImGui desktop GUI.
 // Qt-free since the remove-qt change: theme persistence via AppSettings
 // (loli_settings.json), capture via the LoliCore-backed GuiDataBridge.
 
@@ -697,51 +697,12 @@ void DrawScreenshotPanel(const gui::GuiSnapshot& snapshot,
 int main(int argc, char** argv) {
     // Optional: path to a .loli record to open on startup (for quick inspection).
     const char* openRecordArg = nullptr;
-    // Headless perf harness: render a bounded number of frames and auto-exit so
-    // we can measure load/interactivity from scripts without manual clicking.
-    bool selfTest = false;
-    bool selfTestCumulative = false;
-    bool selfTestRangeLeaks = false;
-    bool selfTestCaptureClock = false;
-    std::string selfTestCaptureDevice;
-    std::string selfTestCaptureApp;
-    std::string selfTestCaptureOut;
-    int selfTestCaptureSeconds = 8;
-    std::string selfTestSavePath;
-    // Screenshot harness: after the selftest frame budget, dump the window to a
-    // PNG so we can visually verify rendering from scripts.
-    std::string screenshotPath;
-    std::string selfTestDialog;
     std::string diagnosticLogPath;
     std::string diagnosticLevel;
     bool defaultDiagnosticLogPath = false;
     for (int i = 1; i < argc; ++i) {
         const char* a = argv[i];
-        if (std::strcmp(a, "--selftest") == 0) {
-            selfTest = true;
-        } else if (std::strcmp(a, "--selftest-range-leaks") == 0) {
-            selfTest = true;
-            selfTestRangeLeaks = true;
-        } else if (std::strcmp(a, "--selftest-capture-clock") == 0 && i + 4 < argc) {
-            selfTest = true;
-            selfTestCaptureClock = true;
-            selfTestCaptureDevice = argv[++i];
-            selfTestCaptureApp = argv[++i];
-            selfTestCaptureSeconds = std::max(3, std::atoi(argv[++i]));
-            selfTestCaptureOut = argv[++i];
-        } else if (std::strcmp(a, "--selftest-save") == 0 && i + 1 < argc) {
-            selfTest = true;
-            selfTestSavePath = argv[++i];
-        } else if (std::strcmp(a, "--selftest-cumulative") == 0) {
-            selfTest = true;
-            selfTestCumulative = true;
-        } else if (std::strcmp(a, "--screenshot") == 0 && i + 1 < argc) {
-            screenshotPath = argv[++i];
-            selfTest = true;  // screenshot implies selftest (bounded frames + exit)
-        } else if (std::strcmp(a, "--selftest-dialog") == 0 && i + 1 < argc) {
-            selfTestDialog = argv[++i];
-            selfTest = true;
-        } else if (std::strcmp(a, "--log-file") == 0) {
+        if (std::strcmp(a, "--log-file") == 0) {
             if (i + 1 < argc && argv[i + 1][0] != '-')
                 diagnosticLogPath = argv[++i];
             else
@@ -862,11 +823,6 @@ int main(int argc, char** argv) {
         " ndk=" + PathUtilsLite::GetNDKPath() +
         " adb=" + PathUtilsLite::GetADBExecutablePath() +
         " python=" + PathUtilsLite::GetPythonExecutablePath());
-    if (selfTestDialog == "run")
-        runLaunchDialog.Open(&bridge);
-    else if (selfTestDialog == "config")
-        captureConfigDialog.Open(&bridge);
-
     std::string loadedRecordName;
     std::string recordPath;
     std::string pendingSymbolizeSave;
@@ -888,7 +844,7 @@ int main(int argc, char** argv) {
     gui::StacktraceTree liveStacktraceTree;
     bool hasLiveTree = false;
     bool liveTreeAliasesAll = false;
-    bool showPersistent = !selfTestCumulative;
+    bool showPersistent = true;
     uint64_t stacktraceBuiltVersion = 0;  // bridge.SnapshotVersion() the tree was built from
     char stacktraceFilter[256] = {0};
     int32_t stacktraceContextNode = -1;   // nodeIndex right-clicked in the Stacktrace panel
@@ -902,7 +858,6 @@ int main(int argc, char** argv) {
     bool rangeLiveAliasesAll = false;
     double requestedRangeStart = 0.0;
     double requestedRangeEnd = 0.0;
-    std::size_t rangeRecordCount = 0;
     uint64_t rangeTreeVersion = 0;
     gui::TreemapState treemapState;
     gui::TreemapState leakTreemapState;
@@ -926,24 +881,12 @@ int main(int argc, char** argv) {
     bool showConsole = true;
     uint64_t consoleCursor = 0;
     std::vector<loli::LogEntry> consoleLines;
-    bool showSettingsDialog = selfTestDialog == "settings";
-    bool showAboutDialog = selfTestDialog == "about";
+    bool showSettingsDialog = false;
+    bool showAboutDialog = false;
     bool firstFrame = true;
-    bool activateTimelineAfterLayout = selfTestDialog.empty();
-    int framesRendered = 0;
-    int loadingFrames = 0;
-    double lastTreeBuildMs = 0.0;
-    double worstFrameMs = 0.0;
+    bool activateTimelineAfterLayout = true;
     bool wasLoading = false;
     std::string launchErrorModal;
-    int framesAfterLoad = 0;
-    int rangeLeakTestStage = 0;
-    int selfTestExitCode = 0;
-    bool selfTestRangeLeaksDone = false;
-    bool selfTestSaveRequested = false;
-    int captureClockTestStage = 0;
-    loli::LoliLogger::Clock::time_point captureClockTestConnectedAt{};
-    std::size_t rangeLeakOriginalNodes = 0;
 
     auto chooseSymbolLibrary = [&]() -> bool {
         auto path = FileDialogs::OpenFile({{"Shared library", "so,sym,dylib,debug"}});
@@ -1044,8 +987,6 @@ int main(int argc, char** argv) {
                 hasLiveTree = false;
                 liveTreeAliasesAll = false;
             }
-            const auto t1 = std::chrono::steady_clock::now();
-            lastTreeBuildMs = std::chrono::duration<double, std::milli>(t1 - t0).count();
             loli::LoliLogger::Instance().LogStage("ui", "adopt_tree", t0,
                 "nodes=" + std::to_string(stacktraceTree.Nodes().size()));
             stacktraceBuiltVersion = v;
@@ -1059,7 +1000,6 @@ int main(int argc, char** argv) {
 
     sf::Clock deltaClock;
     sf::Clock frameClock;
-    sf::Clock selfTestClock;
     auto lastSlowFrameLog = loli::LoliLogger::Clock::now() - std::chrono::seconds(2);
 #ifdef __APPLE__
     constexpr const char* kRunShortcut = "Cmd+R";
@@ -1080,73 +1020,6 @@ int main(int argc, char** argv) {
         // Drive the capture engine (meminfo/screenshot polling, stacktrace
         // channel pump, launch completion) once per frame.
         bridge.Tick();
-        if (selfTestCaptureClock) {
-            if (captureClockTestStage == 0 && framesRendered > 2) {
-                const auto config = bridge.GetCaptureConfig();
-                if (!bridge.StartCapture(selfTestCaptureDevice, selfTestCaptureApp,
-                                         "", config, false, true)) {
-                    LOLI_ERROR("selftest") << "GUI capture clock: start failed";
-                    selfTestExitCode = 1;
-                    window.close();
-                } else {
-                    captureClockTestStage = 1;
-                    LOLI_INFO("selftest") << "GUI capture clock: started app="
-                        << selfTestCaptureApp << " duration_s=" << selfTestCaptureSeconds;
-                }
-            } else if (captureClockTestStage == 1) {
-                if (!bridge.IsCapturing()) {
-                    LOLI_ERROR("selftest") << "GUI capture clock: capture ended early";
-                    selfTestExitCode = 1;
-                    window.close();
-                } else if (bridge.IsConnected()) {
-                    if (captureClockTestConnectedAt == loli::LoliLogger::Clock::time_point{})
-                        captureClockTestConnectedAt = loli::LoliLogger::Clock::now();
-                    const auto elapsed = loli::LoliLogger::Clock::now() -
-                                         captureClockTestConnectedAt;
-                    if (elapsed >= std::chrono::seconds(selfTestCaptureSeconds)) {
-                        bridge.StopCapture();
-                        const auto stopped = bridge.AcquireSnapshot();
-                        const std::size_t samples = stopped ?
-                            stopped->memTimeline.size() : 0;
-                        const int32_t lastMs = samples ?
-                            stopped->memTimeline.back().timeMs : -1;
-                        LOLI_INFO("selftest") << "GUI capture clock: stopped samples="
-                            << samples << " last_sample_ms=" << lastMs;
-                        if (samples < 3 || lastMs < 2000 ||
-                            lastMs > (selfTestCaptureSeconds + 3) * 1000) {
-                            LOLI_ERROR("selftest") << "GUI capture clock: invalid sample timeline";
-                            selfTestExitCode = 1;
-                        }
-                        captureClockTestStage = 2;
-                    }
-                }
-            } else if (captureClockTestStage == 2 && !bridge.IsFinalizing()) {
-                if (bridge.SaveRecord(selfTestCaptureOut)) {
-                    captureClockTestStage = 3;
-                } else {
-                    LOLI_ERROR("selftest") << "GUI capture clock: save rejected";
-                    selfTestExitCode = 1;
-                    window.close();
-                }
-            } else if (captureClockTestStage == 3 && !bridge.IsSaving()) {
-                if (!bridge.LastSaveResult()) {
-                    LOLI_ERROR("selftest") << "GUI capture clock: save failed";
-                    selfTestExitCode = 1;
-                } else {
-                    LOLI_INFO("selftest") << "GUI capture clock: saved "
-                        << selfTestCaptureOut;
-                }
-                captureClockTestStage = 4;
-                window.close();
-            }
-            if (selfTestClock.getElapsedTime().asSeconds() > 180.0f &&
-                captureClockTestStage < 4) {
-                LOLI_ERROR("selftest") << "GUI capture clock: timeout stage="
-                    << captureClockTestStage;
-                selfTestExitCode = 1;
-                window.close();
-            }
-        }
         if (bridge.SessionEpoch() != timelineSessionEpoch) {
             timelineSessionEpoch = bridge.SessionEpoch();
             timelineView = gui::TimelineView{};
@@ -1181,7 +1054,6 @@ int main(int argc, char** argv) {
                 hasRangeLiveTree = filtered.live != nullptr;
                 if (hasRangeLiveTree && !rangeLiveAliasesAll)
                     rangeLiveStacktraceTree.Adopt(std::move(*filtered.live));
-                rangeRecordCount = filtered.recordCount;
                 rangeReady = true;
                 ++rangeTreeVersion;
                 treemapState.focusedNode = -1;
@@ -1487,10 +1359,6 @@ int main(int argc, char** argv) {
         runLaunchDialog.Render();
         captureConfigDialog.Render();
 
-        // Selftest-only preview, after the dock layout and optional record
-        // have loaded. No capture or file write is performed.
-        if (selfTest && selfTestDialog == "stopped" && framesAfterLoad == 4)
-            offerSymbolizeAfterStop = true;
         if (offerSymbolizeAfterStop) {
             ImGui::OpenPopup("Capture stopped");
             offerSymbolizeAfterStop = false;
@@ -1618,12 +1486,10 @@ int main(int argc, char** argv) {
             static char ndkPath[512] = {0};
             static bool pathsLoaded = false;
             if (!pathsLoaded) {
-                const std::string sdkExample = selfTestDialog == "settings"
-                    ? "C:/Android/Sdk" : PathUtilsLite::GetSDKPath();
-                const std::string ndkExample = selfTestDialog == "settings"
-                    ? "C:/Android/Sdk/ndk/current" : PathUtilsLite::GetNDKPath();
-                std::strncpy(sdkPath, sdkExample.c_str(), sizeof(sdkPath) - 1);
-                std::strncpy(ndkPath, ndkExample.c_str(), sizeof(ndkPath) - 1);
+                const std::string sdk = PathUtilsLite::GetSDKPath();
+                const std::string ndk = PathUtilsLite::GetNDKPath();
+                std::strncpy(sdkPath, sdk.c_str(), sizeof(sdkPath) - 1);
+                std::strncpy(ndkPath, ndk.c_str(), sizeof(ndkPath) - 1);
                 sdkPath[sizeof(sdkPath) - 1] = '\0';
                 ndkPath[sizeof(ndkPath) - 1] = '\0';
                 pathsLoaded = true;
@@ -1896,125 +1762,10 @@ int main(int argc, char** argv) {
             ImGui::EndPopup();
         }
 
-        // Headless self-test bookkeeping (before display so we can capture the
-        // final frame reliably from the back buffer).
-        bool captureScreenshotNow = false;
-        if (selfTest) {
-            framesRendered++;
-            if (bridge.IsLoading())
-                loadingFrames++;
-            // Count frames rendered AFTER loading finishes, so the screenshot /
-            // summary reflects the fully-populated UI, not the loading state.
-            if (!bridge.IsLoading())
-                framesAfterLoad++;
-            if (!selfTestSavePath.empty() && !bridge.IsLoading()) {
-                if (!selfTestSaveRequested && !snapshot.records.empty()) {
-                    selfTestSaveRequested = true;
-                    if (!bridge.SaveRecord(selfTestSavePath)) {
-                        std::fprintf(stderr, "[selftest-save] FAIL: save rejected\n");
-                        selfTestExitCode = 1;
-                        selfTestRangeLeaksDone = true;
-                    }
-                } else if (selfTestSaveRequested && !bridge.IsSaving()) {
-                    if (bridge.LastSaveResult()) {
-                        std::printf("[selftest-save] PASS: %s\n",
-                                    selfTestSavePath.c_str());
-                    } else {
-                        std::fprintf(stderr, "[selftest-save] FAIL: write failed\n");
-                        selfTestExitCode = 1;
-                    }
-                    selfTestRangeLeaksDone = true;
-                }
-                if (selfTestClock.getElapsedTime().asSeconds() > 180.0f) {
-                    std::fprintf(stderr, "[selftest-save] FAIL: timeout\n");
-                    selfTestExitCode = 1;
-                    selfTestRangeLeaksDone = true;
-                }
-                std::fflush(stdout);
-                std::fflush(stderr);
-            }
-            if (selfTestRangeLeaks && !bridge.IsLoading()) {
-                if (rangeLeakTestStage == 0 && !snapshot.records.empty() &&
-                    snapshot.memTimeline.size() >= 10 &&
-                    !stacktraceTree.Nodes().empty()) {
-                    const auto& samples = snapshot.memTimeline;
-                    timelineView.selStartMs = samples[samples.size() / 10].timeMs;
-                    timelineView.selEndMs = samples[samples.size() * 9 / 10].timeMs;
-                    timelineView.hasSelection = true;
-                    rangeLeakOriginalNodes = stacktraceTree.Nodes().size();
-                    rangeLeakTestStage = 1;
-                    std::printf("[selftest-range-leaks] selecting %.1f-%.1fs\n",
-                                timelineView.selStartMs / 1000.0,
-                                timelineView.selEndMs / 1000.0);
-                } else if (rangeLeakTestStage == 1 && rangeReady) {
-                    if (rangeRecordCount == 0 || rangeStacktraceTree.Nodes().empty()) {
-                        std::fprintf(stderr, "[selftest-range-leaks] FAIL: empty range result\n");
-                        selfTestExitCode = 1;
-                        selfTestRangeLeaksDone = true;
-                    } else if (bridge.RequestPossibleLeaks(
-                                   static_cast<int32_t>(timelineView.selStartMs),
-                                   static_cast<int32_t>(timelineView.selEndMs), false)) {
-                        leakAnalysisRunning = true;
-                        rangeLeakTestStage = 2;
-                        std::printf("[selftest-range-leaks] range ready: %zu records, %zu nodes\n",
-                                    rangeRecordCount, rangeStacktraceTree.Nodes().size());
-                    } else {
-                        std::fprintf(stderr, "[selftest-range-leaks] FAIL: leak request rejected\n");
-                        selfTestExitCode = 1;
-                        selfTestRangeLeaksDone = true;
-                    }
-                } else if (rangeLeakTestStage == 2 && !leakAnalysisRunning) {
-                    if (!leakAnalysisError.empty() || !leakTree || leakTree->Nodes().empty()) {
-                        std::fprintf(stderr, "[selftest-range-leaks] FAIL: leak result empty or failed: %s\n",
-                                     leakAnalysisError.c_str());
-                        selfTestExitCode = 1;
-                        selfTestRangeLeaksDone = true;
-                    } else {
-                        std::printf("[selftest-range-leaks] leak ready: %zu nodes\n",
-                                    leakTree->Nodes().size());
-                        timelineView.hasSelection = false;
-                        rangeLeakTestStage = 3;
-                    }
-                } else if (rangeLeakTestStage == 3 && !rangeRequested &&
-                           !rangeReady && stacktraceTree.Nodes().size() ==
-                               rangeLeakOriginalNodes) {
-                    std::printf("[selftest-range-leaks] PASS: clear restored %zu nodes in %.1fs\n",
-                                rangeLeakOriginalNodes,
-                                selfTestClock.getElapsedTime().asSeconds());
-                    selfTestRangeLeaksDone = true;
-                    rangeLeakTestStage = 4;
-                }
-                if (selfTestClock.getElapsedTime().asSeconds() > 180.0f &&
-                    rangeLeakTestStage != 4) {
-                    std::fprintf(stderr, "[selftest-range-leaks] FAIL: timeout at stage %d\n",
-                                 rangeLeakTestStage);
-                    selfTestExitCode = 1;
-                    selfTestRangeLeaksDone = true;
-                }
-                std::fflush(stdout);
-                std::fflush(stderr);
-            }
-            // Exit once we've rendered enough frames past load to capture the
-            // fully-populated UI (a small count is enough for a screenshot).
-            if (!selfTestRangeLeaks && selfTestSavePath.empty() &&
-                !bridge.IsLoading() && framesAfterLoad > 40) {
-                std::printf("[selftest] frames=%d loadingFrames=%d records=%zu treeNodes=%zu treeBuildMs=%.1f worstFrameMs=%.2f\n",
-                            framesRendered, loadingFrames, snapshot.records.size(),
-                            stacktraceTree.Nodes().size(), lastTreeBuildMs, worstFrameMs);
-                std::fflush(stdout);
-                captureScreenshotNow = !screenshotPath.empty();
-            }
-        }
-
         window.clear();
         ImGui::SFML::Render(window);
         window.display();
-        if (selfTestRangeLeaksDone)
-            window.close();
-
         const double frameMs = frameClock.getElapsedTime().asSeconds() * 1000.0;
-        if (selfTest && frameMs > worstFrameMs)
-            worstFrameMs = frameMs;
         const auto frameNow = loli::LoliLogger::Clock::now();
         if (frameMs >= 100.0 && frameNow - lastSlowFrameLog >= std::chrono::seconds(1)) {
             lastSlowFrameLog = frameNow;
@@ -2024,27 +1775,6 @@ int main(int argc, char** argv) {
                 " tree_nodes=" + std::to_string(stacktraceTree.Nodes().size()));
         }
 
-        // Capture the just-presented frame from the front buffer, then exit.
-        if (captureScreenshotNow) {
-            sf::Texture tex;
-            if (tex.resize(window.getSize())) {
-                tex.update(window);
-                if (tex.copyToImage().saveToFile(screenshotPath))
-                    std::printf("[selftest] screenshot saved: %s\n", screenshotPath.c_str());
-                else
-                    std::fprintf(stderr, "[selftest] FAILED to save screenshot %s\n", screenshotPath.c_str());
-            }
-            window.close();
-        }
-        if (selfTest && !selfTestRangeLeaks && !selfTestCaptureClock &&
-            selfTestSavePath.empty() &&
-            screenshotPath.empty() &&
-            !bridge.IsLoading() && framesAfterLoad > 40)
-            window.close();
-        // A fast offscreen window can render 20,000 frames while a large
-        // record still loads. Bound the harness by elapsed time instead.
-        if (selfTest && selfTestClock.getElapsedTime().asSeconds() > 600.0f)
-            window.close();
     }
 
     if (symbolizeRunning && symbolizeProcess) {
@@ -2056,5 +1786,5 @@ int main(int argc, char** argv) {
     gui::FreeTreemapState(treemapState);
     gui::FreeTreemapState(leakTreemapState);
     ImGui::SFML::Shutdown();
-    return selfTestExitCode;
+    return 0;
 }

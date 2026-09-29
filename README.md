@@ -1,58 +1,59 @@
-# Overview
+# LoliProfiler
 
-![](https://img.shields.io/badge/license-MIT-brightgreen.svg?style=flat)
-![](https://img.shields.io/badge/support-UnrealEngine4%20%7C%20UnityEngine-brightgreen.svg?style=flat)
-![](https://img.shields.io/badge/release-1.1.1-red.svg?style=flat)
-![](https://img.shields.io/badge/android-5.0%20--%2010-blue.svg?style=flat)
-![](https://img.shields.io/badge/arch-armeabi%20%7C%20armeabi--v7a%20%7C%20arm64--v8a-blue.svg?style=flat)
+<img src="res/loli_cat_icon.png" alt="LoliProfiler cat icon" width="96">
 
-**LoliProfiler** is a **C/C++ memory profiling** tool for **Android** games and applications.
+LoliProfiler captures native allocations in Android applications and displays call stacks, a treemap, memory timeline, screenshots, and smaps data. The desktop GUI and headless capture CLI use the same Qt-free C++ core.
 
-LoliProfiler supports profiling debuggable applications out of box. And offers engine specific (UnrealEngine4/Unity) modifications to enable profiling complex or production level games. 
+![LoliProfiler showing a captured Android session with stacktrace, treemap, timeline, and screenshot](docs/images/readme-overview.png)
 
-![](res/images/macos.png)
+## Build
 
-![](res/images/treemap.gif)
+From the repository root:
 
-# Features
+```sh
+python scripts/build.py
+```
 
-* Profiler client supports Windows 10/7 and Mac OSX Mojave and newer.
-* Work with debuggable applications out of box.
-* Support attaching to running application.
-* Support multiple back-trace implementations.
-* Support profiling complex games by doing some mods with your game engine.
-* Support detecting c++ code memory leaks(Tested with Unreal Engine 4.26).
-* Support profiling release build applications on rooted devices.
-* Multiple data view modes: tree map/call tree/memory fragmentation.
-* Builtin adb console to be able to exec command.
-* **CLI mode** for automated profiling and CI/CD integration.
-* **AI** (Claude Code) based memory growth report generation.
-* **`loli` CLI** for interactive heap snapshot/diff exploration from any shell or agent.
+The interactive menu builds the GUI, CLI, Android hooks, and release zip. SDK/NDK downloads require your confirmation. See the [build guide](docs/BUILD.md) for prerequisites, non-interactive commands, and Windows/macOS/Linux details.
 
-# Documents
+The GUI's **Console** tab shows capture and load timings. GUI and CLI use the same logging API; add `--log-file profiler.log` to save timestamped diagnostics and `--log-level debug` for more detail. See the [quick start](docs/QUICK_START.md).
 
-* [Quick Start Guide](docs/QUICK_START.md) [(Chinese)](docs/QUICK_START_CN.md)
-* [CLI Mode Guide](docs/CLI_MODE.md) - Automated profiling for CI/CD
-* [`loli` Heap Explorer CLI](loli_cli/README.md) - Interactive heap snapshot exploration
-* [Working With Game Engines](docs/GAME_ENGINE.md) [(Chinese)](docs/GAME_ENGINE_CN.md)
-* [Trouble Shooting](docs/TROUBLE_SHOOTING.md)
-* [Build Project](docs/BUILD.md)
-* [How Does It Work](docs/PRINCIPLE.md) [(Chinese)](docs/PRINCIPLE_CN.md)
-* [Architecture & Developer Reference](docs/ARCH.md) - Components, data structures, threading, pitfalls
+## Documentation
 
-# Special Thanks
+- [Quick start](docs/QUICK_START.md) ([Chinese](docs/QUICK_START_CN.md))
+- [macOS build notes](docs/BUILD_MACOS.md) and [Linux build notes](docs/BUILD_LINUX.md)
+- [Capture, dump, and compare CLI](docs/CLI_MODE.md)
+- [Python agent CLI](agentcli/README.md) for indexed `.db` heap exploration
+- [Game engine integration](docs/GAME_ENGINE.md) ([Chinese](docs/GAME_ENGINE_CN.md))
+- [Troubleshooting](docs/TROUBLE_SHOOTING.md) and [architecture](docs/ARCH.md)
 
-* [QT framework](https://www.qt.io/)
-* [Perfetto](https://perfetto.dev/)
-* [LZ4](https://github.com/lz4/lz4)
-* [Chromium](https://chromium.googlesource.com/chromium/src/base/+/master/debug/stack_trace.cc)
-* [JDWP injector](https://koz.io/library-injection-for-debuggable-android-apps/)
-* [XHook](https://github.com/iqiyi/xHook)
-* [Android native memory leak solution](https://developer.aliyun.com/article/708672)
-* [YMTreeMap](https://github.com/yahoo/YMTreeMap)
-* [qconsolewidget](https://github.com/gapost/qconsolewidget)
-* Icons [smashicons](https://www.flaticon.com/authors/smashicons), [freepik](https://www.flaticon.com/authors/freepik)
+## What the tools do
 
-# License
+| Tool | Use |
+| --- | --- |
+| `LoliProfilerImGui` | Launch or attach, inspect live/saved captures, and save `.loli` files. |
+| `LoliProfilerCLI` | Capture headlessly; export `.txt` or SQLite `.db`; compare captures; symbolize offline. |
+| `agentcli` Python package | Query the SQLite call tree from scripts or agents. The `loli` command remains available. |
 
-See [LICENSE File](LICENSE).
+During capture, choose whether to keep every allocation record or retain only allocations still live at stop. In the Stacktrace panel, the **All Allocations / Persistent** selector changes the inspection view for saved records. Symbol names require a matching application library with suitable debug information.
+
+## Open-source components
+
+| Project | Role |
+| --- | --- |
+| [Dear ImGui](https://github.com/ocornut/imgui) | Dockable desktop interface. |
+| [ImGui-SFML](https://github.com/SFML/imgui-sfml) | ImGui rendering and event integration. |
+| [SFML](https://github.com/SFML/SFML) | Window, graphics, and device socket transport. |
+| [nativefiledialog-extended](https://github.com/btzy/nativefiledialog-extended) | Native file and folder dialogs. |
+| [tiny-process-library](https://github.com/eidheim/tiny-process-library) | ADB, Python, and symbol-tool subprocesses. |
+| [RapidJSON](https://github.com/Tencent/rapidjson) | Application settings. |
+| [SQLite](https://www.sqlite.org/amalgamation.html) | Indexed `.db` snapshot export and agent queries. |
+| [LZ4](https://github.com/lz4/lz4) | Compressed capture packets. |
+| [xHook](https://github.com/iqiyi/xHook) | Android native allocation hooks. |
+| [Nougat_dlfunctions](https://github.com/avs333/Nougat_dlfunctions) | Android symbol lookup helper. |
+
+The Android hook also draws on upstream stack-trace and sampling techniques documented in [Chromium](https://chromium.googlesource.com/chromium/src/base/+/master/debug/stack_trace.cc) and [Perfetto](https://perfetto.dev/). The JDWP injection approach is described in [this article](https://koz.io/library-injection-for-debuggable-android-apps/). Legacy toolbar assets credit [Smashicons](https://www.flaticon.com/authors/smashicons) and [Freepik](https://www.flaticon.com/authors/freepik).
+
+## License
+
+See [LICENSE](LICENSE) and the licenses in each vendored component.

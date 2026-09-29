@@ -110,7 +110,7 @@ def build_prompt(output_file: str,
       Phase 3:   Per-hotspot sub-agents do deep analysis, each writes result_<id>.md
       (Report assembly is done by the Python harness after the LLM exits)
 
-    The LLM accesses heap data by shelling out to `python -m loli_cli.cli ...`
+    The LLM accesses heap data by shelling out to `python -m agentcli.cli ...`
     via the Bash tool. Each invocation is stateless — the file path is passed
     as the first positional argument every time.
 
@@ -241,37 +241,37 @@ The data file is:
 
 Available subcommands (the only three you need):
 
-  python -m loli_cli.cli summary <FILE>
+  python -m agentcli.cli summary <FILE>
       Header stats + tree metadata + top 5 roots. Run this once at the start
       to get total size, total allocations, and root count.
 
-  python -m loli_cli.cli children <FILE> <NODE_ID>
+  python -m agentcli.cli children <FILE> <NODE_ID>
       Direct children of a node, sorted by size descending. Each line:
           [<child_node_id>] <size>, count=<N> | <function_name>
       This is your primary tool for descending the call tree.
 
-  python -m loli_cli.cli call-path <FILE> <NODE_ID>
+  python -m agentcli.cli call-path <FILE> <NODE_ID>
       Trace the full call path from root down to <NODE_ID>. Use this once
       per hotspot to capture the complete calling context.
 
 Usage examples (run via Bash):
-    python -m loli_cli.cli summary "{abs_data_file}"
-    python -m loli_cli.cli children "{abs_data_file}" 12345
-    python -m loli_cli.cli call-path "{abs_data_file}" 12345
+    python -m agentcli.cli summary "{abs_data_file}"
+    python -m agentcli.cli children "{abs_data_file}" 12345
+    python -m agentcli.cli call-path "{abs_data_file}" 12345
 
 NOTE: the very first call against a `.loli` file may take 10-30s while it
 auto-converts to `.txt` (cached on disk for subsequent calls). All later
 calls are fast.
 """
     # Pre-baked tool-call snippets used inside the walker / phase-3 briefs.
-    walker_summary_step = f'python -m loli_cli.cli summary "{abs_data_file}"     (via Bash)'
-    walker_get_children_call = f'python -m loli_cli.cli children "{abs_data_file}" <node_id>'
+    walker_summary_step = f'python -m agentcli.cli summary "{abs_data_file}"     (via Bash)'
+    walker_get_children_call = f'python -m agentcli.cli children "{abs_data_file}" <node_id>'
     phase3_call_path_step = (
-        f'Run via Bash:\n       python -m loli_cli.cli call-path '
+        f'Run via Bash:\n       python -m agentcli.cli call-path '
         f'"{abs_data_file}" [node_id]'
     )
     phase3_children_step = (
-        f'Run via Bash:\n       python -m loli_cli.cli children '
+        f'Run via Bash:\n       python -m agentcli.cli children '
         f'"{abs_data_file}" [node_id]\n'
         f'    to see the COMPOSITION — what specifically accounts for the [X.X] MB?\n'
         f'    If any child is >= 30% of the hotspot size, run children on that child too\n'
@@ -838,7 +838,7 @@ def run_analysis(data_file: str,
     """Run an LLM CLI to analyze heap data.
 
     The LLM does Phase 1+2 (walk) and Phase 3 (deep analysis), driving the
-    `loli` CLI through the Bash tool (`python -m loli_cli.cli ...`) for all
+    `loli` CLI through the Bash tool (`python -m agentcli.cli ...`) for all
     heap-data queries. The Python harness then assembles the per-hotspot
     result files into the final report.
     """
@@ -859,9 +859,9 @@ def run_analysis(data_file: str,
     os.makedirs(worklog_dir, exist_ok=True)
     print(f"Worklog dir: {worklog_dir}")
 
-    # The directory containing this script — parent of the loli_cli/ package.
+    # The directory containing this script — parent of the agentcli/ package.
     # We add it to PYTHONPATH for the LLM subprocess so child Bash invocations
-    # of `python -m loli_cli.cli ...` resolve regardless of cwd.
+    # of `python -m agentcli.cli ...` resolve regardless of cwd.
     repo_root = os.path.dirname(os.path.abspath(__file__))
 
     prompt = build_prompt(abs_output, base_repo, target_repo, min_size_mb,
@@ -893,8 +893,8 @@ def run_analysis(data_file: str,
         if model:
             cmd_args.extend(['--model', model])
 
-        # Inject PYTHONPATH so child `python -m loli_cli.cli ...` calls
-        # can find the loli_cli package no matter what cwd the LLM ran
+        # Inject PYTHONPATH so child `python -m agentcli.cli ...` calls
+        # can find the agentcli package no matter what cwd the LLM ran
         # under. Inherit the rest of the environment.
         child_env = os.environ.copy()
         existing_pp = child_env.get("PYTHONPATH", "")

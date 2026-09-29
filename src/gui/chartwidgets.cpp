@@ -30,6 +30,12 @@ std::string FormatBytes(uint64_t bytes) {
     return buf;
 }
 
+// /proc/<pid>/smaps reports these fields in kB, including the values stored
+// in .loli. Convert only at display time so the file format stays unchanged.
+std::string FormatSmapsKB(uint64_t kilobytes) {
+    return FormatBytes(kilobytes * 1024ull);
+}
+
 // ---------------------------------------------------------------------------
 // Timeline chart
 // ---------------------------------------------------------------------------
@@ -49,6 +55,19 @@ constexpr TimelineSeries kTimelineSeries[] = {
     {"Unknown",     IM_COL32(150, 150, 150, 255), &MemInfoSample::unknown},
 };
 constexpr int kTimelineSeriesCount = IM_ARRAYSIZE(kTimelineSeries);
+
+// Timeline meminfo values are MB (dumpsys reports KB; the parser divides by
+// 1024 — Qt parity, and the .loli format stores these MB values verbatim).
+// The axis therefore labels plain MB numbers, NOT FormatBytes (which would
+// read the MB figure as bytes and show e.g. "1.1 KB" for a 1.1 GB process).
+std::string FormatMB(double mb) {
+    char buf[64];
+    if (mb < 10.0)
+        std::snprintf(buf, sizeof(buf), "%.1f MB", mb);
+    else
+        std::snprintf(buf, sizeof(buf), "%.0f MB", mb);
+    return buf;
+}
 
 double SampleValue(const MemInfoSample& s, int seriesIdx) {
     return static_cast<double>(s.*kTimelineSeries[seriesIdx].member);
@@ -123,7 +142,7 @@ void DrawSmapsStackedBar(const std::vector<SMapsSectionSnapshot>& sections) {
                                        ImVec2(std::min(x + w, bbMax.x), bbMax.y))) {
             const char* name = entries[i].section ? entries[i].section->name.c_str() : "Other";
             ImGui::SetTooltip("%s\nPSS: %s (%.1f%%)", name,
-                              FormatBytes(entries[i].pss).c_str(), frac * 100.0f);
+                               FormatSmapsKB(entries[i].pss).c_str(), frac * 100.0f);
         }
         x += w;
     }
@@ -135,7 +154,8 @@ void DrawSmapsStackedBar(const std::vector<SMapsSectionSnapshot>& sections) {
 // Timeline chart
 // ---------------------------------------------------------------------------
 
-void DrawMemoryTimelineChart(const GuiSnapshot& snapshot, TimelineView& view) {
+void DrawMemoryTimelineChart(const GuiSnapshot& snapshot, TimelineView& view,
+                             int* hoverScreenshotIdx) {
     if (snapshot.memTimeline.empty()) {
         ImGui::TextUnformatted("No memory timeline data.");
         return;
@@ -184,12 +204,10 @@ void DrawMemoryTimelineChart(const GuiSnapshot& snapshot, TimelineView& view) {
     {
         const double mstep = NiceStep(maxVal / 4.0);
         for (double v = mstep; v <= maxVal; v += mstep) {
-            std::snprintf(measureBuf, sizeof(measureBuf), "%s",
-                          FormatBytes(static_cast<uint64_t>(v)).c_str());
+            std::snprintf(measureBuf, sizeof(measureBuf), "%s", FormatMB(v).c_str());
             labelW = std::max(labelW, ImGui::CalcTextSize(measureBuf).x);
         }
-        std::snprintf(measureBuf, sizeof(measureBuf), "%s",
-                      FormatBytes(static_cast<uint64_t>(maxVal)).c_str());
+        std::snprintf(measureBuf, sizeof(measureBuf), "%s", FormatMB(maxVal).c_str());
         labelW = std::max(labelW, ImGui::CalcTextSize(measureBuf).x);
         labelW += 7.0f;  // 6px gap to plot edge + 1px safety
     }
@@ -246,11 +264,11 @@ void DrawMemoryTimelineChart(const GuiSnapshot& snapshot, TimelineView& view) {
         for (double v = step; v <= maxVal; v += step) {
             const float y = valueToY(v);
             dl->AddLine(ImVec2(plotMin.x, y), ImVec2(plotMax.x, y), gridCol);
-            std::snprintf(buf, sizeof(buf), "%s", FormatBytes(static_cast<uint64_t>(v)).c_str());
+            std::snprintf(buf, sizeof(buf), "%s", FormatMB(v).c_str());
             const float tw = ImGui::CalcTextSize(buf).x;
             dl->AddText(ImVec2(plotMin.x - 6.0f - tw, y - 6.0f), IM_COL32(200, 200, 200, 255), buf);
         }
-        std::snprintf(buf, sizeof(buf), "%s", FormatBytes(static_cast<uint64_t>(maxVal)).c_str());
+        std::snprintf(buf, sizeof(buf), "%s", FormatMB(maxVal).c_str());
         const float tw = ImGui::CalcTextSize(buf).x;
         dl->AddText(ImVec2(plotMin.x - 6.0f - tw, plotMin.y), IM_COL32(200, 200, 200, 255), buf);
     }
@@ -304,7 +322,10 @@ void DrawMemoryTimelineChart(const GuiSnapshot& snapshot, TimelineView& view) {
         }
     }
 
-    // Hover: nearest sample tooltip.
+    // Hover: nearest sample tooltip + screenshot scrub. When the user hovers
+    // the plot, surface the index of the screenshot nearest the hovered time
+    // so the Screenshot panel can follow the cursor (Qt OnTimeSelectionChange
+    // parity).
     if (hovered) {
         const ImVec2 mouse = ImGui::GetIO().MousePos;
         const double tAt = vmin + static_cast<double>(mouse.x - plotMin.x) / plotW * vspan;
@@ -320,12 +341,25 @@ void DrawMemoryTimelineChart(const GuiSnapshot& snapshot, TimelineView& view) {
         const float cx = timeToX(samples[best].timeMs);
         dl->AddLine(ImVec2(cx, plotMin.y), ImVec2(cx, plotMax.y), IM_COL32(255, 255, 255, 90));
 
+        if (hoverScreenshotIdx && !snapshot.screenshots.empty()) {
+            int shotBest = 0;
+            double shotDist = 1e30;
+            for (size_t i = 0; i < snapshot.screenshots.size(); ++i) {
+                const double d = std::fabs(static_cast<double>(snapshot.screenshots[i].timeMs) - tAt);
+                if (d < shotDist) {
+                    shotDist = d;
+                    shotBest = static_cast<int>(i);
+                }
+            }
+            *hoverScreenshotIdx = shotBest;
+        }
+
         ImGui::BeginTooltip();
         ImGui::Text("Time: %.2fs", samples[best].timeMs / 1000.0);
         for (int k = 0; k < kTimelineSeriesCount; ++k) {
             ImGui::TextColored(ImColor(kTimelineSeries[k].color), "%s:", kTimelineSeries[k].name);
             ImGui::SameLine();
-            ImGui::Text("%s", FormatBytes(samples[best].*kTimelineSeries[k].member).c_str());
+            ImGui::Text("%s", FormatMB(samples[best].*kTimelineSeries[k].member).c_str());
         }
         ImGui::EndTooltip();
     }
@@ -333,11 +367,14 @@ void DrawMemoryTimelineChart(const GuiSnapshot& snapshot, TimelineView& view) {
     // Rubber-band drag overlay (drawn last so it sits above everything).
     if (view.dragStartX >= 0.0f) {
         const ImVec2 mouse = ImGui::GetIO().MousePos;
-        dl->AddRectFilled(ImVec2(view.dragStartX, plotMin.y), ImVec2(mouse.x, plotMax.y),
+        const float x0 = std::clamp(view.dragStartX, plotMin.x, plotMax.x);
+        const float x1 = std::clamp(mouse.x, plotMin.x, plotMax.x);
+        dl->AddRectFilled(ImVec2(std::min(x0, x1), plotMin.y),
+                          ImVec2(std::max(x0, x1), plotMax.y),
                           IM_COL32(100, 160, 255, 50));
-        dl->AddLine(ImVec2(view.dragStartX, plotMin.y), ImVec2(view.dragStartX, plotMax.y),
+        dl->AddLine(ImVec2(x0, plotMin.y), ImVec2(x0, plotMax.y),
                     IM_COL32(100, 160, 255, 180), 1.5f);
-        dl->AddLine(ImVec2(mouse.x, plotMin.y), ImVec2(mouse.x, plotMax.y),
+        dl->AddLine(ImVec2(x1, plotMin.y), ImVec2(x1, plotMax.y),
                     IM_COL32(100, 160, 255, 180), 1.5f);
     }
 
@@ -356,21 +393,22 @@ void DrawMemoryTimelineChart(const GuiSnapshot& snapshot, TimelineView& view) {
     }
 
     // Rubber-band: left-drag selects a [from,to] time range.
-    if (hovered) {
-        if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
-            view.dragStartX = ImGui::GetIO().MousePos.x;
-        }
-        if (ImGui::IsMouseReleased(ImGuiMouseButton_Left) && view.dragStartX >= 0.0f) {
+    if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
+        ImGui::GetIO().MousePos.x >= plotMin.x &&
+        ImGui::GetIO().MousePos.x <= plotMax.x) {
+        view.dragStartX = ImGui::GetIO().MousePos.x;
+    }
+    if (view.dragStartX >= 0.0f && ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
             const ImVec2 mouse = ImGui::GetIO().MousePos;
-            const float dragMinX = std::min(view.dragStartX, mouse.x);
-            const float dragMaxX = std::max(view.dragStartX, mouse.x);
+            const float endX = std::clamp(mouse.x, plotMin.x, plotMax.x);
+            const float dragMinX = std::min(view.dragStartX, endX);
+            const float dragMaxX = std::max(view.dragStartX, endX);
             if (dragMaxX - dragMinX > 4.0f) {
                 view.selStartMs = vmin + static_cast<double>(dragMinX - plotMin.x) / plotW * vspan;
                 view.selEndMs = vmin + static_cast<double>(dragMaxX - plotMin.x) / plotW * vspan;
                 view.hasSelection = true;
             }
             view.dragStartX = -1.0f;
-        }
     }
 
     // Zoom: mouse wheel around cursor.
@@ -452,39 +490,51 @@ void DrawSmapsPanel(const GuiSnapshot& snapshot) {
     ImGui::TableSetupColumn("PrivateDirty");
     ImGui::TableHeadersRow();
 
-    // Build a sorted view of row indices according to the active sort specs.
+    // Sorted row order, cached across frames: re-sorted only when the user
+    // changes the sort (SpecsDirty) or the row count changes. Rebuilding an
+    // identity order each frame would silently revert the user's sort.
+    static std::vector<int> s_order;
+    static ImGuiTableSortSpecs s_lastSpecs = {};
     const int count = static_cast<int>(snapshot.smaps.size());
-    std::vector<int> order(count);
-    for (int i = 0; i < count; ++i)
-        order[i] = i;
+    const auto& rows = snapshot.smaps;
 
+    bool needSort = static_cast<int>(s_order.size()) != count;
     if (ImGuiTableSortSpecs* specs = ImGui::TableGetSortSpecs()) {
         if (specs->SpecsDirty) {
-            auto getCol = [](const SMapsSectionSnapshot& s, int col) -> uint64_t {
-                switch (col) {
-                    case 1:  return s.virtualSize;
-                    case 2:  return s.rss;
-                    case 3:  return s.pss;
-                    case 4:  return s.sharedClean;
-                    case 5:  return s.sharedDirty;
-                    case 6:  return s.privateClean;
-                    case 7:  return s.privateDirty;
-                    default: return 0;
-                }
-            };
-            const ImGuiTableColumnSortSpecs* spec = &specs->Specs[0];
-            std::stable_sort(order.begin(), order.end(),
+            needSort = true;
+            specs->SpecsDirty = false;
+            s_lastSpecs = *specs;
+        }
+    }
+    if (needSort) {
+        s_order.resize(count);
+        for (int i = 0; i < count; ++i)
+            s_order[i] = i;
+        auto getCol = [](const SMapsSectionSnapshot& s, int col) -> uint64_t {
+            switch (col) {
+                case 1:  return s.virtualSize;
+                case 2:  return s.rss;
+                case 3:  return s.pss;
+                case 4:  return s.sharedClean;
+                case 5:  return s.sharedDirty;
+                case 6:  return s.privateClean;
+                case 7:  return s.privateDirty;
+                default: return 0;
+            }
+        };
+        if (s_lastSpecs.SpecsCount > 0) {
+            const ImGuiTableColumnSortSpecs spec = s_lastSpecs.Specs[0];
+            std::stable_sort(s_order.begin(), s_order.end(),
                              [&](int a, int b) {
-                                 const auto& sa = snapshot.smaps[a];
-                                 const auto& sb = snapshot.smaps[b];
+                                 const auto& sa = rows[a];
+                                 const auto& sb = rows[b];
                                  bool less;
-                                 if (spec->ColumnIndex == 0)
+                                 if (spec.ColumnIndex == 0)
                                      less = sa.name < sb.name;
                                  else
-                                     less = getCol(sa, spec->ColumnIndex) < getCol(sb, spec->ColumnIndex);
-                                 return spec->SortDirection == ImGuiSortDirection_Ascending ? less : !less;
+                                     less = getCol(sa, spec.ColumnIndex) < getCol(sb, spec.ColumnIndex);
+                                 return spec.SortDirection == ImGuiSortDirection_Ascending ? less : !less;
                              });
-            specs->SpecsDirty = false;
         }
     }
 
@@ -492,24 +542,24 @@ void DrawSmapsPanel(const GuiSnapshot& snapshot) {
     clipper.Begin(count);
     while (clipper.Step()) {
         for (int r = clipper.DisplayStart; r < clipper.DisplayEnd; ++r) {
-            const SMapsSectionSnapshot& s = snapshot.smaps[order[r]];
+            const SMapsSectionSnapshot& s = rows[s_order[r]];
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             ImGui::TextUnformatted(s.name.c_str());
             ImGui::TableNextColumn();
-            ImGui::Text("%s", FormatBytes(s.virtualSize).c_str());
+            ImGui::Text("%s", FormatSmapsKB(s.virtualSize).c_str());
             ImGui::TableNextColumn();
-            ImGui::Text("%s", FormatBytes(s.rss).c_str());
+            ImGui::Text("%s", FormatSmapsKB(s.rss).c_str());
             ImGui::TableNextColumn();
-            ImGui::Text("%s", FormatBytes(s.pss).c_str());
+            ImGui::Text("%s", FormatSmapsKB(s.pss).c_str());
             ImGui::TableNextColumn();
-            ImGui::Text("%s", FormatBytes(s.sharedClean).c_str());
+            ImGui::Text("%s", FormatSmapsKB(s.sharedClean).c_str());
             ImGui::TableNextColumn();
-            ImGui::Text("%s", FormatBytes(s.sharedDirty).c_str());
+            ImGui::Text("%s", FormatSmapsKB(s.sharedDirty).c_str());
             ImGui::TableNextColumn();
-            ImGui::Text("%s", FormatBytes(s.privateClean).c_str());
+            ImGui::Text("%s", FormatSmapsKB(s.privateClean).c_str());
             ImGui::TableNextColumn();
-            ImGui::Text("%s", FormatBytes(s.privateDirty).c_str());
+            ImGui::Text("%s", FormatSmapsKB(s.privateDirty).c_str());
         }
     }
     ImGui::EndTable();

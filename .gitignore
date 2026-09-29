@@ -47,6 +47,10 @@ CMakeFiles/
 .DS_Store
 CMakeCache.txt
 .cache/
+*.egg-info/
+__pycache__/
+*.pyc
 
 dist/
 /.claude
+/imgui.ini

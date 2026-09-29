@@ -10,12 +10,10 @@
 
 #include "guisnapshot.h"
 
-class QString;
-class QStringList;
-
 namespace gui {
 
 class GuiDataBridge;
+class CaptureConfigDialog;
 struct DeviceInfoLite;  // defined in guidatabridge.h (Qt-side)
 
 class RunLaunchDialog {
@@ -30,6 +28,10 @@ public:
 
     bool IsOpen() const { return open_; }
 
+    // The capture-config editor lives in a separate dialog; main() owns it and
+    // hands it over so Run/Launch can open it on demand.
+    void SetConfigDialog(CaptureConfigDialog* dlg) { configDialog_ = dlg; }
+
 private:
     void RefreshDevices();
     void RefreshApps();
@@ -37,8 +39,14 @@ private:
 
 private:
     GuiDataBridge* bridge_ = nullptr;
+    CaptureConfigDialog* configDialog_ = nullptr;
     bool shouldOpen_ = false;
     bool open_ = false;
+    bool returnFromConfiguration_ = false;
+    bool preflightErrorOpen_ = false;
+    std::string preflightError_;
+    bool attachToRunningApp_ = false;
+    bool retainAllRecords_ = false;
 
     // device selection
     struct DeviceItem { std::string serial, model, device, state; };
@@ -52,13 +60,9 @@ private:
     char appManual_[256] = {0};
     char subProcess_[256] = {0};
 
-    // capture config
+    // capture config (read-only summary here; edited in CaptureConfigDialog)
     CaptureConfigSnapshot config_;
     bool configLoaded_ = false;
-    char whiteEntry_[512] = {0};
-    char blackEntry_[512] = {0};
-
-    static constexpr int kDefaultThreshold = 128;
 };
 
 } // namespace gui

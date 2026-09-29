@@ -1,4 +1,5 @@
 #include "stacktracetree.h"
+#include "lolilogger.h"
 
 #include <algorithm>
 #include <cctype>
@@ -38,6 +39,24 @@ void StacktraceTree::BuildFromRecords(
     const std::vector<std::vector<RawFrameIdx>>& recordFrames,
     const std::vector<std::string>& funcNames,
     const std::vector<std::string>& libNames) {
+    BuildFromRecordsInternal(recordSizes, recordFrames, funcNames, libNames, nullptr);
+}
+
+void StacktraceTree::BuildLeakDiffFromRecords(
+    const std::vector<uint32_t>& recordSizes,
+    const std::vector<std::vector<RawFrameIdx>>& recordFrames,
+    const std::vector<std::string>& funcNames,
+    const std::vector<std::string>& libNames,
+    const std::vector<uint8_t>& baseline) {
+    BuildFromRecordsInternal(recordSizes, recordFrames, funcNames, libNames, &baseline);
+}
+
+void StacktraceTree::BuildFromRecordsInternal(
+    const std::vector<uint32_t>& recordSizes,
+    const std::vector<std::vector<RawFrameIdx>>& recordFrames,
+    const std::vector<std::string>& funcNames,
+    const std::vector<std::string>& libNames,
+    const std::vector<uint8_t>* baseline) {
 
     nodes_.clear();
     roots_.clear();
@@ -68,6 +87,8 @@ void StacktraceTree::BuildFromRecords(
     // key = (parent+1) << 32 | funcPoolIndex   (parent -1 -> 0)
     std::unordered_map<uint64_t, int32_t, PairHash> nodeMap;
     nodeMap.reserve(recordCount / 2 + 16);
+    std::vector<uint64_t> baselineSizes;
+    std::vector<uint32_t> baselineCounts;
 
     for (size_t i = 0; i < recordCount; i++) {
         const auto& frames = recordFrames[i];
@@ -93,6 +114,10 @@ void StacktraceTree::BuildFromRecords(
                 node.parent   = parent;
                 node.id       = nextId_++;
                 nodes_.push_back(node);
+                if (baseline) {
+                    baselineSizes.push_back(0);
+                    baselineCounts.push_back(0);
+                }
                 nodeMap.emplace(key, nodeIndex);
                 if (parent >= 0)
                     nodes_[parent].children.push_back(nodeIndex);
@@ -109,12 +134,63 @@ void StacktraceTree::BuildFromRecords(
         while (walk >= 0) {
             nodes_[walk].totalSize += size;
             nodes_[walk].allocCount += 1;
+            if (baseline && i < baseline->size() && (*baseline)[i]) {
+                baselineSizes[walk] += size;
+                baselineCounts[walk] += 1;
+            }
             walk = nodes_[walk].parent;
         }
     }
-    std::fprintf(stderr, "[tree-dbg] afterLoop nodes=%zu roots=%zu pool=%zu recordCount=%zu\n",
-                 nodes_.size(), roots_.size(), pool_.size(), recordCount);
-    std::fflush(stderr);
+    if (baseline) {
+        // Old Qt behavior: only leaves which existed at the first mark can
+        // count as leak candidates. A callstack introduced later is omitted.
+        for (size_t i = 0; i < nodes_.size(); ++i) {
+            Node& n = nodes_[i];
+            if (!n.children.empty() || baselineCounts[i] == 0 ||
+                n.totalSize < baselineSizes[i] ||
+                n.totalSize - baselineSizes[i] < 1024 ||
+                n.allocCount <= baselineCounts[i]) {
+                n.totalSize = 0;
+                n.allocCount = 0;
+            } else {
+                n.totalSize -= baselineSizes[i];
+                n.allocCount -= baselineCounts[i];
+            }
+        }
+        // Node indices are created parent-first, so reverse traversal sums
+        // surviving leaf deltas into their parents.
+        for (size_t i = nodes_.size(); i-- > 0;) {
+            const int32_t p = nodes_[i].parent;
+            if (p >= 0) {
+                nodes_[p].totalSize += nodes_[i].totalSize;
+                nodes_[p].allocCount += nodes_[i].allocCount;
+            }
+        }
+        // Keep only reachable positive nodes so search and treemap both see
+        // the same candidates as the Qt result tree.
+        std::vector<int32_t> remap(nodes_.size(), -1);
+        std::vector<Node> kept;
+        kept.reserve(nodes_.size());
+        for (size_t i = 0; i < nodes_.size(); ++i) {
+            if (nodes_[i].allocCount == 0) continue;
+            remap[i] = static_cast<int32_t>(kept.size());
+            kept.push_back(std::move(nodes_[i]));
+        }
+        for (Node& n : kept) {
+            n.parent = n.parent >= 0 ? remap[n.parent] : -1;
+            n.children.erase(std::remove_if(n.children.begin(), n.children.end(),
+                [&](int32_t child) { return remap[child] < 0; }), n.children.end());
+            for (int32_t& child : n.children) child = remap[child];
+        }
+        roots_.erase(std::remove_if(roots_.begin(), roots_.end(),
+            [&](int32_t root) { return remap[root] < 0; }), roots_.end());
+        for (int32_t& root : roots_) root = remap[root];
+        nodes_ = std::move(kept);
+    }
+    LOLI_DEBUG("tree") << "after merge nodes=" << nodes_.size()
+                       << " roots=" << roots_.size()
+                       << " pool=" << pool_.size()
+                       << " records=" << recordCount;
 
     for (auto& node : nodes_) {
         std::sort(node.children.begin(), node.children.end(),
@@ -152,6 +228,22 @@ void StacktraceTree::ExpandAll() {
 
 void StacktraceTree::CollapseAll() {
     expandedIds_.clear();
+    RebuildVisible();
+}
+
+void StacktraceTree::ExpandAtLeast(uint64_t bytes) {
+    expandedIds_.clear();
+    for (const auto& n : nodes_)
+        if (!n.children.empty() && n.totalSize >= bytes)
+            expandedIds_.insert(n.id);
+    RebuildVisible();
+}
+
+void StacktraceTree::RevealNode(int32_t nodeIndex) {
+    if (nodeIndex < 0 || nodeIndex >= static_cast<int32_t>(nodes_.size()))
+        return;
+    for (int32_t p = nodes_[nodeIndex].parent; p >= 0; p = nodes_[p].parent)
+        expandedIds_.insert(nodes_[p].id);
     RebuildVisible();
 }
 

@@ -71,11 +71,23 @@ public:
         const std::vector<std::string>& funcNames,
         const std::vector<std::string>& libNames);
 
+    // Qt's "Possible Memory Leaks": compare cumulative allocations at two
+    // timeline marks. baseline[i] is true when record i is at/before the first
+    // mark; all records supplied are at/before the second mark.
+    void BuildLeakDiffFromRecords(
+        const std::vector<uint32_t>& recordSizes,
+        const std::vector<std::vector<RawFrameIdx>>& recordFrames,
+        const std::vector<std::string>& funcNames,
+        const std::vector<std::string>& libNames,
+        const std::vector<uint8_t>& baseline);
+
     void Clear();
 
     void SetExpanded(int32_t nodeIndex, bool expanded);
     void ExpandAll();
+    void ExpandAtLeast(uint64_t bytes);
     void CollapseAll();
+    void RevealNode(int32_t nodeIndex);
 
     void SetFilter(const std::string& text);
     const std::string& Filter() const { return filter_; }
@@ -99,6 +111,12 @@ public:
     }
 
 private:
+    void BuildFromRecordsInternal(
+        const std::vector<uint32_t>& recordSizes,
+        const std::vector<std::vector<RawFrameIdx>>& recordFrames,
+        const std::vector<std::string>& funcNames,
+        const std::vector<std::string>& libNames,
+        const std::vector<uint8_t>* baseline);
     void RebuildVisible();
     void AppendVisible(int32_t nodeIndex, int32_t depth);
     bool MatchesFilterRecursive(int32_t nodeIndex) const;

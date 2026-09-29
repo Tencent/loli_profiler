@@ -19,7 +19,7 @@ The legacy Qt Widgets/Charts GUI target and its files (`mainwindow`, `.ui` files
 - **THEN** there is no Qt-Widgets GUI target and no Qt dependency in any build target
 
 ### Requirement: Build/docs without Qt
-Build scripts (`build.bat`, `build.sh`, `build_linux_with_docker.sh`, `Dockerfile`) and docs SHALL NOT require `QT5Path` or any Qt installation.
+The Python build driver (`scripts/build.py`), Dockerfile, and current docs SHALL NOT require `QT5Path` or any Qt installation.
 
 #### Scenario: Build on a machine without Qt
 - **WHEN** the project is built per the documented steps on a machine with no Qt installed

@@ -91,6 +91,15 @@ Records use `QUuid` only as a map key for callstack association. Replace with a 
 ### D9: Remove the legacy Qt GUI target
 Delete `src/mainwindow.*`, all `.ui`, `qdarkstyle/`, `thirdparty/qconsolewidget-master/`, the Qt-model classes after the CLI is ported. `LoliProfilerImGui` becomes the GUI.
 
+### D12: Capture orchestration lives in the Qt-free core; GUI and headless CLI are equal API consumers
+The capture/launch logic (adb orchestration, StartApp sequence, stacktrace channel, meminfo/screenshot polling, record saving) SHALL be implemented ONCE in LoliCore as plain C++ APIs with no UI coupling. Two consumers call those APIs directly:
+- `LoliProfilerImGui` (the GUI) — calls the capture APIs directly; it is a viewer + control surface, not an owner of capture logic.
+- `LoliProfilerCLI` (the headless exe) — has the SAME capture/launch capability as the GUI by calling the same LoliCore APIs.
+
+The existing `agentcli/` Python package is analysis-only (reads .loli, builds trees/reports); it is NOT the headless capture tool and is out of scope for this change. Do not add Python orchestration, pybind bindings, or IPC layers — a clean LoliCore split makes the headless "cli" a thin main() over the same APIs the GUI uses.
+
+*Alternative considered:* Python orchestration driving LoliCore via pybind11 (py does adb glue, cpp does hot paths) — rejected: adds a packaging/version-matrix surface, and the C++ ProcessRunner/DeviceChannel work (D2/D3) already covers the glue with equal ergonomics for this codebase.
+
 ## Risks / Trade-offs
 
 - [`.loli` byte-compat: subtle QString/QHash/QUuid encoding differences break loading old captures] → Mitigation: byte-level diff harness against the two known sample files; unit tests per field type; read Qt 5.15 QDataStream source to confirm encodings before writing the serializer.

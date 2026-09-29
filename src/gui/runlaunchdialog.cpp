@@ -2,86 +2,21 @@
 
 #include "imgui.h"
 #include "guidatabridge.h"
+#include "captureconfigdialog.h"
 
-#include <QString>
-#include <QStringList>
+#include <algorithm>
 #include <cstring>
 
 namespace gui {
 
-namespace {
-
-// Combo helper for a fixed set of string options; returns true if changed.
-bool ComboFromOptions(const char* label, std::string& current,
-                      std::initializer_list<const char*> options) {
-    bool changed = false;
-    if (ImGui::BeginCombo(label, current.c_str())) {
-        for (const char* opt : options) {
-            const bool selected = (current == opt);
-            if (ImGui::Selectable(opt, selected)) {
-                current = opt;
-                changed = true;
-            }
-            if (selected)
-                ImGui::SetItemDefaultFocus();
-        }
-        ImGui::EndCombo();
-    }
-    return changed;
-}
-
-// Editable list group: scrolling child of current entries, input + Add button
-// to append, small "x" button per row to remove. Edits `items` in place.
-// `entry` is the caller-owned input buffer (must be separate per list).
-void EditStringList(const char* id, std::vector<std::string>& items,
-                    char* entry, int entrySize, float listHeight,
-                    const char* addHint) {
-    ImGui::PushID(id);
-
-    if (ImGui::BeginChild("##entries", ImVec2(0, listHeight), ImGuiChildFlags_Borders)) {
-        if (items.empty()) {
-            ImGui::TextDisabled("(empty)");
-        } else {
-            for (int i = 0; i < (int)items.size(); i++) {
-                ImGui::PushID(i);
-                ImGui::Bullet();
-                ImGui::SameLine();
-                ImGui::TextUnformatted(items[i].c_str());
-                ImGui::SameLine(ImGui::GetContentRegionAvail().x - 4.0f);
-                if (ImGui::SmallButton("x")) {
-                    items.erase(items.begin() + i);
-                    ImGui::PopID();
-                    break;
-                }
-                ImGui::PopID();
-            }
-        }
-    }
-    ImGui::EndChild();
-
-    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 60.0f);
-    const bool enterPressed =
-        ImGui::InputTextWithHint("##newentry", addHint, entry, entrySize,
-                                 ImGuiInputTextFlags_EnterReturnsTrue);
-    ImGui::SameLine();
-    const bool addClicked = ImGui::Button("Add", ImVec2(52.0f, 0.0f));
-    if ((enterPressed || addClicked) && entry[0] != '\0') {
-        items.emplace_back(entry);
-        entry[0] = '\0';
-        ImGui::SetKeyboardFocusHere(-1); // keep focus on the input
-    }
-
-    ImGui::PopID();
-}
-
-} // namespace
-
 void RunLaunchDialog::Open(GuiDataBridge* bridge) {
     bridge_ = bridge;
-    shouldOpen_ = true;
+    returnFromConfiguration_ = false;
     if (!configLoaded_)
         LoadConfigFromBridge();
     RefreshDevices();
+    shouldOpen_ = preflightError_.empty();
+    preflightErrorOpen_ = !preflightError_.empty();
 }
 
 void RunLaunchDialog::LoadConfigFromBridge() {
@@ -96,14 +31,14 @@ void RunLaunchDialog::RefreshDevices() {
     selectedDevice_ = -1;
     if (!bridge_)
         return;
-    const auto devs = bridge_->EnumerateDevices();
+    const auto devs = bridge_->EnumerateDevices(&preflightError_);
     int firstOnline = -1;
     for (const auto& d : devs) {
         DeviceItem item;
-        item.serial = d.serial.toStdString();
-        item.model  = d.model.toStdString();
-        item.device = d.device.toStdString();
-        item.state  = d.state.toStdString();
+        item.serial = d.serial;
+        item.model  = d.model;
+        item.device = d.device;
+        item.state  = d.state;
         if (item.state == "device" && firstOnline < 0)
             firstOnline = static_cast<int>(devices_.size());
         devices_.push_back(std::move(item));
@@ -115,21 +50,49 @@ void RunLaunchDialog::RefreshDevices() {
         selectedDevice_ = firstOnline;
     apps_.clear();
     appsForDevice_.clear();
+    if (preflightError_.empty() && firstOnline < 0)
+        preflightError_ = "No online Android device was found. Connect or authorize a device, then retry.";
 }
 
 void RunLaunchDialog::RefreshApps() {
     apps_.clear();
     if (!bridge_ || selectedDevice_ < 0)
         return;
-    const QString serial = QString::fromStdString(devices_[selectedDevice_].serial);
-    const QStringList list = bridge_->ListInstalledApps(serial);
+    const std::string serial = devices_[selectedDevice_].serial;
+    const std::vector<std::string> list = bridge_->ListInstalledApps(serial);
     apps_.reserve(list.size());
     for (const auto& a : list)
-        apps_.push_back(a.toStdString());
+        apps_.push_back(a);
     appsForDevice_ = devices_[selectedDevice_].serial;
 }
 
 void RunLaunchDialog::Render() {
+    if (returnFromConfiguration_ && configDialog_ && !configDialog_->IsOpen()) {
+        config_ = bridge_->GetCaptureConfig();
+        returnFromConfiguration_ = false;
+        shouldOpen_ = true;
+    }
+    if (preflightErrorOpen_) {
+        ImGui::OpenPopup("ADB connection problem");
+        preflightErrorOpen_ = false;
+    }
+    if (ImGui::BeginPopupModal("ADB connection problem", nullptr,
+                              ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::PushTextWrapPos(520.0f);
+        ImGui::TextUnformatted(preflightError_.c_str());
+        ImGui::PopTextWrapPos();
+        if (ImGui::Button("Retry", ImVec2(120, 0))) {
+            RefreshDevices();
+            if (preflightError_.empty()) {
+                ImGui::CloseCurrentPopup();
+                shouldOpen_ = true;
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Close", ImVec2(120, 0)))
+            ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
     if (shouldOpen_) {
         ImGui::OpenPopup("Run/Launch");
         shouldOpen_ = false;
@@ -138,9 +101,19 @@ void RunLaunchDialog::Render() {
     if (!open_)
         return;
 
-    ImGui::SetNextWindowSize(ImVec2(640, 720), ImGuiCond_FirstUseEver);
+    // Let the modal fit its complete form. Only the app list scrolls.
+    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(),
+                            ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+    const float dialogW = std::min(560.0f, ImGui::GetIO().DisplaySize.x - 32.0f);
+    ImGui::SetNextWindowSizeConstraints(ImVec2(dialogW, 0.0f),
+                                        ImVec2(dialogW, 100000.0f));
     bool open = true;
-    if (!ImGui::BeginPopupModal("Run/Launch", &open, ImGuiWindowFlags_NoCollapse)) {
+    if (!ImGui::BeginPopupModal("Run/Launch", &open,
+                                ImGuiWindowFlags_NoCollapse |
+                                ImGuiWindowFlags_NoMove |
+                                ImGuiWindowFlags_NoResize |
+                                ImGuiWindowFlags_AlwaysAutoResize |
+                                ImGuiWindowFlags_NoScrollbar)) {
         if (!open)
             open_ = false;
         return;
@@ -181,8 +154,7 @@ void RunLaunchDialog::Render() {
     ImGui::SeparatorText("Application");
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 100);
     if (ImGui::SmallButton("Refresh Apps")) {
-        if (selectedDevice_ >= 0 &&
-            appsForDevice_ != devices_[selectedDevice_].serial)
+        if (selectedDevice_ >= 0)
             RefreshApps();
     }
     ImGui::InputTextWithHint("##appmanual", "package name (e.g. com.example.game)",
@@ -190,25 +162,38 @@ void RunLaunchDialog::Render() {
     ImGui::InputTextWithHint("##appsearch", "filter installed apps...",
                              appSearch_, sizeof(appSearch_));
 
-    const float listHeight = 220.0f;
+    const float listHeight = std::clamp(
+        ImGui::GetIO().DisplaySize.y - 392.0f,
+        80.0f, 220.0f);
     if (ImGui::BeginChild("##applist", ImVec2(0, listHeight), ImGuiChildFlags_Borders)) {
         if (selectedDevice_ < 0) {
             ImGui::TextDisabled("Select a device first.");
         } else if (apps_.empty() && appsForDevice_.empty()) {
             ImGui::TextDisabled("Click \"Refresh Apps\" to list installed apps.");
         } else {
-            ImGuiListClipper clipper;
-            clipper.Begin((int)apps_.size());
-            while (clipper.Step()) {
-                for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++) {
-                    const auto& app = apps_[i];
-                    if (appSearch_[0] != '\0' &&
-                        app.find(appSearch_) == std::string::npos)
-                        continue;
-                    const bool sel = (appManual_ == app);
-                    if (ImGui::Selectable(app.c_str(), sel)) {
-                        std::strncpy(appManual_, app.c_str(), sizeof(appManual_) - 1);
-                        appManual_[sizeof(appManual_) - 1] = '\0';
+            // The clipper must receive one submitted row for every index it
+            // counts. Build the filtered index first instead of skipping rows
+            // inside its range (which also breaks its first-row measurement).
+            std::vector<int> visibleApps;
+            visibleApps.reserve(apps_.size());
+            for (int i = 0; i < static_cast<int>(apps_.size()); ++i) {
+                if (appSearch_[0] == '\0' ||
+                    apps_[i].find(appSearch_) != std::string::npos)
+                    visibleApps.push_back(i);
+            }
+            if (visibleApps.empty()) {
+                ImGui::TextDisabled("No matching apps.");
+            } else {
+                ImGuiListClipper clipper;
+                clipper.Begin(static_cast<int>(visibleApps.size()));
+                while (clipper.Step()) {
+                    for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row) {
+                        const auto& app = apps_[visibleApps[row]];
+                        const bool sel = (appManual_ == app);
+                        if (ImGui::Selectable(app.c_str(), sel)) {
+                            std::strncpy(appManual_, app.c_str(), sizeof(appManual_) - 1);
+                            appManual_[sizeof(appManual_) - 1] = '\0';
+                        }
                     }
                 }
             }
@@ -218,44 +203,36 @@ void RunLaunchDialog::Render() {
     ImGui::InputTextWithHint("##subproc", "sub-process name (optional)",
                              subProcess_, sizeof(subProcess_));
 
-    // ---- Capture config ----
-    if (ImGui::CollapsingHeader("Capture Configuration", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::InputInt("Threshold (bytes)", &config_.threshold);
-        if (config_.threshold < 0) config_.threshold = 0;
-        ComboFromOptions("Mode",     config_.mode,     {"strict", "nostack", "loose"});
-        ComboFromOptions("Build",    config_.build,    {"default", "debug"});
-        if (ComboFromOptions("Type", config_.type,     {"white list", "black list"}))
-            ImGui::SetScrollHereY(0.0f); // keep config section visible when list switches
-        ComboFromOptions("Arch",     config_.arch,     {"armeabi-v7a", "arm64-v8a", "x86", "x86_64"});
-        ComboFromOptions("Compiler", config_.compiler, {"gcc", "clang"});
-        ComboFromOptions("Hook",     config_.hook,     {"malloc"});
+    ImGui::Checkbox("Attach to running app", &attachToRunningApp_);
 
-        const bool useWhite = (config_.type == "white list");
-        const float entryListHeight = 140.0f;
-
-        // Show the list relevant to the selected type prominently; the other
-        // is still editable below, dimmed.
-        if (useWhite) {
-            ImGui::TextUnformatted("Whitelist (captured only if matching)");
-            EditStringList("##whitelist", config_.whitelist, whiteEntry_,
-                           (int)sizeof(whiteEntry_), entryListHeight,
-                           "add whitelist pattern...");
-            ImGui::Spacing();
-            ImGui::TextDisabled("Blacklist (captured only if NOT matching)");
-            EditStringList("##blacklist", config_.blacklist, blackEntry_,
-                           (int)sizeof(blackEntry_), entryListHeight * 0.6f,
-                           "add blacklist pattern...");
-        } else {
-            ImGui::TextUnformatted("Blacklist (captured only if NOT matching)");
-            EditStringList("##blacklist", config_.blacklist, blackEntry_,
-                           (int)sizeof(blackEntry_), entryListHeight,
-                           "add blacklist pattern...");
-            ImGui::Spacing();
-            ImGui::TextDisabled("Whitelist (captured only if matching)");
-            EditStringList("##whitelist", config_.whitelist, whiteEntry_,
-                           (int)sizeof(whiteEntry_), entryListHeight * 0.6f,
-                           "add whitelist pattern...");
+    // ---- Capture config (summary + link to the dedicated dialog) ----
+    ImGui::SeparatorText("Capture Config");
+    ImGui::TextDisabled("%s | %s | %s | %s | threshold %d",
+                        config_.arch.c_str(), config_.compiler.c_str(),
+                        config_.mode.c_str(), config_.build.c_str(),
+                        config_.threshold);
+    ImGui::SameLine(ImGui::GetContentRegionAvail().x - 150.0f);
+    if (ImGui::SmallButton("Edit Configuration...")) {
+        if (configDialog_) {
+            configDialog_->Open(bridge_);
+            returnFromConfiguration_ = true;
+            open_ = false;
+            ImGui::CloseCurrentPopup();
         }
+    }
+
+    ImGui::TextUnformatted("Record retention");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(270.0f);
+    const char* retentionLabel = retainAllRecords_
+        ? "All allocations (full history)"
+        : "Live at stop (smaller file)";
+    if (ImGui::BeginCombo("##recordRetention", retentionLabel)) {
+        if (ImGui::Selectable("Live at stop (smaller file)", !retainAllRecords_))
+            retainAllRecords_ = false;
+        if (ImGui::Selectable("All allocations (full history)", retainAllRecords_))
+            retainAllRecords_ = true;
+        ImGui::EndCombo();
     }
 
     // ---- Footer ----
@@ -263,12 +240,15 @@ void RunLaunchDialog::Render() {
     const bool canLaunch = selectedDevice_ >= 0 && appManual_[0] != '\0';
     if (!canLaunch)
         ImGui::BeginDisabled();
-    if (ImGui::Button("Launch", ImVec2(120, 0))) {
-        const QString serial = QString::fromStdString(devices_[selectedDevice_].serial);
-        const QString app    = QString::fromStdString(appManual_);
-        const QString sub    = QString::fromStdString(subProcess_);
-        bridge_->SaveCaptureConfig(config_);
-        bridge_->StartCapture(serial, app, sub, config_);
+    if (ImGui::Button(attachToRunningApp_ ? "Attach" : "Launch", ImVec2(120, 0))) {
+        const std::string serial = devices_[selectedDevice_].serial;
+        const std::string app    = appManual_;
+        const std::string sub    = subProcess_;
+        // Pull the latest saved config (the config dialog may have changed it).
+        config_ = bridge_->GetCaptureConfig();
+        bridge_->StartCapture(serial, app, sub, config_,
+                               /*enableInject=*/attachToRunningApp_,
+                               /*useCache=*/!retainAllRecords_);
         open_ = false;
         ImGui::CloseCurrentPopup();
     }

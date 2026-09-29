@@ -15,7 +15,7 @@ The ImGui GUI migration (change `migrate-gui-to-imgui`) replaced the Qt Widgets/
 - Port the CLI (`main_cli.cpp`, `cliprofiler`, `profilecomparator`, `clilogger`) off Qt so `LoliProfilerCLI` builds with no Qt.
 - Complete the ImGui GUI's remaining Qt-boundary gaps now possible once core is Qt-free: **live-capture tree build** (currently only record-load builds the aggregated tree) and **`.loli` record saving** (`SaveRecord` is a stub).
 - **BREAKING**: Qt5 removed from the build entirely (no `QT5Path`, no `find_package(Qt5)`). The legacy Qt GUI target (`LoliProfiler`, Widgets/Charts) is deleted — superseded by `LoliProfilerImGui`.
-- Update `build.bat` / `build.sh` / `build_linux_with_docker.sh` / `Dockerfile` and docs (README, CLAUDE.md, BUILD_LINUX.md) to drop Qt prerequisites.
+- Use one Python build driver (`scripts/build.py`) plus `Dockerfile`; update README, CLAUDE.md, and the build guides under `docs/` to drop Qt prerequisites.
 
 ## Capabilities
 

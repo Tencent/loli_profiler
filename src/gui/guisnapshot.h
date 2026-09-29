@@ -114,6 +114,8 @@ struct GuiSnapshot {
     // The aggregated call tree, pre-built on the loader worker thread. The UI
     // adopts it (move) when a new snapshot version arrives. Null when empty.
     std::shared_ptr<StacktraceTree>  stackTree;
+    std::shared_ptr<StacktraceTree>  liveStackTree; // filtered by free sequence
+    bool                             liveTreeUsesAll = false; // saved free filter excludes nothing
     std::vector<MemInfoSample>       memTimeline;
     std::vector<ScreenshotSnapshot>  screenshots;
     std::vector<SMapsSectionSnapshot> smaps;

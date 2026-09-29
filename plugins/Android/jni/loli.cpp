@@ -189,16 +189,18 @@ int loli_index_posix_memalign(void** ptr, size_t alignment, size_t size, int ind
 }
 
 void *loli_index_realloc(void *ptr, size_t new_size, int index) {
+    const uint64_t oldAddr = reinterpret_cast<uint64_t>(ptr);
     void* addr = realloc(ptr, new_size);
-    if (addr != 0) {
+    // On success, realloc retires the old pointer even when the allocation
+    // moves. On failure with a nonzero size the old allocation stays live.
+    if (oldAddr != 0 && (addr != nullptr || new_size == 0)) {
         static thread_local io::buffer obuffer(128);
-        // std::ostringstream oss;
         obuffer.clear();
-        obuffer << static_cast<uint8_t>(FREE_) << static_cast<uint32_t>(++callSeq_) << reinterpret_cast<uint64_t>(addr);
-        // oss << FREE_ << '\\' << ++callSeq_ << '\\' << ptr;
+        obuffer << static_cast<uint8_t>(FREE_) << static_cast<uint32_t>(++callSeq_) << oldAddr;
         loli_server_send(obuffer.data(), obuffer.size());
-        loli_maybe_record_alloc(new_size, addr, loliFlags::MALLOC_, index);
     }
+    if (addr != nullptr)
+        loli_maybe_record_alloc(new_size, addr, loliFlags::MALLOC_, index);
     return addr;
 }
 

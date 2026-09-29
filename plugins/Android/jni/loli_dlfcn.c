@@ -25,11 +25,11 @@
 #define log_dbg(...)
 #endif
 
-#ifdef __arm__
+#if defined(__arm__) || defined(__i386__)
 #define Elf_Ehdr Elf32_Ehdr
 #define Elf_Shdr Elf32_Shdr
 #define Elf_Sym  Elf32_Sym
-#elif defined(__aarch64__)
+#elif defined(__aarch64__) || defined(__x86_64__)
 #define Elf_Ehdr Elf64_Ehdr
 #define Elf_Shdr Elf64_Shdr
 #define Elf_Sym  Elf64_Sym

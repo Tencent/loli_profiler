@@ -3,19 +3,20 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "loli-cli"
+name = "agentcli"
 version = "0.1.0"
 description = "CLI for LoliProfiler heap data exploration."
 requires-python = ">=3.10"
-authors = [{ name = "loli-cli contributors" }]
-readme = "loli_cli/README.md"
+authors = [{ name = "LoliProfiler contributors" }]
+readme = "agentcli/README.md"
 dependencies = []  # tree_model uses only stdlib + re
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0"]
 
 [project.scripts]
-loli = "loli_cli.cli:main"
+loli = "agentcli.cli:main"
+agentcli = "agentcli.cli:main"
 
 [tool.setuptools]
-packages = ["loli_cli"]
+packages = ["agentcli"]

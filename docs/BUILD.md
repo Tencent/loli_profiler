@@ -1,38 +1,60 @@
-# Build
+# Build and package
 
-## Requirement
+LoliProfiler is Qt-free. It builds `LoliProfilerImGui` (GUI), `LoliProfilerCLI` (headless capture and export), the Android `libloli.so` hooks, and the Python `agentcli` package.
 
-* QT 5.15 / 5.14 / 5.12 (Requires QtCharts plugin)
-* CMake
-* Android NDK r16b / r20
-* Visual Studio 2017 / XCode / Command line tools
+## Requirements
 
-MacOS:
+- CMake 3.24 or newer and a C++17 compiler. Windows builds use Visual Studio 2022.
+- Python 3.8 or newer for packaging; Python 3.10 or newer to run `agentcli`.
+- JDK 17 or newer only if the build driver needs to install Android packages through Google's `sdkmanager`.
+- An Android NDK for capture-ready packages. Set `ANDROID_NDK_HOME` or `Ndk_R20_CMD` to its `ndk-build` executable. An older `Ndk_R16_CMD` is optional for legacy GCC/armeabi hooks.
+- On Linux, the graphics development libraries listed in the [Linux guide](BUILD_LINUX.md). On macOS, Xcode command-line tools.
 
-```shell
-export QT5Path=/Users/yourname/Qt5.14.1
-export Ndk_R16_CMD=/android-ndk-r16b/ndk-build
-export Ndk_R20_CMD=/android-ndk-r20b/ndk-build
-sh build.sh
+No Qt SDK or runtime is needed.
+
+## Windows
+
+```bat
+python scripts\build.py
 ```
 
-Windows:
+Without arguments, `scripts/build.py` opens an interactive menu: full release, native binaries only, package existing binaries, or install missing Android tools. A full build configures VS2022, builds both executables and Android hooks, and creates `dist/LoliProfiler-windows.zip`. Android object files are kept in NDK-specific directories under `build/ndk-obj`, so switching NDK versions does not reuse incompatible intermediates.
 
-```bash
-set QT5Path="D:/SDK/QT/5.14.1/msvc2017_64"
-set MSBUILD_EXE="%ProgramFiles(x86)%\Microsoft Visual Studio\2017\Community\MSBuild\15.0\Bin\MSBuild.exe"
-set Ndk_R16_CMD="/android-ndk-r16b/ndk-build.cmd"
-set Ndk_R20_CMD="/android-ndk-r20b/ndk-build.cmd"
-build.bat
+For CI or another non-interactive shell, specify a mode and installed paths:
+
+```bat
+python scripts\build.py --mode full --non-interactive --sdk C:\Android\Sdk --ndk C:\Android\Sdk\ndk\27.0.12077973
+python scripts\build.py --mode native --non-interactive
 ```
 
-Linux:
+The driver searches `ANDROID_HOME`, `ANDROID_SDK_ROOT`, `ANDROID_NDK_HOME`, and standard SDK locations. If tools are missing in interactive mode, it asks before downloading. It verifies the pinned official Android command-line-tools archive, then uses Google's `sdkmanager` to install Platform-Tools and a side-by-side NDK. The script **does not accept Google licenses automatically**; `sdkmanager` prompts for them. Non-interactive runs never download unless `--download-missing` is specified. Build and dist directories are preserved.
 
-```bash
-build_linux_with_docker.sh
-# or 
-# export QT5Path=/Users/yourname/Qt5.14.1
-# export Ndk_R16_CMD=/android-ndk-r16b/ndk-build
-# export Ndk_R20_CMD=/android-ndk-r20b/ndk-build
-# bash build_linux.sh
+To package binaries and hooks already built:
+
+```bat
+python scripts\package_release.py --platform windows --build-dir build\cmake --out-dir dist
 ```
+
+## macOS
+
+```sh
+export ANDROID_NDK_HOME=/path/to/android-ndk
+python3 scripts/build.py
+```
+
+With no arguments the same interactive menu appears. Use `python3 scripts/build.py --mode full --non-interactive` for automation with an installed NDK. A complete build writes `dist/LoliProfiler-macos.zip`. See [macOS notes](BUILD_MACOS.md). This path is statically checked but awaits an on-macOS run.
+
+## Linux
+
+```sh
+export ANDROID_NDK_HOME=/path/to/android-ndk
+python3 scripts/build.py
+```
+
+With no arguments the same interactive menu appears. Use `python3 scripts/build.py --mode full --non-interactive` for automation, or add `--docker` for the container build. Both produce `dist/LoliProfiler-linux.zip` when the build succeeds. See the [Linux guide](BUILD_LINUX.md). This path is statically checked but awaits a Linux run.
+
+## Archive contents
+
+Each zip has a `LoliProfiler/` root with the GUI, native CLI, Python injector and config, `remote/llvm/<abi>/libloli.so` for ARM and x86, optional legacy GCC hooks, the `agentcli/` Python package, app icon, README, and analysis scripts. On macOS the GUI's runtime files are also inside `LoliProfilerImGui.app/Contents/MacOS/`.
+
+The native CLI can export `.loli` to text or SQLite: `LoliProfilerCLI --dump capture.loli --out capture.db`. The installed Python command remains `loli`; `agentcli` is also available. See [CLI mode](CLI_MODE.md).

@@ -35,6 +35,11 @@ enum class loliCommands : std::uint8_t {
 
 std::vector<io::buffer> cache_;
 loli::spinlock cacheLock_;
+// Keep a stalled or disconnected desktop reader from exhausting the game's
+// address space. A connected reader normally drains this well below the cap.
+constexpr std::size_t kMaxPendingBytes = 128u * 1024u * 1024u;
+std::size_t pendingBytes_ = 0;
+std::atomic<uint64_t> droppedRecords_ {0};
 
 char* buffer_ = NULL;
 const std::size_t bandwidth_ = 3000;
@@ -144,6 +149,7 @@ void loli_server_loop(int sock) {
                             {
                                 std::lock_guard<loli::spinlock> lock(cacheLock_);
                                 cache_.clear();
+                                pendingBytes_ = 0;
                             }
                         }
                     }
@@ -178,6 +184,9 @@ void loli_server_loop(int sock) {
                 }
             }
             if (cacheCopy.size() > 0) {
+                std::size_t sentBytes = 0;
+                for (const auto& record : cacheCopy)
+                    sentBytes += record.size();
                 sendBuffer.clear();
                 for (auto& buffer : cacheCopy) {
                     sendBuffer << static_cast<uint16_t>(buffer.size());
@@ -208,6 +217,10 @@ void loli_server_loop(int sock) {
                     //    compressSize, static_cast<int>(cacheCopy.size()));
                 }
                 cacheCopy.clear();
+                {
+                    std::lock_guard<loli::spinlock> lock(cacheLock_);
+                    pendingBytes_ = pendingBytes_ > sentBytes ? pendingBytes_ - sentBytes : 0;
+                }
             }
         }
     }
@@ -235,11 +248,18 @@ int loli_server_start(int port) {
         LOLILOGI("start.socket %i", sock);
         return -1;
     }
+    int reuse = 1;
+    if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {
+        close(sock);
+        LOLILOGE("Could not enable address reuse for profiler server: %d", errno);
+        return -1;
+    }
     // bind address
     int ecode = bind(sock, (struct sockaddr*)&serverAddr, sizeof(struct sockaddr));
     if (ecode < 0) {
+        const int bindError = errno;
         close(sock);
-        LOLILOGI("start.bind %i", ecode);
+        LOLILOGE("Profiler server bind failed on port %d: %d", port, bindError);
         return -1;
     }
     // set max send buffer
@@ -261,15 +281,28 @@ int loli_server_start(int port) {
     serverRunning_ = true;
     hasClient_ = false;
     ignoreCache_ = false;
+    {
+        std::lock_guard<loli::spinlock> lock(cacheLock_);
+        cache_.clear();
+        pendingBytes_ = 0;
+    }
+    droppedRecords_ = 0;
     socketThread_ = std::thread(loli_server_loop, sock);
     return 0;
 }
 
 void loli_server_send(const char* data, unsigned int size) {
-    if (ignoreCache_)
+    if (!started_ || ignoreCache_)
         return;
     std::lock_guard<loli::spinlock> lock(cacheLock_);
+    if (size > kMaxPendingBytes - pendingBytes_) {
+        const uint64_t dropped = ++droppedRecords_;
+        if (dropped == 1 || dropped % 100000 == 0)
+            LOLILOGE("Profiler transport overflow: dropped %llu records", static_cast<unsigned long long>(dropped));
+        return;
+    }
     cache_.emplace_back(io::buffer(data, size));
+    pendingBytes_ += size;
 }
 
 void loli_server_shutdown() {

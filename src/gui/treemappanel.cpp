@@ -4,6 +4,7 @@
 #include "imgui-SFML.h"
 #include "imgui_internal.h"
 #include "stacktracetree.h"
+#include "lolilogger.h"
 
 #include <SFML/Graphics/RenderTexture.hpp>
 #include <SFML/Graphics/RectangleShape.hpp>
@@ -54,6 +55,8 @@ sf::Color DisplayColor(uint64_t id, int depth) {
 
 // Picking color: encode nodeIndex+1 as RGB (so 0 = background "no node").
 sf::Color PickColor(int32_t nodeIndex) {
+    if (nodeIndex == -1000)
+        return sf::Color(255, 255, 255);
     const uint32_t v = (uint32_t)nodeIndex + 1;
     return sf::Color((uint8_t)(v & 0xFF), (uint8_t)((v >> 8) & 0xFF),
                      (uint8_t)((v >> 16) & 0xFF));
@@ -72,6 +75,11 @@ double WorstAspect(const std::vector<double>& row, double groupSum, double propo
 float TitleHeight(float fontSize, float dpiScale) {
     return fontSize + 4.0f * dpiScale;
 }
+
+// Sentinel nodeIndex for the file-browser-style ".." go-up cell, prepended to
+// the layout when the treemap is drilled into a subtree. Distinct from any
+// real node (which are >= 0) and from -1 ("no cell" in picking).
+constexpr int32_t kGoUpCell = -1000;
 
 // Squarified treemap layout (Bruls-Huizing-van Wijk). Lays out `items` into
 // `rect`, producing one Cell per item at `depth`, then recurses into each
@@ -186,46 +194,50 @@ std::string ToLower(const char* s) {
     return out;
 }
 
-// Version counter for the search state; bumped whenever the text changes so
-// the texture re-renders (and the match cache recomputes) exactly once.
+// Version counter for the active search, which changes on Enter, not typing.
 uint64_t SearchVersion(const TreemapState& state, uint64_t dataVersion) {
     uint64_t h = 1469598103934665603ull; // FNV-1a offset basis
-    for (const char* p = state.search; *p; ++p) {
+    for (const char* p = state.committedSearch; *p; ++p) {
         h ^= (uint64_t)(unsigned char)*p;
         h *= 1099511628211ull;
     }
     return h ^ dataVersion;
 }
 
-// Recompute the cached search matches (node indices whose funcName or library
-// contains the search text, case-insensitive). Only runs when the text or the
+// Recompute the cached search matches (function names, matching Qt column 0).
+// Only runs when the committed query or the
 // data version changed since the last build.
 void RebuildSearchMatches(const StacktraceTree& tree, TreemapState& state,
                           uint64_t dataVersion) {
     if (state.searchBuiltForVersion == dataVersion &&
-        std::strcmp(state.searchBuiltText, state.search) == 0)
+        std::strcmp(state.searchBuiltText, state.committedSearch) == 0)
         return;
+    const auto searchStart = loli::LoliLogger::Clock::now();
     state.searchMatches.clear();
     state.searchMatchIdx = -1;
-    const std::string needle = ToLower(state.search);
+    const std::string needle = ToLower(state.committedSearch);
     if (!needle.empty()) {
         const auto& nodes = tree.Nodes();
         state.searchMatches.reserve(nodes.size() / 8 + 1);
         for (int32_t i = 0; i < (int32_t)nodes.size(); ++i) {
             const auto& node = nodes[i];
-            if (ToLower(tree.PoolStr(node.funcName)).find(needle) != std::string::npos ||
-                ToLower(tree.PoolStr(node.library)).find(needle) != std::string::npos)
+            if (ToLower(tree.PoolStr(node.funcName)).find(needle) != std::string::npos)
                 state.searchMatches.push_back(i);
         }
     }
     state.searchBuiltForVersion = dataVersion;
-    std::snprintf(state.searchBuiltText, sizeof(state.searchBuiltText), "%s", state.search);
+    std::snprintf(state.searchBuiltText, sizeof(state.searchBuiltText), "%s",
+                  state.committedSearch);
+    if (!needle.empty())
+        loli::LoliLogger::Instance().LogStage("treemap", "search_matches",
+            searchStart, "matches=" + std::to_string(state.searchMatches.size()) +
+                " tree_nodes=" + std::to_string(tree.Nodes().size()));
 }
 
 } // namespace
 
 void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
-                      uint64_t dataVersion, float dpiScale) {
+                      uint64_t dataVersion, float dpiScale, bool liveView) {
     if (tree.Nodes().empty()) {
         ImGui::TextUnformatted("No data. Load a record or run a capture.");
         return;
@@ -245,9 +257,8 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
     const int w = std::max(8, (int)usableW);
     const int h = std::max(8, (int)(avail.y - controlBarH));
 
-    // Search: refresh the cached match list only when the text or the data
-    // version changed, and remember which match (if any) is "selected" for
-    // the highlight overlay.
+    // Search only the last query committed with Enter. Unsubmitted edits do
+    // not scan nodes or invalidate the cached treemap texture.
     RebuildSearchMatches(tree, state, dataVersion);
     const uint64_t searchVersion = SearchVersion(state, dataVersion);
     const int32_t selectedMatch =
@@ -260,6 +271,7 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
     const bool dataChanged =
         state.builtForVersion != dataVersion ||
         state.builtSearchVersion != searchVersion ||
+        state.builtSelectedMatch != selectedMatch ||
         state.builtFocus != state.focusedNode ||
         state.builtDepth != state.maxDepth ||
         state.builtDpi != dpiScale ||
@@ -285,6 +297,7 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
     }
 
     if (needRender) {
+        const auto renderStart = loli::LoliLogger::Clock::now();
         const int rw = w;
         const int rh = h;
         state.pendingW = state.pendingH = 0;
@@ -300,13 +313,36 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
             const float fontSize = 12.0f * dpiScale;
             const float titleH = TitleHeight(fontSize, dpiScale);
 
-            // Compute layout once (nested cells with title strips).
+            // The current parent is the full graph cell, matching the Qt view.
+            // Its title is clickable to go up; children fill its content area.
             std::vector<Cell> cells;
             std::vector<int32_t> top;
-            if (state.focusedNode >= 0) top.push_back(state.focusedNode);
+            if (state.focusedNode >= 0) top = tree.NodeAt(state.focusedNode).children;
             else top = tree.Roots();
-            Squarify(top, tree, { 0, 0, (float)rw, (float)rh }, 0, state.maxDepth,
+            Rect contentRect{ 0, 0, (float)rw, (float)rh };
+            cells.push_back({ kGoUpCell, 0, contentRect });
+            contentRect = { pad, titleH + pad,
+                            contentRect.w - 2.0f * pad,
+                            contentRect.h - titleH - 2.0f * pad };
+            Squarify(top, tree, contentRect, 1, state.maxDepth,
                      pad, titleH, cells);
+            // A tiny match can be omitted by the one-pixel treemap cutoff.
+            // Zoom into that node so the selected target remains visible as
+            // the highlighted graph root instead of losing its selection.
+            if (selectedMatch >= 0 && state.focusedNode != selectedMatch &&
+                std::none_of(cells.begin(), cells.end(), [&](const Cell& cell) {
+                    return cell.nodeIndex == selectedMatch;
+                })) {
+                state.focusedNode = selectedMatch;
+                cells.resize(1);
+                Squarify(tree.NodeAt(selectedMatch).children, tree, contentRect,
+                         1, state.maxDepth, pad, titleH, cells);
+            }
+            loli::LoliLogger::Instance().LogStage("treemap", "layout",
+                renderStart, "cells=" + std::to_string(cells.size()) +
+                    " tree_nodes=" + std::to_string(tree.Nodes().size()) +
+                    " width=" + std::to_string(rw) +
+                    " height=" + std::to_string(rh));
 
             // Match lookup set for search highlighting (built only when there
             // is an active search; empty set = no overlay work at all).
@@ -326,9 +362,39 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
             }
 
             // Display layer.
+            const auto displayStart = loli::LoliLogger::Clock::now();
+            double textFitMs = 0.0;
+            std::size_t truncatedLabels = 0;
             disp->clear(sf::Color(24, 24, 28));
 
             for (const auto& c : cells) {
+                // Full-size fake root, with its own title and child content.
+                if (c.nodeIndex == kGoUpCell) {
+                    const bool selectedRoot = selectedMatch >= 0 &&
+                                              state.focusedNode == selectedMatch;
+                    sf::RectangleShape body(sf::Vector2f(std::max(0.0f, c.rect.w - 1),
+                                                         std::max(0.0f, c.rect.h - 1)));
+                    body.setPosition({ c.rect.x, c.rect.y });
+                    body.setFillColor(sf::Color(46, 50, 56));
+                    body.setOutlineThickness(selectedRoot ? -2.0f * dpiScale : -1.0f);
+                    body.setOutlineColor(selectedRoot ? sf::Color(255, 220, 40)
+                                                      : sf::Color(15, 15, 18));
+                    disp->draw(body);
+                    if (fontLoaded) {
+                        const std::string label = state.focusedNode >= 0
+                            ? FormatBytes(tree.NodeAt(state.focusedNode).totalSize) +
+                              ": " + tree.PoolStr(tree.NodeAt(state.focusedNode).funcName)
+                            : (liveView ? "Live allocations" : "Cumulative allocations");
+                        const unsigned fsize = (unsigned)std::max(8.0f, fontSize);
+                        sf::Text text(font, sf::String::fromUtf8(label.begin(), label.end()), fsize);
+                        text.setPosition({ c.rect.x + 4.0f * dpiScale,
+                                           c.rect.y + 1.0f * dpiScale });
+                        text.setFillColor(selectedRoot ? sf::Color(255, 235, 130)
+                                                       : sf::Color(210, 214, 220, 240));
+                        disp->draw(text);
+                    }
+                    continue;
+                }
                 const auto& node = tree.NodeAt(c.nodeIndex);
                 sf::Color base = DisplayColor(node.id, c.depth);
 
@@ -369,16 +435,47 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
                                         (tree.PoolStr(node.funcName) ? tree.PoolStr(node.funcName) : "");
                     const float availW = c.rect.w - 6.0f * dpiScale;
                     const unsigned fsize = (unsigned)std::max(8.0f, fontSize);
+                    sf::Text measured(font, sf::String(), fsize);
                     auto textW = [&](const std::string& s) {
-                        sf::Text t(font, sf::String::fromUtf8(s.begin(), s.end()), fsize);
-                        return t.getLocalBounds().size.x;
+                        measured.setString(sf::String::fromUtf8(s.begin(), s.end()));
+                        return measured.getLocalBounds().size.x;
                     };
+                    const auto fitStart = loli::LoliLogger::Clock::now();
                     if (!label.empty() && textW(label) > availW) {
+                        ++truncatedLabels;
                         const std::string ell = "...";
-                        while (label.size() > 1 && textW(label + ell) > availW)
-                            label.pop_back();
-                        label += ell;
+                        if (textW(ell) > availW) {
+                            label.clear();
+                        } else {
+                            // Search code-point boundaries instead of trimming
+                            // one byte at a time. Long UE function names used
+                            // to spend >100 ms in this loop per treemap frame.
+                            std::vector<std::size_t> cuts{0};
+                            for (std::size_t pos = 0; pos < label.size();) {
+                                const unsigned char byte =
+                                    static_cast<unsigned char>(label[pos]);
+                                const std::size_t width = byte < 0x80 ? 1 :
+                                    (byte & 0xE0) == 0xC0 ? 2 :
+                                    (byte & 0xF0) == 0xE0 ? 3 :
+                                    (byte & 0xF8) == 0xF0 ? 4 : 1;
+                                pos = std::min(label.size(), pos + width);
+                                cuts.push_back(pos);
+                            }
+                            std::size_t low = 0;
+                            std::size_t high = cuts.size() - 1;
+                            while (low < high) {
+                                const std::size_t mid = low + (high - low + 1) / 2;
+                                if (textW(label.substr(0, cuts[mid]) + ell) <= availW)
+                                    low = mid;
+                                else
+                                    high = mid - 1;
+                            }
+                            label.resize(cuts[low]);
+                            label += ell;
+                        }
                     }
+                    textFitMs += std::chrono::duration<double, std::milli>(
+                        loli::LoliLogger::Clock::now() - fitStart).count();
                     sf::Text text(font, sf::String::fromUtf8(label.begin(), label.end()), fsize);
                     text.setPosition({ c.rect.x + 3.0f * dpiScale, c.rect.y + 1.0f * dpiScale });
                     text.setFillColor(sf::Color(255, 255, 255, 240));
@@ -406,8 +503,13 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
                 }
             }
             disp->display();
+            loli::LoliLogger::Instance().LogStage("treemap", "display_pass",
+                displayStart, "cells=" + std::to_string(cells.size()) +
+                    " text_fit_ms=" + std::to_string(textFitMs) +
+                    " truncated_labels=" + std::to_string(truncatedLabels));
 
             // Picking layer (cell -> nodeIndex color), matching display rects.
+            const auto pickStart = loli::LoliLogger::Clock::now();
             // Parents are drawn first, then children on top, so a pixel resolves
             // to the deepest (innermost) cell under the cursor.
             pick->clear(sf::Color::Black);
@@ -419,12 +521,25 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
                 pick->draw(r);
             }
             pick->display();
+            loli::LoliLogger::Instance().LogStage("treemap", "pick_pass",
+                pickStart, "cells=" + std::to_string(cells.size()));
+            const auto readbackStart = loli::LoliLogger::Clock::now();
+            if (!state.pickImage)
+                state.pickImage = new sf::Image();
+            *state.pickImage = pick->getTexture().copyToImage();
+            loli::LoliLogger::Instance().LogStage("treemap", "pick_readback",
+                readbackStart, "pixels=" + std::to_string(rw * rh));
 
             state.builtForVersion = dataVersion;
             state.builtSearchVersion = searchVersion;
+            state.builtSelectedMatch = selectedMatch;
             state.builtFocus = state.focusedNode;
             state.builtDepth = state.maxDepth;
             state.builtDpi = dpiScale;
+            loli::LoliLogger::Instance().LogStage("treemap", "render_complete",
+                renderStart, "cells=" + std::to_string(cells.size()) +
+                    " width=" + std::to_string(rw) +
+                    " height=" + std::to_string(rh));
         }
     }
 
@@ -441,18 +556,33 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
     ImVec2 mouse = ImGui::GetIO().MousePos;
     const bool hovered = ImGui::IsItemHovered();
     int32_t hoveredNode = -1;
-    if (hovered && state.pickTex) {
+    if (hovered && state.pickImage) {
         const float sx = (float)state.texW / (float)w;
         const float sy = (float)state.texH / (float)h;
         const int px = (int)((mouse.x - origin.x) * sx);
         const int py = (int)((mouse.y - origin.y) * sy);
         if (px >= 0 && py >= 0 && px < state.texW && py < state.texH) {
-            sf::Image img = state.pickTex->getTexture().copyToImage();
-            sf::Color c = img.getPixel({ (unsigned)px, (unsigned)py });
+            sf::Color c = state.pickImage->getPixel({ (unsigned)px, (unsigned)py });
             uint32_t v = (uint32_t)c.r | ((uint32_t)c.g << 8) | ((uint32_t)c.b << 16);
-            if (v > 0)
+            if (v == 0xFFFFFF)
+                hoveredNode = kGoUpCell;
+            else if (v > 0)
                 hoveredNode = (int32_t)(v - 1);
         }
+    }
+
+    // The current parent is part of the graph. Clicking its exposed title
+    // navigates to the parent, just like the old Qt treemap.
+    if (hoveredNode == kGoUpCell) {
+        if (hovered) {
+            ImGui::BeginTooltip();
+            ImGui::TextDisabled(state.focusedNode >= 0 ? "Click to go up"
+                                                      : (liveView ? "Live allocations" : "Cumulative allocations"));
+            ImGui::EndTooltip();
+        }
+        if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && state.focusedNode >= 0)
+            state.focusedNode = tree.NodeAt(state.focusedNode).parent;
+        hoveredNode = -1; // not a real node; skip the node tooltip below
     }
 
     // Tooltip + interactions.
@@ -462,8 +592,9 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
         ImGui::Text("%s", tree.PoolStr(node.funcName));
         if (node.library >= 0)
             ImGui::TextDisabled("%s", tree.PoolStr(node.library));
-        ImGui::Text("%s, %u allocs",
-                    FormatBytes(node.totalSize).c_str(), node.allocCount);
+        ImGui::Text("%s %s, %u allocs",
+                    FormatBytes(node.totalSize).c_str(),
+                    liveView ? "live" : "allocated total", node.allocCount);
         if (!node.children.empty())
             ImGui::TextDisabled("(click to zoom, right-click to go up)");
         ImGui::EndTooltip();
@@ -474,8 +605,7 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
     if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right) && state.focusedNode >= 0)
         state.focusedNode = tree.NodeAt(state.focusedNode).parent;
 
-    // Bottom control bar, left to right: [search input (flex width)]
-    // [prev/next match buttons] [compact Depth combo] [Go Up button].
+    // Bottom control bar: search and depth.
     // Clamp any out-of-range depth to the nearest preset so the combo's
     // preview always matches a selectable option.
     static const struct { const char* label; int depth; } kDepthOptions[] = {
@@ -495,7 +625,6 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
     ImGuiStyle& style = ImGui::GetStyle();
     const float spacing = style.ItemSpacing.x;
     const float comboW = 110.0f * dpiScale;  // fits "Extreme (12)" + arrow
-    const float upW = ImGui::CalcTextSize("Go Up").x + style.FramePadding.x * 2.0f;
     const float navBtnW = ImGui::GetFrameHeight(); // square "<" / ">" buttons
 
     // Cycle focus through the search matches, wrapping around. Focus is
@@ -507,20 +636,21 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
             return;
         state.searchMatchIdx = ((state.searchMatchIdx + dir) % count + count) % count;
         const int32_t match = state.searchMatches[state.searchMatchIdx];
-        bool visible = (state.focusedNode < 0);
-        for (int32_t p = match; p >= 0 && !visible; p = tree.NodeAt(p).parent)
-            visible = (p == state.focusedNode);
-        if (!visible) {
-            const int32_t parent = tree.NodeAt(match).parent;
-            state.focusedNode = parent;
-        }
+        state.focusedNode = tree.NodeAt(match).parent;
     };
 
     ImGui::SetNextItemWidth(
-        std::max(80.0f, usableW - comboW - upW - 2.0f * navBtnW - 3.0f * spacing));
-    if (ImGui::InputTextWithHint("##search", "search nodes...", state.search,
-                                 sizeof(state.search))) {
-        state.searchMatchIdx = -1; // text changed; matches rebuild next frame
+        std::max(80.0f, usableW - comboW - 2.0f * navBtnW - 2.0f * spacing));
+    const bool enter = ImGui::InputTextWithHint("##search", "search nodes...", state.search,
+                                                sizeof(state.search), ImGuiInputTextFlags_EnterReturnsTrue);
+    if (enter) {
+        ImGui::SetKeyboardFocusHere(-1);
+        std::snprintf(state.committedSearch, sizeof(state.committedSearch), "%s",
+                      state.search);
+        RebuildSearchMatches(tree, state, dataVersion);
+        state.searchNoticeCount = static_cast<int>(state.searchMatches.size());
+        state.searchNoticeUntil = ImGui::GetTime() + 3.0;
+        cycleMatch(1);
     }
     ImGui::SameLine();
     if (state.searchMatches.empty())
@@ -545,19 +675,24 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
         }
         ImGui::EndCombo();
     }
-    ImGui::SameLine();
-    if (state.focusedNode < 0)
-        ImGui::BeginDisabled();
-    if (ImGui::SmallButton("Go Up")) {
-        state.focusedNode = tree.NodeAt(state.focusedNode).parent;
+    if (ImGui::GetTime() < state.searchNoticeUntil) {
+        const float alpha = std::min(1.0f, static_cast<float>(state.searchNoticeUntil - ImGui::GetTime()));
+        const std::string notice = std::to_string(state.searchNoticeCount) + " matches";
+        const ImVec2 origin = ImGui::GetWindowPos();
+        const ImVec2 pos(origin.x + 20.0f, origin.y + 55.0f);
+        const ImVec2 textSize = ImGui::CalcTextSize(notice.c_str());
+        ImGui::GetForegroundDrawList()->AddRectFilled(pos,
+            ImVec2(pos.x + textSize.x + 20.0f, pos.y + textSize.y + 12.0f),
+            ImGui::GetColorU32(ImVec4(0.05f, 0.08f, 0.08f, 0.78f * alpha)), 5.0f);
+        ImGui::GetForegroundDrawList()->AddText(ImVec2(pos.x + 10.0f, pos.y + 6.0f),
+            ImGui::GetColorU32(ImVec4(1, 1, 1, alpha)), notice.c_str());
     }
-    if (state.focusedNode < 0)
-        ImGui::EndDisabled();
 }
 
 void FreeTreemapState(TreemapState& state) {
     delete state.displayTex; state.displayTex = nullptr;
     delete state.pickTex;    state.pickTex = nullptr;
+    delete state.pickImage;  state.pickImage = nullptr;
 }
 
 } // namespace gui

@@ -6,7 +6,7 @@ LoliProfiler now includes a dedicated CLI executable (`LoliProfilerCLI.exe`) des
 
 ## Executables
 
-- **LoliProfiler.exe** - GUI application
+- **LoliProfilerImGui.exe** - GUI application
 - **LoliProfilerCLI.exe** - Dedicated console application (CLI only, smaller size, better console integration)
 
 ## Features
@@ -18,12 +18,12 @@ LoliProfiler now includes a dedicated CLI executable (`LoliProfilerCLI.exe`) des
   - Manual stop with Ctrl+C (profile until you're ready to stop)
 - **Graceful Shutdown**: Ctrl+C triggers proper data collection and file save
 - **Symbol Translation**: Automatic address-to-symbol translation with symbol files
-- **Data Optimization**: Streaming mode enabled by default for large datasets
+- **Data Optimization**: Optional live-allocation retention for large datasets
 - **Device Selection**: Support for multiple connected Android devices
 
 ## Command-Line Options
 
-All options use Qt's standard format: `--option value` (double dash with space-separated value).
+Options use `--option value`; boolean flags such as `--attach` have no value.
 
 ### Required Options
 
@@ -38,7 +38,9 @@ All options use Qt's standard format: `--option value` (double dash with space-s
 - `--duration <seconds>` - Profiling duration in seconds (omit for manual stop with Ctrl+C)
 - `--attach` - Attach to running app instead of launching new instance
 - `--verbose` - Enable verbose output for debugging
-- `--enable-memory-optimization` - Stream captured data to disk cache instead of keeping it in RAM. Recommended for large projects that produce massive amounts of allocation data (mirrors the "Enable Data Optimization?" prompt in GUI mode)
+- `--log-file <path>` - Write timestamped diagnostics to a file (capture mode otherwise writes `cli_profiler.log` beside the executable)
+- `--log-level <debug|info|warn|error>` - Set diagnostic detail; default is `info`
+- `--enable-memory-optimization` - Keep only allocations still live at capture stop. Freed allocation stacks are discarded during capture to bound memory use (mirrors the GUI's launch-time retention choice).
 - `--help` or `-h` - Display help message
 
 > All other options will use what you set in gui mode.
@@ -84,14 +86,14 @@ This is useful for:
 
 ### With Memory Optimization
 
-For large projects that generate massive amounts of allocation data, enable streaming to disk to reduce RAM usage:
+For large projects that generate massive amounts of allocation data, discard freed allocation stacks as capture proceeds:
 
 ```bash
 LoliProfilerCLI.exe --app com.example.game --out profile.loli \
   --enable-memory-optimization --duration 120
 ```
 
-Data is streamed to `cache/` files during capture and read back at the end, keeping the profiler's RAM footprint low. Without this flag, all data is kept in memory (faster, but uses more RAM).
+With this flag, the saved record retains only allocations still live at stop. Without it, the CLI keeps all allocation records for cumulative analysis.
 
 ### Attach to Running App
 
@@ -301,7 +303,7 @@ you can query the database for a tree of `(function_name, size, count)` nodes.
 
 For full details on every subcommand, the migration table from the
 historical MCP server, and programmatic Python use, see
-[`loli_cli/README.md`](../loli_cli/README.md).
+[`agentcli/README.md`](../agentcli/README.md).
 
 ## See Also
 

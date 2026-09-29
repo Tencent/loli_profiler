@@ -44,7 +44,10 @@ struct TimelineView {
 // gridlines, hover tooltip and wheel-zoom / drag-pan interaction; Reset View
 // and Clear Selection live in the plot's right-click context menu.
 // Call between ImGui::Begin/End; uses an InvisibleButton to capture input.
-void DrawMemoryTimelineChart(const GuiSnapshot& snapshot, TimelineView& view);
+// If hoverScreenshotIdx is non-null, it receives the index of the screenshot
+// nearest the hovered time each frame the plot is hovered (screenshot scrub).
+void DrawMemoryTimelineChart(const GuiSnapshot& snapshot, TimelineView& view,
+                             int* hoverScreenshotIdx = nullptr);
 
 // ---------------------------------------------------------------------------
 // Smaps panel

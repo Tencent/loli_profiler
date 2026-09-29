@@ -1,4 +1,5 @@
 #include "filedialogs.h"
+#include "lolilogger.h"
 
 #include <cstdio>
 #include <mutex>
@@ -33,7 +34,7 @@ bool AcquireNFD()
 
     if (NFD_Init() != NFD_OKAY)
     {
-        std::fprintf(stderr, "FileDialogs: NFD_Init failed: %s\n", NFD_GetError());
+        LOLI_ERROR("dialog") << "NFD_Init failed: " << NFD_GetError();
         return false;
     }
 
@@ -103,7 +104,8 @@ std::optional<std::string> WrapResult(nfdresult_t result, nfdchar_t* outPath)
     if (result == NFD_ERROR)
     {
         const char* error = NFD_GetError();
-        std::fprintf(stderr, "FileDialogs: dialog failed: %s\n", error ? error : "unknown error");
+        LOLI_ERROR("dialog") << "native file dialog failed: "
+                             << (error ? error : "unknown error");
     }
 
     // NFD_CANCEL (and NFD_ERROR): no path to free.

@@ -198,7 +198,7 @@ LoliProfilerCLI --compare impl_a.loli impl_b.loli --out impl_comparison.txt
 ### Comparison Algorithm
 
 1. **Load both profiles**: Parse binary `.loli` format into memory structures
-2. **Build call trees with hash maps**: Use `qHashRange()` for O(1) node lookup by call stack suffix
+2. **Build call trees with hash maps**: Reproduce the old call stack suffix hash and use `std::unordered_map` for node lookup
 3. **Leaf-node diffing**: Compare only leaf nodes (allocation sites) by hash
 4. **Filter growth**: Only include allocations with >1KB size increase
 5. **Bottom-up propagation**: Propagate leaf deltas up to parent nodes
@@ -208,7 +208,7 @@ LoliProfilerCLI --compare impl_a.loli impl_b.loli --out impl_comparison.txt
 
 - **CallTreeNode**: Hierarchical tree node with function name, size delta, and count delta
 - **ProfileData**: Complete profile including stack records, call stacks, symbols, and metadata
-- **Hash-based matching**: Uses Qt's `qHashRange()` for efficient call stack comparison
+- **Hash-based matching**: Uses a local implementation of the historical suffix hash for compatible call stack comparison; the CLI does not link Qt
 
 ### Performance
 

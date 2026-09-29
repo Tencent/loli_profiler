@@ -2,8 +2,8 @@
 #define LOLI_PROFILER_GUI_GUISNAPSHOT_H
 
 // POD snapshot types consumed by the ImGui panels.
-// Pure C++17 — NO Qt includes. The GuiDataBridge (the only Qt-aware file in
-// the GUI target) fills these from core profiling state once per frame/update.
+// Pure C++17 snapshot data. GuiDataBridge fills these from core profiling
+// state once per frame/update.
 
 #include <cstdint>
 #include <memory>

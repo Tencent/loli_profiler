@@ -4,6 +4,12 @@
 
 LoliProfiler captures native allocations in Android applications and displays call stacks, a treemap, memory timeline, screenshots, and smaps data. The desktop GUI and headless capture CLI use the same Qt-free C++ core.
 
+Click **Compare** in the toolbar or **File > Compare** to open a separate window. Choose two `.loli` captures, then inspect the dockable **Base**, **Comparer**, and **Diff** panels with independent search footers. They default to three columns; drag their tabs to arrange the workspace. `LoliProfilerCompare base.loli comparison.loli` opens it directly. CLI and GUI share the signed live-allocation comparison API; see the [comparison guide](docs/CLI_COMPARE_MODE.md).
+
+![Comparison window with three dockable panels and no capture data loaded](docs/images/imgui-compare-empty.png)
+
+The comparison feature builds on the work in [leoin2012's LoliProfiler fork](https://github.com/leoin2012/loli_profiler); its Loli Compare module credits **shuchangliu**. Thank you to both contributors. The Qt-free shared engine and ImGui comparison window were adapted and independently tested here.
+
 ![LoliProfiler showing a captured Android session with stacktrace, treemap, timeline, and screenshot](docs/images/readme-overview.png)
 
 ## Build
@@ -33,6 +39,7 @@ The GUI's **Console** tab shows capture and load timings. GUI and CLI use the sa
 | --- | --- |
 | `LoliProfilerImGui` | Launch or attach, inspect live/saved captures, and save `.loli` files. |
 | `LoliProfilerCLI` | Capture headlessly; export `.txt` or SQLite `.db`; compare captures; symbolize offline. |
+| `LoliProfilerCompare` | Compare two saved captures in independent, dockable Base/Comparer/Diff panels. |
 | `agentcli` Python package | Query the SQLite call tree from scripts or agents. The `loli` command remains available. |
 
 During capture, choose whether to keep every allocation record or retain only allocations still live at stop. In the Stacktrace panel, the **All Allocations / Persistent** selector changes the inspection view for saved records. Symbol names require a matching application library with suitable debug information.

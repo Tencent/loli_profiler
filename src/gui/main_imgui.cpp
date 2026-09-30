@@ -10,6 +10,7 @@
 #include "chartwidgets.h"
 #include "themes.h"
 #include "filedialogs.h"
+#include "shortcuts.h"
 #include "guidatabridge.h"
 #include "lolilogger.h"
 #include "guisnapshot.h"
@@ -20,6 +21,7 @@
 #include "pathutilslite.h"
 #include "appsettings.h"
 #include "processrunner.h"
+#include "comparelaunch.h"
 
 
 #include <SFML/Graphics/RenderWindow.hpp>
@@ -700,9 +702,12 @@ int main(int argc, char** argv) {
     std::string diagnosticLogPath;
     std::string diagnosticLevel;
     bool defaultDiagnosticLogPath = false;
+    bool smokeTest = false;
     for (int i = 1; i < argc; ++i) {
         const char* a = argv[i];
-        if (std::strcmp(a, "--log-file") == 0) {
+        if (std::strcmp(a, "--smoke-test") == 0) {
+            smokeTest = true;
+        } else if (std::strcmp(a, "--log-file") == 0) {
             if (i + 1 < argc && argv[i + 1][0] != '-')
                 diagnosticLogPath = argv[++i];
             else
@@ -719,6 +724,12 @@ int main(int argc, char** argv) {
             openRecordArg = a;  // bare path ending in .loli
         }
     }
+    if (smokeTest && !openRecordArg) {
+        std::fprintf(stderr, "--smoke-test requires --open <capture.loli>\n");
+        return 2;
+    }
+    if (smokeTest && diagnosticLogPath.empty())
+        defaultDiagnosticLogPath = true;
     const std::string defaultLogPath =
         (GuiExecutablePath().parent_path() / "loli_gui.log").string();
     const bool commandLineLogging = defaultDiagnosticLogPath ||
@@ -751,14 +762,7 @@ int main(int argc, char** argv) {
 
     sf::RenderWindow window(sf::VideoMode({1440, 810}), "LoliProfiler",
                             sf::Style::Default, sf::State::Windowed, settings);
-    std::filesystem::path iconDir;
-#ifdef _WIN32
-    wchar_t executablePath[MAX_PATH] = {};
-    if (GetModuleFileNameW(nullptr, executablePath, MAX_PATH) != 0)
-        iconDir = std::filesystem::path(executablePath).parent_path();
-#else
-    iconDir = std::filesystem::absolute(argv[0]).parent_path();
-#endif
+    const std::filesystem::path iconDir = GuiExecutablePath().parent_path();
     sf::Image windowIcon;
     if (!iconDir.empty() &&
         windowIcon.loadFromFile(iconDir / "res" / "loli_cat_icon.png"))
@@ -794,8 +798,15 @@ int main(int argc, char** argv) {
         // small default atlas (which makes text blocky on HiDPI).
         ImFontAtlas* fonts = io.Fonts;
         fonts->Clear();
-        ImFont* font = fonts->AddFontFromFileTTF("C:/Windows/Fonts/segoeui.ttf",
-                                                 13.0f * dpiScale);
+        ImFont* font = nullptr;
+#ifdef _WIN32
+        font = fonts->AddFontFromFileTTF("C:/Windows/Fonts/segoeui.ttf",
+                                       13.0f * dpiScale);
+#else
+        ImFontConfig fontConfig;
+        fontConfig.SizePixels = 13.0f * dpiScale;
+        font = fonts->AddFontDefault(&fontConfig);
+#endif
         if (!font)
             font = fonts->AddFontDefault(); // [[nodiscard]]: keep the returned font
         io.FontDefault = font;
@@ -824,6 +835,12 @@ int main(int argc, char** argv) {
         " adb=" + PathUtilsLite::GetADBExecutablePath() +
         " python=" + PathUtilsLite::GetPythonExecutablePath());
     std::string loadedRecordName;
+    std::string compareLaunchError;
+    bool showCompareLaunchError = false;
+    auto launchCompare = [&]() {
+        if (!gui::LaunchComparison(GuiExecutablePath(), compareLaunchError))
+            showCompareLaunchError = true;
+    };
     std::string recordPath;
     std::string pendingSymbolizeSave;
     std::string pendingSymbolLibrary;
@@ -1001,6 +1018,12 @@ int main(int argc, char** argv) {
     sf::Clock deltaClock;
     sf::Clock frameClock;
     auto lastSlowFrameLog = loli::LoliLogger::Clock::now() - std::chrono::seconds(2);
+    const auto smokeStarted = loli::LoliLogger::Clock::now();
+    int smokeStage = 0;
+    int smokeRenderedFrames = 0;
+    int smokeExitCode = 1;
+    std::size_t smokeRangeRecords = 0;
+    uint64_t smokeRangeBytes = 0;
 #ifdef __APPLE__
     constexpr const char* kRunShortcut = "Cmd+R";
     constexpr const char* kOpenShortcut = "Cmd+O";
@@ -1048,6 +1071,8 @@ int main(int argc, char** argv) {
         if (rangeRequested && !rangeReady) {
             gui::GuiDataBridge::TimeRangeTrees filtered;
             if (bridge.TryTakeTimeRangeTrees(filtered)) {
+                smokeRangeRecords = filtered.recordCount;
+                smokeRangeBytes = filtered.totalBytes;
                 rangeLiveAliasesAll = filtered.live &&
                     filtered.live.get() == filtered.all.get();
                 rangeStacktraceTree.Adopt(std::move(*filtered.all));
@@ -1124,6 +1149,42 @@ int main(int argc, char** argv) {
             frameSnapshot = emptySnapshot;
         const gui::GuiSnapshot& snapshot = *frameSnapshot;
         rebuildTreeIfNeeded();
+        if (smokeTest) {
+            if (loli::LoliLogger::Clock::now() - smokeStarted > std::chrono::seconds(120)) {
+                LOLI_ERROR("smoke") << "Timed out loading/analyzing saved record";
+                window.close();
+            } else if (smokeStage == 0 && pendingOpen.empty() && !bridge.IsLoading() &&
+                       !snapshot.records.empty() && !stacktraceTree.Nodes().empty()) {
+                int32_t firstMs = snapshot.records.front().timeMs;
+                int32_t lastMs = firstMs;
+                for (const auto& record : snapshot.records) {
+                    firstMs = std::min(firstMs, record.timeMs);
+                    lastMs = std::max(lastMs, record.timeMs);
+                }
+                LOLI_INFO("smoke") << "loaded records=" << snapshot.records.size()
+                    << " nodes=" << stacktraceTree.Nodes().size()
+                    << " timeline_samples=" << snapshot.memTimeline.size()
+                    << " timeline_series_mask=" << int(snapshot.memTimelineSeriesMask)
+                    << " live_tree=" << hasLiveTree;
+                timelineView.hasSelection = true;
+                timelineView.selStartMs = firstMs + (lastMs - firstMs) / 3.0;
+                timelineView.selEndMs = firstMs + (lastMs - firstMs) * 2.0 / 3.0;
+                smokeStage = 1;
+            } else if (smokeStage == 1 && rangeReady) {
+                uint64_t rootBytes = 0;
+                for (const int32_t root : rangeStacktraceTree.Roots())
+                    rootBytes += rangeStacktraceTree.NodeAt(root).totalSize;
+                if (smokeRangeRecords == 0 || rangeStacktraceTree.Nodes().empty() ||
+                    rootBytes != smokeRangeBytes) {
+                    LOLI_ERROR("smoke") << "Saved-record range/live-tree validation failed";
+                    window.close();
+                } else {
+                    LOLI_INFO("smoke") << "range records=" << smokeRangeRecords
+                        << " nodes=" << rangeStacktraceTree.Nodes().size();
+                    smokeStage = 2;
+                }
+            }
+        }
         const bool canStartCapture = !bridge.IsCapturing() &&
                                      !bridge.IsLoading() && !bridge.IsSaving() &&
                                      !bridge.IsFinalizing() && !symbolizeRunning;
@@ -1140,8 +1201,8 @@ int main(int argc, char** argv) {
 
         auto openRecordDialog = [&]() {
             auto path = FileDialogs::OpenFile({{"Loli Record", "loli"}});
-            // NFD blocks the SFML frame loop, so the key-up for Ctrl+O may be
-            // consumed by the native dialog. A stale Ctrl suppresses wheel
+            // NFD blocks the SFML frame loop, so shortcut key-up events may be
+            // consumed by the native dialog. A stale modifier suppresses wheel
             // scrolling in ImGui until the window loses and regains focus.
             ImGui::GetIO().ClearInputKeys();
             return path;
@@ -1197,6 +1258,7 @@ int main(int argc, char** argv) {
                 if (ImGui::MenuItem("Symbolize Record...", nullptr, false,
                                     canSaveRecord))
                     startSymbolize();
+                if (ImGui::MenuItem("Compare...")) launchCompare();
                 ImGui::Separator();
                 if (ImGui::MenuItem("Settings...", kSettingsShortcut)) {
                     showSettingsDialog = true;
@@ -1233,16 +1295,14 @@ int main(int argc, char** argv) {
 
         // Global shortcuts use Command on macOS and Control elsewhere.
         {
-            ImGuiIO& io = ImGui::GetIO();
-#ifdef __APPLE__
-            const bool mod = io.KeySuper;
-#else
-            const bool mod = io.KeyCtrl;
-#endif
-            if (mod && canStartCapture && ImGui::IsKeyPressed(ImGuiKey_R, false) &&
+            if (canStartCapture && gui::IsApplicationShortcutPressed(ImGuiKey_R) &&
                 !runLaunchDialog.IsOpen() && !captureConfigDialog.IsOpen())
+            {
+                LOLI_DEBUG("shortcut") << "action=run";
                 runLaunchDialog.Open(&bridge);
-            if (mod && canOpenRecord && ImGui::IsKeyPressed(ImGuiKey_O, false)) {
+            }
+            if (canOpenRecord && gui::IsApplicationShortcutPressed(ImGuiKey_O)) {
+                LOLI_DEBUG("shortcut") << "action=open";
                 if (auto path = openRecordDialog()) {
                     bridge.LoadRecord(*path);
                     loadedRecordName = *path;
@@ -1250,7 +1310,8 @@ int main(int argc, char** argv) {
                     window.setTitle("LoliProfiler - " + loadedRecordName);
                 }
             }
-            if (mod && canSaveRecord && ImGui::IsKeyPressed(ImGuiKey_S, false)) {
+            if (canSaveRecord && gui::IsApplicationShortcutPressed(ImGuiKey_S)) {
+                LOLI_DEBUG("shortcut") << "action=save";
                 auto path = FileDialogs::SaveFile({{"Loli Record", "loli"}});
                 ImGui::GetIO().ClearInputKeys();
                 if (path) {
@@ -1262,10 +1323,12 @@ int main(int argc, char** argv) {
                     }
                 }
             }
-            if (mod && ImGui::IsKeyPressed(ImGuiKey_Q, false)) {
+            if (gui::IsApplicationShortcutPressed(ImGuiKey_Q)) {
+                LOLI_DEBUG("shortcut") << "action=quit";
                 window.close();
             }
-            if (mod && ImGui::IsKeyPressed(ImGuiKey_Comma, false)) {
+            if (gui::IsApplicationShortcutPressed(ImGuiKey_Comma)) {
+                LOLI_DEBUG("shortcut") << "action=settings";
                 showSettingsDialog = true;
             }
         }
@@ -1291,8 +1354,10 @@ int main(int argc, char** argv) {
                 ImGui::GetStyle().FramePadding.x * 2.0f;
             const float leaksW = ImGui::CalcTextSize("Leaks").x +
                                  ImGui::GetStyle().FramePadding.x * 2.0f;
-            const float buttonsWidth = captureActionW + leaksW +
-                                       ImGui::GetStyle().ItemSpacing.x;
+            const float compareW = ImGui::CalcTextSize("Compare").x +
+                                   ImGui::GetStyle().FramePadding.x * 2.0f;
+            const float buttonsWidth = captureActionW + leaksW + compareW +
+                                       2.0f * ImGui::GetStyle().ItemSpacing.x;
             const float toolbarWidth = ImGui::GetContentRegionAvail().x;
             ImGui::SetCursorPosX((toolbarWidth - buttonsWidth) * 0.5f);
             if (capturing) {
@@ -1316,8 +1381,21 @@ int main(int argc, char** argv) {
                 showLeakViewChoice = true;
             if (!canAnalyzeLeaks) ImGui::EndDisabled();
             ImGui::SetItemTooltip("Select a timeline interval first. Compare callstack growth between its start and end marks.");
+            ImGui::SameLine();
+            if (ImGui::Button("Compare")) launchCompare();
+            ImGui::SetItemTooltip("Open a separate window to compare two saved captures.");
         }
         ImGui::End();
+
+        if (showCompareLaunchError) {
+            ImGui::OpenPopup("Compare launch failed");
+            showCompareLaunchError = false;
+        }
+        if (ImGui::BeginPopupModal("Compare launch failed", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+            ImGui::TextWrapped("%s", compareLaunchError.c_str());
+            if (ImGui::Button("OK")) ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+        }
 
         if (showLeakViewChoice) {
             ImGui::OpenPopup("Leaks view");
@@ -1500,7 +1578,9 @@ int main(int argc, char** argv) {
             ImGui::InputText("##sdk", sdkPath, sizeof(sdkPath));
             ImGui::SameLine();
             if (ImGui::SmallButton("Browse##sdk")) {
-                if (auto p = FileDialogs::PickFolder()) {
+                auto p = FileDialogs::PickFolder();
+                ImGui::GetIO().ClearInputKeys();
+                if (p) {
                     std::strncpy(sdkPath, p->c_str(), sizeof(sdkPath) - 1);
                     sdkPath[sizeof(sdkPath) - 1] = '\0';
                 }
@@ -1511,7 +1591,9 @@ int main(int argc, char** argv) {
             ImGui::InputText("##ndk", ndkPath, sizeof(ndkPath) - 1);
             ImGui::SameLine();
             if (ImGui::SmallButton("Browse##ndk")) {
-                if (auto p = FileDialogs::PickFolder()) {
+                auto p = FileDialogs::PickFolder();
+                ImGui::GetIO().ClearInputKeys();
+                if (p) {
                     std::strncpy(ndkPath, p->c_str(), sizeof(ndkPath) - 1);
                     ndkPath[sizeof(ndkPath) - 1] = '\0';
                 }
@@ -1765,6 +1847,17 @@ int main(int argc, char** argv) {
         window.clear();
         ImGui::SFML::Render(window);
         window.display();
+        if (smokeTest && smokeStage == 2 && ++smokeRenderedFrames == 30) {
+            sf::Texture rendered(window.getSize());
+            rendered.update(window);
+            if (rendered.copyToImage().saveToFile(diagnosticLogPath + ".png")) {
+                LOLI_INFO("smoke") << "PASS screenshot=" << diagnosticLogPath << ".png";
+                smokeExitCode = 0;
+            } else {
+                LOLI_ERROR("smoke") << "Could not save smoke screenshot";
+            }
+            window.close();
+        }
         const double frameMs = frameClock.getElapsedTime().asSeconds() * 1000.0;
         const auto frameNow = loli::LoliLogger::Clock::now();
         if (frameMs >= 100.0 && frameNow - lastSlowFrameLog >= std::chrono::seconds(1)) {
@@ -1786,5 +1879,5 @@ int main(int argc, char** argv) {
     gui::FreeTreemapState(treemapState);
     gui::FreeTreemapState(leakTreemapState);
     ImGui::SFML::Shutdown();
-    return 0;
+    return smokeTest ? smokeExitCode : 0;
 }

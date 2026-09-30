@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 #include <fstream>
+#include <filesystem>
 #include <sstream>
 
 #ifdef _WIN32
@@ -95,13 +96,9 @@ CaptureConfig LoadCaptureConfig(SavedCaptureConfigs* savedOut) {
         // Create with defaults when missing (CreateIfNoConfigFile parity).
         std::ifstream probe(path.c_str());
         if (!probe.good()) {
-#ifdef _WIN32
             const std::string dir = path.substr(0, path.find_last_of("\\/"));
-            CreateDirectoryA(dir.c_str(), nullptr);
-#else
-            const std::string dir = path.substr(0, path.find_last_of('/'));
-            mkdir(dir.c_str(), 0755); // best-effort
-#endif
+            std::error_code error;
+            std::filesystem::create_directories(dir, error); // best-effort
             std::ofstream create(path.c_str());
             if (create.good())
                 create << DefaultConfigContent();
@@ -155,13 +152,9 @@ CaptureConfig LoadCaptureConfig(SavedCaptureConfigs* savedOut) {
 
 bool StoreCaptureConfig(const CaptureConfig& config, const SavedCaptureConfigs* saved) {
     const std::string path = CaptureConfigFilePath();
-#ifdef _WIN32
     const std::string dir = path.substr(0, path.find_last_of("\\/"));
-    CreateDirectoryA(dir.c_str(), nullptr);
-#else
-    const std::string dir = path.substr(0, path.find_last_of('/'));
-    mkdir(dir.c_str(), 0755);
-#endif
+    std::error_code error;
+    std::filesystem::create_directories(dir, error);
 
     std::ofstream out(path.c_str());
     if (!out.good())

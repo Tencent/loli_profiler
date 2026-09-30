@@ -123,8 +123,8 @@ def ask(question: str, *, default: bool = False) -> bool:
 
 def menu() -> str | None:
     print("\nLoliProfiler build")
-    print("  1. Build GUI, CLI, Android hooks, and release zip")
-    print("  2. Build GUI and CLI only")
+    print("  1. Build profiling GUI, compare GUI, CLI, Android hooks, and release zip")
+    print("  2. Build profiling GUI, compare GUI, and CLI only")
     print("  3. Package existing binaries and hooks")
     print("  4. Install missing Android SDK/NDK tools")
     print("  q. Quit")
@@ -292,14 +292,21 @@ def run(command: list[str], *, dry_run: bool) -> None:
         subprocess.run(command, cwd=ROOT, check=True)
 
 
-def stage_windows_runtime() -> None:
-    destination = BUILD_DIR / "bin" / "release"
-    destination.mkdir(parents=True, exist_ok=True)
-    for name in ("LoliProfilerImGui.exe", "LoliProfilerCLI.exe"):
-        shutil.copy2(find_build_output(BUILD_DIR, name), destination / name)
-    # Users also launch directly from the VS Release directory. Keep both
-    # executable locations paired with the same freshly built Android hooks.
-    for runtime_dir in (destination, BUILD_DIR / "Release"):
+def stage_runtime(system: str) -> None:
+    if system == "windows":
+        destination = BUILD_DIR / "bin" / "release"
+        destination.mkdir(parents=True, exist_ok=True)
+        for name in ("LoliProfilerImGui.exe", "LoliProfilerCLI.exe", "LoliProfilerCompare.exe"):
+            shutil.copy2(find_build_output(BUILD_DIR, name), destination / name)
+        runtime_dirs = (destination, BUILD_DIR / "Release")
+    elif system == "macos":
+        runtime_dirs = (find_build_output(BUILD_DIR, "LoliProfilerCLI").parent,
+                        find_build_output(BUILD_DIR, "LoliProfilerImGui.app") /
+                        "Contents" / "MacOS")
+    else:
+        runtime_dirs = (find_build_output(BUILD_DIR, "LoliProfilerCLI").parent,)
+    # Keep every launch location paired with the freshly built runtime.
+    for runtime_dir in runtime_dirs:
         icon = runtime_dir / "res"
         icon.mkdir(parents=True, exist_ok=True)
         shutil.copy2(ROOT / "res" / "loli_cat_icon.png", icon / "loli_cat_icon.png")
@@ -312,7 +319,7 @@ def stage_windows_runtime() -> None:
                     target = runtime_dir / "remote" / compiler / abi
                     target.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(source, target / "libloli.so")
-    print("Staged local Windows runtime:", destination, "and", BUILD_DIR / "Release")
+    print("Staged local runtime:", ", ".join(str(path) for path in runtime_dirs))
 
 
 def build_native(system: str, *, dry_run: bool) -> None:
@@ -324,10 +331,10 @@ def build_native(system: str, *, dry_run: bool) -> None:
         command += ["-DCMAKE_BUILD_TYPE=Release"]
     run(command, dry_run=dry_run)
     run(["cmake", "--build", str(BUILD_DIR), "--config", "Release",
-         "--target", "LoliProfilerImGui", "LoliProfilerCLI", "--parallel"],
+         "--target", "LoliProfilerImGui", "LoliProfilerCLI", "LoliProfilerCompare", "--parallel"],
         dry_run=dry_run)
-    if system == "windows" and not dry_run:
-        stage_windows_runtime()
+    if not dry_run:
+        stage_runtime(system)
 
 
 def build_hooks(ndk: Path, system: str, *, dry_run: bool) -> None:
@@ -438,8 +445,8 @@ def main() -> int:
                     raise RuntimeError("NDK is required for a capture-ready release.")
             else:
                 build_hooks(ndk, args.platform, dry_run=args.dry_run)
-            if args.platform == "windows" and not args.dry_run:
-                stage_windows_runtime()
+            if not args.dry_run:
+                stage_runtime(args.platform)
         if args.mode in ("full", "package"):
             package(args.platform, dry_run=args.dry_run)
     except (OSError, RuntimeError, subprocess.CalledProcessError) as error:

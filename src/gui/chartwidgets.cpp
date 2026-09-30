@@ -289,6 +289,8 @@ void DrawMemoryTimelineChart(const GuiSnapshot& snapshot, TimelineView& view,
 
     // One polyline per series (NaN gaps between outside-range segments).
     for (int k = 0; k < kTimelineSeriesCount; ++k) {
+        if (!(snapshot.memTimelineSeriesMask & (1u << k)))
+            continue;
         const ImU32 col = kTimelineSeries[k].color;
         bool pen = false;
         ImVec2 prev(0.0f, 0.0f);
@@ -357,6 +359,8 @@ void DrawMemoryTimelineChart(const GuiSnapshot& snapshot, TimelineView& view,
         ImGui::BeginTooltip();
         ImGui::Text("Time: %.2fs", samples[best].timeMs / 1000.0);
         for (int k = 0; k < kTimelineSeriesCount; ++k) {
+            if (!(snapshot.memTimelineSeriesMask & (1u << k)))
+                continue;
             ImGui::TextColored(ImColor(kTimelineSeries[k].color), "%s:", kTimelineSeries[k].name);
             ImGui::SameLine();
             ImGui::Text("%s", FormatMB(samples[best].*kTimelineSeries[k].member).c_str());

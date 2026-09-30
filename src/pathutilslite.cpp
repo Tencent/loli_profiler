@@ -2,6 +2,9 @@
 #include "appsettings.h"
 
 #include <cstdio>
+#include <algorithm>
+#include <filesystem>
+#include <regex>
 #include <vector>
 
 #ifdef _WIN32
@@ -95,7 +98,29 @@ std::string PathUtilsLite::GetPythonExecutablePath() {
     // to the UI layer and is not ported.)
     if (!pythonPath_.empty() && FileExists(pythonPath_))
         return pythonPath_;
-
+    // Current NDKs may no longer bundle Python. Resolve the host interpreter
+    // for CLI capture too, where no file-selection dialog can supply it.
+    const std::string path = GetEnvVar("PATH");
+#ifdef _WIN32
+    const char separator = ';';
+    const std::vector<std::string> names = {"python.exe", "python3.exe"};
+#else
+    const char separator = ':';
+    const std::vector<std::string> names = {"python3", "python"};
+#endif
+    for (const auto& name : names) {
+        std::size_t start = 0;
+        while (start < path.size()) {
+            const auto end = path.find(separator, start);
+            const auto directory = path.substr(start, end - start);
+            const auto candidate = (std::filesystem::path(directory) / name).string();
+            if (!directory.empty() && FileExists(candidate))
+                return candidate;
+            if (end == std::string::npos)
+                break;
+            start = end + 1;
+        }
+    }
     return std::string();
 }
 
@@ -115,10 +140,11 @@ std::string PathUtilsLite::GetNDKToolPath(const std::string& name, bool armv7) {
         if (FileExists(toolPath))
             return toolPath;
 
-        toolPath = MakeNDKToolPath(ndkPath_, "/toolchains/llvm", "llvm-", name);
-        if (FileExists(toolPath))
-            return toolPath;
     }
+    // Modern NDKs provide architecture-independent LLVM tools for every ABI.
+    toolPath = MakeNDKToolPath(ndkPath_, "/toolchains/llvm", "llvm-", name);
+    if (FileExists(toolPath))
+        return toolPath;
     return std::string();
 }
 
@@ -158,9 +184,11 @@ void PathUtilsLite::SavePythonPathSettings() {
 }
 
 std::string PathUtilsLite::SearchAndroidSDK() {
-    const std::string androidHome = GetEnvVar("ANDROID_HOME");
-    if (!androidHome.empty() && FileExists(androidHome))
-        return androidHome;
+    for (const char* key : {"ANDROID_HOME", "ANDROID_SDK_ROOT"}) {
+        const std::string path = GetEnvVar(key);
+        if (!path.empty() && FileExists(path))
+            return path;
+    }
 #ifdef _WIN32
     const std::string username = GetEnvVar("USERNAME");
     // android studio default path
@@ -174,9 +202,12 @@ std::string PathUtilsLite::SearchAndroidSDK() {
         if (FileExists(nvpack))
             return nvpack;
     }
+#elif defined(__APPLE__)
+    const std::string sdkPath = GetEnvVar("HOME") + "/Library/Android/sdk";
 #else
-    const std::string username = GetEnvVar("USER");
-    const std::string sdkPath = "/Users/" + username + "/Library/Android/sdk";
+    const std::string sdkPath = GetEnvVar("HOME") + "/Android/Sdk";
+#endif
+#ifndef _WIN32
     if (FileExists(sdkPath))
         return sdkPath;
 #endif
@@ -184,18 +215,42 @@ std::string PathUtilsLite::SearchAndroidSDK() {
 }
 
 std::string PathUtilsLite::SearchAndroidNDK() {
-    const std::string& sdkPath = GetSDKPath();
-    if (sdkPath.empty() || !FileExists(sdkPath))
-        return std::string();
-    std::vector<std::string> pathes = {
-        sdkPath + "/ndk-bundle",
+    const std::vector<std::string> paths = {
+        GetEnvVar("ANDROID_NDK_HOME"),
         GetEnvVar("ANDROID_NDK_ROOT"),
         GetEnvVar("NDK_ROOT"),
         GetEnvVar("NDKROOT"),
     };
-    for (const auto& path : pathes) {
+    for (const auto& path : paths) {
         if (!path.empty() && FileExists(path))
             return path;
     }
+    const std::string sdkPath = GetSDKPath().empty() ? SearchAndroidSDK() : GetSDKPath();
+    if (sdkPath.empty())
+        return {};
+    namespace fs = std::filesystem;
+    std::vector<std::pair<std::vector<int>, std::string>> installed;
+    std::error_code ec;
+    fs::directory_iterator iterator(fs::path(sdkPath) / "ndk", ec);
+    const fs::directory_iterator end;
+    const std::regex digits("[0-9]+");
+    for (; !ec && iterator != end; iterator.increment(ec)) {
+        const auto path = iterator->path();
+        if (!FileExists((path / "ndk-build").string()) &&
+            !FileExists((path / "ndk-build.cmd").string()))
+            continue;
+        const std::string version = path.filename().string();
+        std::vector<int> parts;
+        for (std::sregex_iterator match(version.begin(), version.end(), digits), last;
+             match != last; ++match)
+            parts.push_back(std::stoi(match->str()));
+        installed.emplace_back(std::move(parts), path.string());
+    }
+    if (!installed.empty()) {
+        std::sort(installed.begin(), installed.end());
+        return installed.back().second;
+    }
+    if (FileExists(sdkPath + "/ndk-bundle"))
+        return sdkPath + "/ndk-bundle";
     return std::string();
 }

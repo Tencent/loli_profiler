@@ -35,6 +35,7 @@ set(LOLI_QTFREE_SRCS
     src/smaps/smapssectionlite.cpp
     src/lolilogger.cpp
     src/profilecomparatorlite.cpp
+    src/profilecomparison.cpp
     src/profilecomparatorlite_sqlite.cpp
     src/captureconfig.cpp
     src/symboltranslator.cpp
@@ -57,6 +58,7 @@ set(LOLI_QTFREE_INCS
     include/smaps/smapssectionlite.h
     include/lolilogger.h
     include/profilecomparatorlite.h
+    include/profilecomparison.h
     include/captureconfig.h
     include/symboltranslator.h
     include/clicapture.h
@@ -64,7 +66,10 @@ set(LOLI_QTFREE_INCS
 
 if (APPLE)
     set(OS_BUNDLE MACOSX_BUNDLE)
-    set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13" CACHE STRING "Minimum OS X deployment version")
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0" CACHE STRING "Minimum macOS deployment version")
+    if(CMAKE_OSX_DEPLOYMENT_TARGET VERSION_LESS "13.0")
+        message(FATAL_ERROR "Supported LoliProfiler macOS builds target macOS 13.0 or newer")
+    endif()
     set(COMPANY "Tencent")
     set(COPYRIGHT "Copyright (c) Tencent. All rights reserved.")
     set(IDENTIFIER "com.tencent.LoliProfiler")
@@ -81,6 +86,11 @@ endif()
 
 set(PROJECT_NAME LoliProfiler)
 project(${PROJECT_NAME})
+if(APPLE)
+    # Enable in the common parent scope: SFML and NFD both compile Objective-C
+    # sources, and a sibling's enable_language() does not populate this scope.
+    enable_language(OBJC OBJCXX)
+endif()
 if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
     # Vendored dependencies have install() rules. Keep a plain `cmake
     # --install` inside the build tree instead of writing to Program Files.
@@ -89,8 +99,8 @@ if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 endif()
 
 # Qt-free since the remove-qt change: no find_package(Qt5) anywhere. The
-# executables are LoliProfilerImGui (GUI) and LoliProfilerCLI (headless),
-# both built from the LoliCore static library.
+# executables are LoliProfilerImGui, LoliProfilerCompare, and LoliProfilerCLI,
+# all built from the LoliCore static library.
 
 # Avoid generating ZERO_CHECK VS project, must in root CMakeLists.txt
 if(MSVC)
@@ -190,6 +200,9 @@ if(BUILD_QTFREE_CLI AND BUILD_QTFREE_CORE AND LOLI_QTFREE_SRCS)
         target_compile_options(LoliProfilerCLI PRIVATE "-Wall" "-Wextra" "-Wno-missing-braces")
     endif()
     target_link_libraries(LoliProfilerCLI PRIVATE LoliCore)
+    if(WIN32)
+        target_link_libraries(LoliProfilerCLI PRIVATE shell32)
+    endif()
     install(TARGETS LoliProfilerCLI DESTINATION ${CMAKE_BINARY_DIR}/bin/release)
 endif()
 
@@ -230,6 +243,7 @@ add_subdirectory(thirdparty/nativefiledialog-extended)
 # OpenGL3 backend is compiled here.
 set(IMGUI_GUI_SRCS
     src/gui/main_imgui.cpp
+    src/gui/comparelaunch.cpp
     src/gui/themes.cpp
     src/gui/filedialogs.cpp
     src/gui/guidatabridge.cpp
@@ -255,6 +269,7 @@ set(IMGUI_GUI_INCS
     src/gui/treemappanel.h
     src/gui/themes.h
     src/gui/filedialogs.h
+    src/gui/shortcuts.h
 )
 
 add_executable(LoliProfilerImGui ${OS_BUNDLE}
@@ -268,7 +283,11 @@ elseif(APPLE)
         MACOSX_PACKAGE_LOCATION Resources)
     target_sources(LoliProfilerImGui PRIVATE res/loli_cat_icon.icns)
     set_target_properties(LoliProfilerImGui PROPERTIES
-        MACOSX_BUNDLE_ICON_FILE loli_cat_icon.icns)
+        MACOSX_BUNDLE_ICON_FILE loli_cat_icon.icns
+        MACOSX_BUNDLE_GUI_IDENTIFIER "${IDENTIFIER}"
+        MACOSX_BUNDLE_BUNDLE_NAME "LoliProfiler"
+        MACOSX_BUNDLE_COPYRIGHT "${COPYRIGHT}"
+        MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/cmake/macosx_bundle_info.plist.in")
 endif()
 add_custom_command(TARGET LoliProfilerImGui POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:LoliProfilerImGui>/res"
@@ -304,10 +323,12 @@ target_link_libraries(LoliProfilerImGui
         SFML::Graphics
         SFML::Window
         SFML::System
-        sfml-main
         ImGui-SFML::ImGui-SFML
         nfd
 )
+if(TARGET sfml-main)
+    target_link_libraries(LoliProfilerImGui PRIVATE sfml-main)
+endif()
 
 if(WIN32)
     target_link_libraries(LoliProfilerImGui PRIVATE opengl32)
@@ -325,4 +346,81 @@ endif()
 install(TARGETS LoliProfilerImGui DESTINATION ${CMAKE_BINARY_DIR}/bin/release)
 install(FILES res/loli_cat_icon.png DESTINATION ${CMAKE_BINARY_DIR}/bin/release/res)
 
+# Standalone desktop comparison shares the same LoliCore API as --compare.
+if(WIN32)
+    set(COMPARE_BUNDLE WIN32)
+else()
+    set(COMPARE_BUNDLE "")
+endif()
+add_executable(LoliProfilerCompare ${COMPARE_BUNDLE}
+    src/gui/main_compare.cpp
+    src/gui/comparetreestate.cpp
+    src/gui/comparepanel.cpp
+    src/gui/filedialogs.cpp
+    src/gui/themes.cpp)
+set_target_properties(LoliProfilerCompare PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+target_link_libraries(LoliProfilerCompare PRIVATE LoliCore SFML::Graphics SFML::Window SFML::System
+    ImGui-SFML::ImGui-SFML nfd)
+if(TARGET sfml-main)
+    target_link_libraries(LoliProfilerCompare PRIVATE sfml-main)
+endif()
+if(MSVC)
+    target_compile_options(LoliProfilerCompare PRIVATE /W3 /EHsc /MP)
+    target_compile_definitions(LoliProfilerCompare PRIVATE _CRT_SECURE_NO_WARNINGS=1 NOMINMAX)
+endif()
+if(WIN32)
+    target_sources(LoliProfilerCompare PRIVATE windows.rc)
+    target_link_libraries(LoliProfilerCompare PRIVATE opengl32 shell32)
+elseif(APPLE)
+    target_link_libraries(LoliProfilerCompare PRIVATE "-framework OpenGL")
+endif()
+install(TARGETS LoliProfilerCompare DESTINATION ${CMAKE_BINARY_DIR}/bin/release)
+add_dependencies(LoliProfilerImGui LoliProfilerCompare)
+
 endif() # BUILD_IMGUI_GUI
+
+option(BUILD_COMPARISON_TESTS "Build focused comparison regression tests" OFF)
+if(BUILD_COMPARISON_TESTS)
+    enable_testing()
+    add_executable(LoliComparisonTests tests/comparison_tests.cpp src/gui/comparetreestate.cpp src/gui/comparelaunch.cpp)
+    target_include_directories(LoliComparisonTests PRIVATE src/gui)
+    target_link_libraries(LoliComparisonTests PRIVATE LoliCore)
+    set_target_properties(LoliComparisonTests PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+    add_test(NAME comparison-regressions COMMAND LoliComparisonTests)
+endif()
+
+# Focused host-path regressions; independent of an attached Android device.
+option(BUILD_PLATFORM_TESTS "Build platform tool/runtime path regression tests" OFF)
+if(BUILD_PLATFORM_TESTS)
+    enable_testing()
+    add_executable(LoliPlatformPathsTest tests/platform_paths.cpp)
+    set_target_properties(LoliPlatformPathsTest PROPERTIES
+        CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tests")
+    target_link_libraries(LoliPlatformPathsTest PRIVATE LoliCore)
+    add_test(NAME platform_paths COMMAND LoliPlatformPathsTest)
+    add_executable(LoliCallTreeTest tests/calltree_identity.cpp)
+    set_target_properties(LoliCallTreeTest PROPERTIES
+        CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tests")
+    target_link_libraries(LoliCallTreeTest PRIVATE LoliCore)
+    add_test(NAME calltree_identity COMMAND LoliCallTreeTest)
+    set_tests_properties(calltree_identity PROPERTIES TIMEOUT 30)
+    if(TARGET ImGui-SFML::ImGui-SFML)
+        add_executable(LoliGuiShortcutsTest tests/gui_shortcuts.cpp)
+        set_target_properties(LoliGuiShortcutsTest PROPERTIES
+            CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON
+            RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tests")
+        target_include_directories(LoliGuiShortcutsTest PRIVATE src/gui)
+        target_link_libraries(LoliGuiShortcutsTest PRIVATE ImGui-SFML::ImGui-SFML)
+        add_test(NAME gui_shortcuts COMMAND LoliGuiShortcutsTest)
+        set_tests_properties(gui_shortcuts PROPERTIES TIMEOUT 30)
+    endif()
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME jdwp_injector COMMAND "${Python3_EXECUTABLE}"
+            -m unittest discover -s "${CMAKE_CURRENT_SOURCE_DIR}/tests"
+            -p test_jdwp_injector.py)
+        set_tests_properties(jdwp_injector PROPERTIES TIMEOUT 30)
+    endif()
+endif()

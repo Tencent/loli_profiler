@@ -547,18 +547,7 @@ void CliCaptureSession::FinishStopSequence() {
         addrs.erase(std::unique(addrs.begin(), addrs.end()), addrs.end());
 
         auto& map = session_->symbolMap[symLibName];
-        std::string symbolizerPath;
-        const std::string ndk = PathUtilsLite::GetNDKPath();
-        if (!ndk.empty()) {
-#ifdef _WIN32
-            const std::string candidate = ndk + "/toolchains/llvm/prebuilt/windows-x86_64/bin/llvm-symbolizer.exe";
-#else
-            const std::string candidate = ndk + "/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-symbolizer";
-#endif
-            std::ifstream probe(candidate.c_str());
-            if (probe.good())
-                symbolizerPath = candidate;
-        }
+        const std::string symbolizerPath = PathUtilsLite::GetNDKToolPath("symbolizer");
         if (!symbolizerPath.empty()) {
             std::unordered_map<uint64_t, std::string> resolved;
             const size_t count = loli::TranslateAddressesSymbolizer(

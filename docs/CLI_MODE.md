@@ -8,6 +8,7 @@ LoliProfiler now includes a dedicated CLI executable (`LoliProfilerCLI.exe`) des
 
 - **LoliProfilerImGui.exe** - GUI application
 - **LoliProfilerCLI.exe** - Dedicated console application (CLI only, smaller size, better console integration)
+- **LoliProfilerCompare.exe** - Separate ImGui comparison window; accepts `base.loli comparison.loli` or `--base base.loli --compare comparison.loli`. See [comparison](CLI_COMPARE_MODE.md).
 
 ## Features
 
@@ -238,7 +239,7 @@ LoliProfilerCLI.exe --compare baseline.loli current.loli --out diff.txt
 ### Comparison Options
 
 - `--compare <baseline.loli> <current.loli>` - Compare two profile files
-- `--out <output_path>` - Output file (`.txt` for text report, `.loli` for GUI-viewable format)
+- `--out <output_path>` - Exact signed text report (`.txt`); signed `.loli` export is rejected
 - `--skip-root-levels <n>` - Skip top N call stack levels (useful for system libs without symbols)
 
 ### Output Formats
@@ -247,19 +248,18 @@ LoliProfilerCLI.exe --compare baseline.loli current.loli --out diff.txt
 ```
 === LoliProfiler Comparison Report ===
 
-Baseline total size: 628.12 MB
-Comparison total size: 631.71 MB
-Size delta: +3.59 MB
+Baseline total bytes: 70
+Comparison total bytes: 85
+Size delta bytes: 15
 
-=== Memory Growth (Delta: Comparison - Baseline) ===
+=== Memory Diff (Comparison - Base) ===
+Columns: function [library], delta bytes, delta count, self delta bytes, self delta count
 
-FRunnableThreadPThread::Run(), +18.44 MB, +79446
-    FAsyncLoadingThread::Run(), +9.94 MB, +65478
-        UDataTable::Serialize(FArchive&), +5.20 MB, +56497
-            ...
+root [game.so], +15, +0, -10, +0
+    child [game.so], +25, +0, +25, +0
 ```
 
-**Loli format:** Can be opened in LoliProfiler GUI for interactive exploration.
+Use **Compare** in the ImGui toolbar or **File > Compare** for a separate three-tab window. It uses the same API and reports as the CLI. Both sides compare live allocations after saved free events; reductions, small changes, count-only changes, and allocations directly on internal nodes are retained. See the [comparison guide](CLI_COMPARE_MODE.md) for full rules and standalone arguments.
 
 ## Heap Exploration with the `loli` CLI
 

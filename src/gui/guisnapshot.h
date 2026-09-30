@@ -117,6 +117,7 @@ struct GuiSnapshot {
     std::shared_ptr<StacktraceTree>  liveStackTree; // filtered by free sequence
     bool                             liveTreeUsesAll = false; // saved free filter excludes nothing
     std::vector<MemInfoSample>       memTimeline;
+    uint8_t                          memTimelineSeriesMask = 0x3f;
     std::vector<ScreenshotSnapshot>  screenshots;
     std::vector<SMapsSectionSnapshot> smaps;
     std::vector<std::string>         logLines;     // console output tail

@@ -8,21 +8,13 @@
 #include <vector>
 
 #include "lolirecord.h"
+#include "profilecomparison.h"
 
-// Qt-free port of include/profilecomparator.h / src/profilecomparator.cpp
-// (remove-qt-dependency task 5.1).
-//
-// Loads .loli captures through loli::ReadSession, compares baseline vs
-// comparison sessions, and produces:
-//   - Compare(): allocation-delta stats + delta call tree (ExportToText /
-//     ExportToLoli)
-//   - DumpProfile(): single-profile live-allocation call tree
-//     (ExportDumpToText)
-//
-// The port reproduces the Qt implementation step for step, including the
-// suffix-hash tree merging (qHashRange parity, see
-// BuildCallTreeWithHashMap), the 1 KiB delta threshold, and the exact
-// text-export formatting and the SQLite snapshot schema.
+// Compatibility facade for CLI snapshot dump and comparison callers.
+// Compare delegates to the exact signed live-allocation API in
+// profilecomparison.h. DumpProfile retains the legacy snapshot tree and
+// SQLite schema. New file comparison consumers should call CompareFiles
+// directly, which releases each parsed session before loading the next.
 class ProfileComparatorLite {
 public:
     ProfileComparatorLite() = default;
@@ -51,18 +43,19 @@ public:
     bool ExportDumpToText(const std::string& outputPath);
     bool ExportDumpToSqlite(const std::string& outputPath);
 
-    // Export the delta as a .loli file (via loli::WriteSession). Requires
-    // Compare().
+    // Legacy capture export. Signed comparison returns a clear error because
+    // .loli cannot faithfully represent signed allocation counts/self metrics.
     bool ExportToLoli(const std::string& outputPath);
 
     struct ComparisonStats {
         uint64_t baselineTotalSize = 0;
         uint64_t comparisonTotalSize = 0;
         int64_t sizeDelta = 0;         // positive = growth, negative = reduction
-        int baselineAllocCount = 0;
-        int comparisonAllocCount = 0;
-        int changedAllocations = 0;    // allocations with size growth >1KB
-        int newAllocationsCount = 0;   // allocations only in comparison
+        int64_t baselineAllocCount = 0;
+        int64_t comparisonAllocCount = 0;
+        int64_t changedAllocations = 0; // changed allocation stack paths
+        int64_t newAllocationsCount = 0;
+        int64_t removedAllocationsCount = 0;
     };
 
     const ComparisonStats& GetStats() const { return stats_; }
@@ -99,36 +92,41 @@ private:
         const std::unordered_map<uint32_t, std::string>& internTable;
     };
 
-    // Hash-based call tree building, matching the Qt implementation (and
-    // MainWindow::GetMergedCallstacks): the node map key is the qHashRange
-    // value of the callstack suffix from the current frame to the end, so
-    // merge decisions are identical to the Qt build (same hash, same key
-    // equality semantics on the uint32 value).
-    std::unordered_map<uint32_t, CallTreeNode*> BuildCallTreeWithHashMap(
+    struct PathKey {
+        std::size_t parent;
+        std::string library;
+        std::string function;
+        bool operator==(const PathKey& other) const {
+            return parent == other.parent && library == other.library &&
+                   function == other.function;
+        }
+    };
+    struct PathKeyHash {
+        std::size_t operator()(const PathKey& key) const {
+            std::size_t hash = key.parent;
+            for (const auto* text : {&key.library, &key.function})
+                hash ^= std::hash<std::string>{}(*text) + 0x9e3779b9u +
+                        (hash << 6) + (hash >> 2);
+            return hash;
+        }
+    };
+    // Exact snapshot identities retain colliding names and recursive frames.
+    std::unordered_map<PathKey, std::size_t, PathKeyHash> pathIds_;
+    std::unordered_map<std::size_t, CallTreeNode*> BuildCallTree(
         const TreeSource& source, std::vector<CallTreeNode*>& roots);
 
-    // qHashRange(...) over the per-frame string hashes: Qt's
-    // QHashCombine fold, seed 0.
-    static uint32_t SuffixHash(const std::vector<uint32_t>& nameHashes,
-                               std::size_t idx);
-
-    void WriteCallTreeToText(std::ostream& stream, CallTreeNode* node, int depth);
     void WriteCallTreeToTextAbsolute(std::ostream& stream, CallTreeNode* node, int depth);
-
-    // Delta tree -> records + callstack map for .loli export. Callstacks are
-    // stored leaf-first (allocation site first, root last) per the .loli
-    // format, so the root-to-leaf path is reversed.
-    void ConvertDeltaTreeToRecords(std::vector<loli::Record>& stackRecords,
-                                   std::unordered_map<LoliUuid, loli::CallStack,
-                                       LoliUuidHash>& callStackMap);
 
     loli::Session baselineSession_;
     loli::Session comparisonSession_;
+    std::string baselinePath_, comparisonPath_;
     ComparisonStats stats_;
     std::string errorMessage_;
     bool baselineLoaded_ = false;
     bool comparisonLoaded_ = false;
     bool compared_ = false;
+    bool signedComparison_ = false;
+    loli::ComparisonResult comparisonResult_;
     int skipRootLevels_ = 0;
 
     // Delta tree roots for export (owns the nodes).

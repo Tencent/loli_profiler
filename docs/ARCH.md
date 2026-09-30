@@ -1,10 +1,11 @@
 # Architecture
 
-LoliProfiler has two native executables and one Python analysis package. The GUI and headless CLI link the same Qt-free `LoliCore` library. `agentcli` reads SQLite snapshots exported by the native CLI.
+LoliProfiler has three native executables and one Python analysis package. The profiling GUI, comparison GUI, and headless CLI link the same Qt-free `LoliCore` library. `agentcli` reads SQLite snapshots exported by the native CLI.
 
 ```mermaid
 flowchart LR
   GUI[ImGui GUI] --> Core[LoliCore]
+  Compare[Standalone comparison GUI] --> Core
   CLI[Headless CLI] --> Core
   Core --> ADB[adb and JDWP injector]
   Core --> Socket[Device TCP channel]
@@ -20,6 +21,8 @@ flowchart LR
 | Component | Source | Responsibility |
 | --- | --- | --- |
 | GUI shell | `src/gui/main_imgui.cpp` | Dock layout, menus, shortcuts, modal dialogs, and frame loop. |
+| Comparison window | `src/gui/main_compare.cpp`, `comparetreestate.cpp`, `comparepanel.cpp` | Async comparison and three independently searchable, clipped trees. |
+| Shared comparison | `include/profilecomparison.h`, `src/profilecomparison.cpp` | Exact structural union tree, signed inclusive/self live metrics, and reports shared by GUI and CLI. |
 | GUI session bridge | `src/gui/guidatabridge.cpp` | Capture state and published snapshots; adopts completed file work on the GUI thread. |
 | Capture controls | `src/gui/runlaunchdialog.cpp`, `captureconfigdialog.cpp` | Device, app, retention policy, and `loli3.conf` settings. |
 | Headless capture | `src/main_cli2.cpp`, `src/clicapture.cpp` | Timed/attached capture and `.loli` save. |
@@ -28,7 +31,7 @@ flowchart LR
 | Process and async work | `src/processrunner.cpp`, `src/threadpool.cpp` | ADB/NDK subprocesses, waits, cancellation, and off-thread work. |
 | Logging | `include/lolilogger.h`, `src/lolilogger.cpp` | Shared GUI/CLI severity levels, source-tagged records, Console ring, and optional file/terminal sinks. |
 | File format | `src/lolistream.cpp`, `src/lolirecord.cpp` | Read/write version-106 `.loli` files in the old Qt-compatible byte layout. |
-| Analysis/export | `src/profilecomparatorlite.cpp`, `src/profilecomparatorlite_sqlite.cpp` | Live/cumulative trees, comparisons, text reports, and SQLite snapshots. |
+| Snapshot export and compatibility facade | `src/profilecomparatorlite.cpp`, `src/profilecomparatorlite_sqlite.cpp` | Legacy snapshot trees and SQLite exports; comparison delegates to the shared API. |
 | Python queries | `agentcli/` | Indexed tree exploration; installed commands are `loli` and `agentcli`. |
 
 ## Capture flow

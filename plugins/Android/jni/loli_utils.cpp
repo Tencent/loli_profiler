@@ -58,7 +58,16 @@ uintptr_t loli_get_nextstackframe(uintptr_t fp) {
 
 uintptr_t loli_get_stackframepc(uintptr_t fp) {
     const uintptr_t* fp_addr = reinterpret_cast<const uintptr_t*>(fp);
+#if defined(__aarch64__)
+    // Android ARM64 return addresses may carry pointer-authentication bits.
+    // XPACLRI uses the HINT encoding, so it is a no-op on older ARM cores.
+    // As in Chromium's GetStackFramePC, strip before validating or saving PCs.
+    register uintptr_t pc __asm__("x30") = fp_addr[1];
+    __asm__("hint #7" : "+r"(pc));
+    return pc;
+#else
     return fp_addr[1];
+#endif
 }
 
 bool loli_is_stackframe_valid(uintptr_t fp, uintptr_t prev_fp, uintptr_t stack_end) {

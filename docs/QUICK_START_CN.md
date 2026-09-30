@@ -2,6 +2,16 @@
 
 LoliProfiler 用于采集 Android 应用的原生内存分配及调用栈。桌面程序为 `LoliProfilerImGui`，`LoliProfilerCLI` 提供无界面采集和文件转换。
 
+| 操作 | macOS | Windows / Linux |
+| --- | --- | --- |
+| 打开记录 | Cmd+O | Ctrl+O |
+| 运行 / 启动 | Cmd+R | Ctrl+R |
+| 另存记录 | Cmd+S | Ctrl+S |
+| 设置 | Cmd+, | Ctrl+, |
+| 退出 | Cmd+Q | Ctrl+Q |
+
+macOS 文本输入框的全选、复制、剪切、粘贴也使用 Command 键。
+
 ## 1. 设置 Android 路径
 
 打开 **File > Settings**，选择 Android SDK 和 NDK。SDK 中的 `platform-tools/adb` 是程序使用的 ADB 客户端；建议与 Android Studio、Unreal 使用同一份 Platform-Tools。NDK 用于符号翻译。

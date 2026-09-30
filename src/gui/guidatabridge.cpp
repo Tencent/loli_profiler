@@ -1445,23 +1445,27 @@ void GuiDataBridge::LoadRecord(const std::string& path) {
         progress->store(0.8f);
 
         // mem timeline
-        if (session->memSeries.size() >= 6) {
+        if (!session->memSeries.empty()) {
             const auto& s0 = session->memSeries[0];
+            snap->memTimelineSeriesMask = 0;
+            for (size_t k = 0; k < std::min(session->memSeries.size(), size_t{6}); ++k)
+                if (!session->memSeries[k].empty())
+                    snap->memTimelineSeriesMask |= static_cast<uint8_t>(1u << k);
             snap->memTimeline.reserve(s0.size());
-            for (size_t j = 0; j < s0.size() && j < session->memSeries[1].size() &&
-                               j < session->memSeries[2].size() &&
-                               j < session->memSeries[3].size() &&
-                               j < session->memSeries[4].size() &&
-                               j < session->memSeries[5].size();
-                 j++) {
+            for (size_t j = 0; j < s0.size(); j++) {
+                const auto value = [&](size_t series) {
+                    return series < session->memSeries.size() &&
+                           j < session->memSeries[series].size()
+                        ? static_cast<uint32_t>(session->memSeries[series][j].value) : 0u;
+                };
                 MemInfoSample m;
                 m.timeMs = SecondsToSnapshotMs(s0[j].time);
-                m.total = static_cast<uint32_t>(session->memSeries[0][j].value);
-                m.nativeHeap = static_cast<uint32_t>(session->memSeries[1][j].value);
-                m.gfxDev = static_cast<uint32_t>(session->memSeries[2][j].value);
-                m.eglMtrack = static_cast<uint32_t>(session->memSeries[3][j].value);
-                m.glMtrack = static_cast<uint32_t>(session->memSeries[4][j].value);
-                m.unknown = static_cast<uint32_t>(session->memSeries[5][j].value);
+                m.total = value(0);
+                m.nativeHeap = value(1);
+                m.gfxDev = value(2);
+                m.eglMtrack = value(3);
+                m.glMtrack = value(4);
+                m.unknown = value(5);
                 snap->memTimeline.push_back(m);
             }
         }

@@ -8,7 +8,7 @@ LoliProfiler is Qt-free. It builds `LoliProfilerImGui` (GUI), `LoliProfilerCLI` 
 - Python 3.8 or newer for packaging; Python 3.10 or newer to run `agentcli`.
 - JDK 17 or newer only if the build driver needs to install Android packages through Google's `sdkmanager`.
 - An Android NDK for capture-ready packages. Set `ANDROID_NDK_HOME` or `Ndk_R20_CMD` to its `ndk-build` executable. An older `Ndk_R16_CMD` is optional for legacy GCC/armeabi hooks.
-- On Linux, the graphics development libraries listed in the [Linux guide](BUILD_LINUX.md). On macOS, Xcode command-line tools.
+- On Linux, the graphics development libraries listed in the [Linux guide](BUILD_LINUX.md). On macOS, Xcode command-line tools and macOS 13+; install Python 3.10+ to run sample validation and the agent CLI (Apple's Python 3.9 is insufficient).
 
 No Qt SDK or runtime is needed.
 
@@ -18,7 +18,7 @@ No Qt SDK or runtime is needed.
 python scripts\build.py
 ```
 
-Without arguments, `scripts/build.py` opens an interactive menu: full release, native binaries only, package existing binaries, or install missing Android tools. A full build configures VS2022, builds both executables and Android hooks, and creates `dist/LoliProfiler-windows.zip`. Android object files are kept in NDK-specific directories under `build/ndk-obj`, so switching NDK versions does not reuse incompatible intermediates.
+Without arguments, `scripts/build.py` opens an interactive menu: full release, native binaries only, package existing binaries, or install missing Android tools. A full build configures VS2022, builds all three executables (profiling GUI, CLI, comparison GUI) and Android hooks, and creates `dist/LoliProfiler-windows.zip`. Android object files are kept in NDK-specific directories under `build/ndk-obj`, so switching NDK versions does not reuse incompatible intermediates.
 
 For CI or another non-interactive shell, specify a mode and installed paths:
 
@@ -42,7 +42,7 @@ export ANDROID_NDK_HOME=/path/to/android-ndk
 python3 scripts/build.py
 ```
 
-With no arguments the same interactive menu appears. Use `python3 scripts/build.py --mode full --non-interactive` for automation with an installed NDK. A complete build writes `dist/LoliProfiler-macos.zip`. See [macOS notes](BUILD_MACOS.md). This path is statically checked but awaits an on-macOS run.
+With no arguments the same interactive menu appears. Use `python3 scripts/build.py --mode full --non-interactive` for automation with an installed NDK. A complete build writes `dist/LoliProfiler-macos.zip`. The Apple Silicon native GUI/CLI build, all four LLVM Android hooks, six saved-capture regressions, and extracted full/native archives have passed on macOS. The connected UE4 phone passed launch/injection, game scene capture, save/export, symbolization, and GUI reopening with the corrected ARM64 frame-pointer hook. See [macOS notes](BUILD_MACOS.md) for native-only packaging, exact tested scope, and validation commands.
 
 ## Linux
 
@@ -55,6 +55,6 @@ With no arguments the same interactive menu appears. Use `python3 scripts/build.
 
 ## Archive contents
 
-Each zip has a `LoliProfiler/` root with the GUI, native CLI, Python injector and config, `remote/llvm/<abi>/libloli.so` for ARM and x86, optional legacy GCC hooks, the `agentcli/` Python package, app icon, README, and analysis scripts. On macOS the GUI's runtime files are also inside `LoliProfilerImGui.app/Contents/MacOS/`.
+Each zip has a `LoliProfiler/` root with the profiling GUI, native CLI, standalone `LoliProfilerCompare` window, Python injector and config, `remote/llvm/<abi>/libloli.so` for ARM and x86, optional legacy GCC hooks, the `agentcli/` Python package, app icon, README, and analysis scripts. On macOS the GUI's runtime files are also inside `LoliProfilerImGui.app/Contents/MacOS/`; the comparison executable is beside the bundle.
 
 The native CLI can export `.loli` to text or SQLite: `LoliProfilerCLI --dump capture.loli --out capture.db`. The installed Python command remains `loli`; `agentcli` is also available. See [CLI mode](CLI_MODE.md).

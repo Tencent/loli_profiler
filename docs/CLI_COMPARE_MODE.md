@@ -1,219 +1,72 @@
-# CLI Compare Mode
+# Comparing captures
 
-## Overview
+The main ImGui app's **Compare** toolbar button and **File > Compare** open a separate `LoliProfilerCompare` process. It stays open when the profiling app closes.
 
-LoliProfiler CLI now supports comparing two `.loli` profile files to identify memory allocation differences between profiling sessions. This is particularly useful for:
+![Empty comparer window in its default three-column layout](images/imgui-compare-empty.png)
 
-- **Regression Detection**: Compare before/after profiles to detect memory leaks
-- **Performance Optimization**: Track memory usage improvements across builds
-- **A/B Testing**: Compare memory behavior between different implementations
-- **CI/CD Integration**: Automated memory regression testing in pipelines
+Screenshots in this guide show the UI with **no captures opened**, so no private file paths, allocation records, or symbols are exposed.
 
-## Usage
+Choose both captures using **Open Base** and **Open Comparer** in the single-row toolbar. Their filename slots have fixed widths; hover to see full paths, which also appear in the native window title. Loading progress and allocation totals appear in the bottom status bar.
 
-### Basic Compare
+The dockable **Base**, **Comparer**, and **Diff** panels default to three equal columns. Drag their tabs to split, stack, or group them. **Window > Base above Comparer, Diff right** provides that arrangement directly; **Window > Three columns** restores the default. The workspace is saved separately in `loli_compare_imgui.ini` beside the settings file.
 
-Compare two `.loli` files and output differences as text:
+![Empty comparer window with Base above Comparer on the left and Diff on the right](images/imgui-compare-empty-stacked.png)
 
-```bash
-LoliProfilerCLI --compare baseline.loli comparison.loli --out diff.txt
-```
+Each panel keeps its own node search footer, match navigation, selection, expansion, and sorting. Enter moves to the next match; `<` and `>` wrap through matches. Search includes function and library names, reveals collapsed ancestors, and scrolls to the selected node. Right-click a node to copy exact values. Expand/collapse-all controls are omitted.
 
-### Output Format
+Open **Settings** from the toolbar or **File > Settings** to change the theme. Theme changes apply immediately and are saved using the existing preference. The less frequently used **Skip root levels** control also lives in Settings; changing it rebuilds the selected captures with that many outer stack frames omitted. The same option remains available as `--skip-root-levels N` on the command line.
 
-The tool produces a human-readable text report with:
-- Comparison statistics (allocation counts, sizes, deltas)
-- Hierarchical call stack view (deep copy format)
-- 4-space indentation showing call hierarchy
+Diff is **comparison minus base**. Red indicates byte growth; green indicates reduction. Hover a node for exact base/comparison values, inclusive deltas, and self deltas. Inclusive values include children; self values account for allocations ending directly at that node. Zero-net parents remain visible if descendants changed. **Swap** reverses the inputs. **File > Export Diff** saves the same report the CLI produces.
 
-Example output:
-```
-=== LoliProfiler Comparison Report ===
+## Standalone window
 
-Baseline allocations: 10524
-Comparison allocations: 12891
-Baseline total size: 45.32 MB
-Comparison total size: 52.10 MB
-Size delta: +6.78 MB
+```powershell
+# Select both files interactively
+.\LoliProfilerCompare.exe
 
-Changed allocations (>1KB growth): 156
+# Load both files immediately
+.\LoliProfilerCompare.exe base.loli comparison.loli
 
-=== Memory Growth (Delta: Comparison - Baseline) ===
-
-FTextLocalizationManager::GetDisplayString(FTextKey const&, FTextKey const&, FString const*), +5.20 MB, +141872
-    FMemory::Malloc(unsigned long, unsigned int), +2.59 MB, +84836
-    TArray<char16_t, TSizedDefaultAllocator<32>>::ResizeTo(int), +2.35 MB, +57034
-        FMemory::Realloc(void*, unsigned long, unsigned int), +2.35 MB, +57034
-```
-
-### Skip Root Call Stack Levels
-
-When comparing profiles from different app versions, system library addresses may differ even though they represent the same code path. Use `--skip-root-levels` to ignore the top N frames of each call stack and compare from a deeper level:
-
-```bash
-# Skip 2 root levels (e.g., skip libsystem_pthread.dylib frames)
-LoliProfilerCLI --compare baseline.loli comparison.loli --out diff.txt --skip-root-levels 2
-```
-
-**Example:** If your call stacks look like:
-```
-/usr/lib/system/libsystem_pthread.dylib!0xe878
-  /usr/lib/system/libsystem_pthread.dylib!0x9c74
-    FRunnableThreadPThread::_ThreadProc(void*)
-      FRunnableThreadPThread::Run()
-        ...
-```
-
-Using `--skip-root-levels 2` will compare starting from `FRunnableThreadPThread::_ThreadProc` instead of the system library addresses, which may differ between versions.
-
-## Command-Line Options
-
-### Compare Mode Options
-
-| Option | Description |
-|--------|-------------|
-| `--compare` | Enable compare mode (requires 2 positional file arguments) |
-| `<baseline.loli>` | First .loli file (baseline) - positional argument |
-| `<comparison.loli>` | Second .loli file (comparison) - positional argument |
-| `--out <path>` | Output file path (`.txt`) |
-| `--skip-root-levels <N>` | Skip N root call stack frames in comparison (default: 0) |
-
-## Comparison Statistics
-
-The tool calculates and reports:
-
-- **Baseline allocations**: Total number of allocations in baseline file
-- **Comparison allocations**: Total number of allocations in comparison file
-- **Baseline total size**: Total memory allocated in baseline
-- **Comparison total size**: Total memory allocated in comparison
-- **Size delta**: Net change in memory usage (positive = growth, negative = reduction)
-- **Changed allocations (>1KB growth)**: Leaf allocations with size increase >1KB
-
-## Output Format Details
-
-### Text Output Format
-
-The text format follows the "deep copy" style from the GUI:
+# Named arguments (a missing input can be selected in the window)
+.\LoliProfilerCompare.exe --base base.loli --compare comparison.loli --skip-root-levels 2
 
 ```
-function_name, +size, +count
-    child_function, +size, +count
-        grandchild_function, +size, +count
+
+The executable is `LoliProfilerCompare` on Linux/macOS. Loading and comparison run off the UI thread; each tree renders only visible rows.
+
+## Headless CLI
+
+```powershell
+.\LoliProfilerCLI.exe --compare base.loli comparison.loli --out diff.txt
+.\LoliProfilerCLI.exe --compare base.loli comparison.loli --out diff.txt --skip-root-levels 2
 ```
 
-- Each level of indentation = 4 spaces
-- Size uses human-readable units (Bytes, KB, MB, GB) with `+` prefix for growth
-- Count shows increase in number of allocations with `+` prefix
-- Parent nodes accumulate sizes from all children
-- Only nodes with >1KB growth are included
+Both consumers call `loli::CompareFiles` and `loli::WriteComparisonReport` in LoliCore. Reports contain exact signed integer bytes/counts, library-qualified paths, and four-space indentation:
 
-## Use Cases
+```text
+=== Memory Diff (Comparison - Base) ===
+Columns: function [library], delta bytes, delta count, self delta bytes, self delta count
 
-### 1. Detecting Memory Leaks
-
-```bash
-# Profile before feature implementation
-LoliProfilerCLI --app com.example.game --out before.loli --duration 300
-
-# Profile after feature implementation
-LoliProfilerCLI --app com.example.game --out after.loli --duration 300
-
-# Compare to find new leaks
-LoliProfilerCLI --compare before.loli after.loli --out leaks.txt
+root [game.so], +15, +0, -10, +0
+    child [game.so], +25, +0, +25, +0
 ```
 
-### 2. CI/CD Integration
+Names can contain commas, so parse the four numeric fields from the right. Header statistics report live totals, signed total deltas, and changed/new/removed **allocation stack paths**, not raw record identities or inclusive tree-node counts.
 
-```bash
-#!/bin/bash
-# regression_test.sh
+## Comparison rules
 
-# Profile baseline (from git)
-LoliProfilerCLI --app com.example.game --out baseline.loli --duration 60
+- Both sides exclude allocations whose sequence precedes the latest saved free event at the same address. A reused address's later allocation remains live.
+- Stack paths match by exact parent path, library name, and resolved function name. UUIDs, intern hashes, and heap addresses need not match across captures. Unresolved functions use their address within the named library.
+- Every byte/count change is kept: reductions, removed branches, sub-1-KiB changes, count-only changes, and resizing without count growth.
+- Records with unavailable stacks appear under `[missing call stack]`. Skipping an entire stack retains its totals under `[stack omitted by root skipping]`.
+- Use matching symbols for each capture's own build. Differing symbol quality can produce separate paths. Heuristic pairing of pseudo-symbol subtrees from the referenced fork is deliberately omitted to avoid false matches.
+- Inputs are standard version-106 captures. The fork's version-107 comparison-file extension is not imported.
+- Signed diffs cannot be represented faithfully by the capture `.loli` format (signed counts, internal self deltas, and 64-bit totals). Comparison rejects `--out diff.loli`; use a text report. Original input captures are never overwritten by comparison export.
 
-# Profile current branch
-LoliProfilerCLI --app com.example.game --out current.loli --duration 60
+This replaces the old CLI's thresholded cumulative growth-only report. Snapshot `--dump` and timeline **Leaks** retain their existing behavior.
 
-# Compare
-LoliProfilerCLI --compare baseline.loli current.loli --out diff.txt
+## Validation and credits
 
-# Parse results and fail if memory increased > 5%
-# (implement your own threshold logic)
-```
+The engine is covered by synthetic regression fixtures and independent randomized path aggregation, plus an independent capture-wire reader for local validation. Forward/reverse/identical comparisons, GUI/CLI report parity, independent panel searches, and saved docking layouts were checked. Private capture names, paths, and results are excluded from this guide.
 
-### 3. Performance Optimization Validation
-
-```bash
-# Profile before optimization
-LoliProfilerCLI --app com.example.game --out pre_optimization.loli --duration 120
-
-# Apply optimization, rebuild, reinstall
-
-# Profile after optimization
-LoliProfilerCLI --app com.example.game --out post_optimization.loli --duration 120
-
-# Compare to verify improvements
-LoliProfilerCLI --compare pre_optimization.loli post_optimization.loli --out optimization_impact.txt
-```
-
-### 4. Comparing Different Implementations
-
-```bash
-# Profile implementation A
-LoliProfilerCLI --app com.example.game --out impl_a.loli --duration 60
-
-# Switch to implementation B, rebuild, reinstall
-
-# Profile implementation B
-LoliProfilerCLI --app com.example.game --out impl_b.loli --duration 60
-
-# Compare
-LoliProfilerCLI --compare impl_a.loli impl_b.loli --out impl_comparison.txt
-```
-
-## Notes
-
-- Both `.loli` files must be valid LoliProfiler profile files (magic number: `0xA4B3C2D1`, version: `106`)
-- Comparison is based on call stack hashing for efficient matching
-- Symbol resolution requires that symbol maps are present in the `.loli` files
-- The comparison algorithm matches allocations by call stack, not by memory address
-- Only leaf nodes with >1KB growth are included in the output
-
-## Troubleshooting
-
-### "Failed to load baseline/comparison"
-
-- Ensure both files are valid `.loli` files
-- Check file permissions
-- Verify files are not corrupted
-
-### "Version mismatch"
-
-- Both files must be created with the same version of LoliProfiler
-- Current version: 106
-- Magic number: 0xA4B3C2D1
-
-## Implementation Details
-
-### Comparison Algorithm
-
-1. **Load both profiles**: Parse binary `.loli` format into memory structures
-2. **Build call trees with hash maps**: Reproduce the old call stack suffix hash and use `std::unordered_map` for node lookup
-3. **Leaf-node diffing**: Compare only leaf nodes (allocation sites) by hash
-4. **Filter growth**: Only include allocations with >1KB size increase
-5. **Bottom-up propagation**: Propagate leaf deltas up to parent nodes
-6. **Export results**: Generate text output with hierarchical format
-
-### Data Structures
-
-- **CallTreeNode**: Hierarchical tree node with function name, size delta, and count delta
-- **ProfileData**: Complete profile including stack records, call stacks, symbols, and metadata
-- **Hash-based matching**: Uses a local implementation of the historical suffix hash for compatible call stack comparison; the CLI does not link Qt
-
-### Performance
-
-- Loading: O(n) where n = number of allocations
-- Comparison: O(n + m) where n, m = allocations in each file
-- Export: O(k) where k = allocations in output
-
-For typical game profiling sessions (10k-100k allocations), comparison completes in <1 second.
+The comparison feature is based on [leoin2012's LoliProfiler fork](https://github.com/leoin2012/loli_profiler). The upstream Loli Compare module identifies **shuchangliu** as its contributor. This implementation brings that comparison workflow to the Qt-free shared core and ImGui GUI, with independent accuracy checks and the complete signed-diff rules described above.

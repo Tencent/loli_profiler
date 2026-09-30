@@ -2,6 +2,16 @@
 
 LoliProfiler captures native memory allocation call stacks from Android applications. The desktop app is `LoliProfilerImGui`; `LoliProfilerCLI` provides headless capture and file conversion.
 
+| Action | macOS | Windows / Linux |
+| --- | --- | --- |
+| Open record | Cmd+O | Ctrl+O |
+| Run / Launch | Cmd+R | Ctrl+R |
+| Save record as | Cmd+S | Ctrl+S |
+| Settings | Cmd+, | Ctrl+, |
+| Quit | Cmd+Q | Ctrl+Q |
+
+On macOS, text fields also use Command for Select All, Copy, Cut, and Paste.
+
 ## 1. Set Android paths
 
 Open **File > Settings**. Choose the Android SDK used by your other development tools; its `platform-tools/adb` is the client LoliProfiler runs. Set an Android NDK path for symbol translation. The app remembers both paths.
@@ -44,6 +54,12 @@ Drag across the timeline to select a time interval. Stacktrace and Treemap then 
 ![Current ImGui saved-record view with stacktrace, treemap, timeline, and screenshot](images/imgui-overview.png)
 
 ## 4. Resolve symbols and analyze files
+
+Click **Compare** in the toolbar or **File > Compare** to open the separate comparison window. Select two files with **Open Base** and **Open Comparer**. The dockable **Base**, **Comparer**, and **Diff** panels default to three columns; drag their tabs to rearrange them, or choose a preset in the **Window** menu. Each panel has independent node search at the bottom: Enter advances to a match, `<` and `>` navigate matches, and matching ancestors expand automatically. Diff is **comparison minus base**: red indicates byte growth, green indicates reduction. Hover a node for exact baseline/comparison/inclusive/self values. **Swap** reverses the direction; **File > Export Diff** saves an exact text report. Both files use live allocations after saved free events are applied. Loading/allocation status is in the bottom bar, full file paths are in the title and filename tooltips, and **Settings** selects a saved theme.
+
+Start it directly with `LoliProfilerCompare base.loli comparison.loli`, or use `LoliProfilerCLI --compare base.loli comparison.loli --out diff.txt` for the same result without a window. See the [comparison guide](CLI_COMPARE_MODE.md).
+
+The infrequently used **Skip root levels** option is in comparison **Settings**, alongside theme selection.
 
 Function names require a symbol library from the **same build** as the APK. The GUI uses the bundled CLI for symbolization. To run it directly without touching the device:
 

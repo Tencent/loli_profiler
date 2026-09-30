@@ -353,12 +353,19 @@ void DrawTreemapPanel(const StacktraceTree& tree, TreemapState& state,
                     matchSet.insert(idx);
             }
 
-            // Load a font once for cell labels (Segoe UI on Windows, matching the
-            // ImGui UI font). Static so it persists across renders.
+            // Load the host's font once for cell labels.
             static sf::Font font;
             static bool fontLoaded = false;
-            if (!fontLoaded) {
+            static bool fontAttempted = false;
+            if (!fontAttempted) {
+                fontAttempted = true;
+#ifdef _WIN32
                 fontLoaded = font.openFromFile("C:/Windows/Fonts/segoeui.ttf");
+#elif defined(__APPLE__)
+                fontLoaded = font.openFromFile("/System/Library/Fonts/Helvetica.ttc");
+#else
+                fontLoaded = font.openFromFile("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf");
+#endif
             }
 
             // Display layer.

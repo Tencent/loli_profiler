@@ -3,6 +3,9 @@
 #include <cstdio>
 #ifdef _WIN32
 #include <windows.h>
+#elif defined(__APPLE__)
+#include <mach-o/dyld.h>
+#include <filesystem>
 #else
 #include <unistd.h>
 #endif
@@ -28,6 +31,13 @@ std::string GetExecutableDir() {
     std::string full(path, len);
     const std::size_t slash = full.find_last_of("\\/");
     return slash == std::string::npos ? "." : full.substr(0, slash);
+#elif defined(__APPLE__)
+    uint32_t length = 0;
+    _NSGetExecutablePath(nullptr, &length);
+    std::string path(length, '\0');
+    if (_NSGetExecutablePath(path.data(), &length) != 0)
+        return ".";
+    return std::filesystem::weakly_canonical(path.c_str()).parent_path().string();
 #else
     char path[4096] = {};
     const ssize_t len = readlink("/proc/self/exe", path, sizeof(path) - 1);

@@ -13,6 +13,7 @@ The Qt-free macOS build and package have only been statically checked. Validate 
 - Keep real-device CLI capture as a final pending acceptance step, requested only after offline work is complete.
 - Complete the subsequently authorized login-to-game-scene phone capture and fix the observed Python 3 injector and ARM64 authenticated-return-address failures.
 - Correct all five macOS GUI application shortcuts to honor physical Command with ImGui's modifier normalization, and document platform shortcut mappings.
+- Ship one full macOS release with Android hooks and saved-record analysis tools; remove the temporary desktop-only archive and packaging option.
 
 ## Capabilities
 

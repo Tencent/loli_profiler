@@ -263,7 +263,7 @@ def ensure_android_tools(args: argparse.Namespace, sdk: Path, ndk: Path | None,
         print(f"Android SDK download terms: {SDK_DOWNLOAD_PAGE}")
         if not ask("Have you read and agreed to the Android SDK terms, and do you want to download the missing tools?"):
             if require_ndk and missing_ndk:
-                raise RuntimeError("NDK download declined. Choose native-only build or provide an installed NDK.")
+                raise RuntimeError("NDK download declined. Choose a desktop build (--mode native) or provide an installed NDK.")
             return ndk
 
     # --download-missing is explicit consent. License acceptance still belongs

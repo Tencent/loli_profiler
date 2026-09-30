@@ -17,15 +17,15 @@ The driver stages injector/config/icon files beside the CLI and inside `LoliProf
 cmake -S . -B build/cmake -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0
 ```
 
-To package an offline build without Android hooks:
+macOS has one release package, `LoliProfiler-macos.zip`, for both phone capture and saved-record analysis. To package already-built desktop binaries and Android hooks:
 
 ```sh
-python3.13 scripts/package_release.py --platform macos --native-only
-ditto -x -k dist/LoliProfiler-macos-native.zip build/macos-release-test
+python3.13 scripts/package_release.py --platform macos
+ditto -x -k dist/LoliProfiler-macos.zip build/macos-release-test
 open build/macos-release-test/LoliProfiler/LoliProfilerImGui.app
 ```
 
-The `*-native.zip` contains GUI, CLI, injector, Python agent, icon, and docs. Android capture requires hook libraries and configured Android tools. `ditto` retains executable permissions; ZIP utilities that discard modes may require restoring them. Generated settings, logs, and caches are omitted from the app bundle archive.
+The ZIP contains the main GUI, CLI, comparison viewer, injector, Python agent, icon, docs, and all four LLVM Android hook libraries. Packaging fails if required hooks are missing and removes the obsolete desktop-only ZIP after a successful release. Phone capture also requires configured Android tools. `ditto` retains executable permissions; ZIP utilities that discard modes may require restoring them. Generated settings, logs, and caches are omitted from the app bundle archive. `--mode native` remains a developer build mode for compiling desktop targets; it does not create a separate release package.
 
 Packaging ad-hoc signs the complete app after staging resources and verifies its seal again after ZIP extraction. This requires macOS and `codesign`; no paid signing identity is needed. Check an extracted app with:
 
@@ -119,8 +119,8 @@ python3.13 tests/check_comparison_cli.py --cli build/cmake/LoliProfilerCLI --gui
 
 ## Verified scope
 
-On 2026-09-30: macOS 26.6.2 arm64, AppleClang 21/Xcode, pinned SFML 3.0.2, Python 3.13.15, SDK Platform-Tools 37.0.1, and NDK r27 (27.0.12077973). Native GUI/CLI, all four LLVM hook ABIs, six supplied archived captures, extracted native/full archives, and real UE4 phone launch/injection, scene entry, stop/save, symbolization, export, and GUI reopening passed. Source archives remain unchanged. The Python 3 injector and ARM64 authenticated-return-PC fixes were verified on the phone.
+On 2026-09-30: macOS 26.6.2 arm64, AppleClang 21/Xcode, pinned SFML 3.0.2, Python 3.13.15, SDK Platform-Tools 37.0.1, and NDK r27 (27.0.12077973). Native GUI/CLI, all four LLVM hook ABIs, six supplied archived captures, the extracted full release, and real UE4 phone launch/injection, scene entry, stop/save, symbolization, export, and GUI reopening passed. Source archives remain unchanged. The Python 3 injector and ARM64 authenticated-return-PC fixes were verified on the phone.
 
 After merging the shared signed comparison feature, all three desktop targets build and all five CTest cases pass. Synthetic comparison CLI/GUI checks verify signed live accounting, Unicode/spaced paths, strict arguments, input protection, docked/stacked layouts, identical-file rendering, and exact GUI/CLI report parity. A representative saved capture passes snapshot/SQLite/agent/self-comparison regression with the new engine. Private capture paths, statistics, and symbols are kept in local build evidence; public documentation records reproducible commands and pass/fail scope. Intel/universal binaries, execution on macOS 13, and Developer ID signing/notarization remain untested.
 
-The reported damaged-app warning was reproduced as an invalid bundle signature; extracted files matched the ZIP exactly. The repaired native/full ZIPs pass strict recursive signature verification after extraction. The repaired local app opens through LaunchServices, displays its window, quits cleanly, and retains its seal after external layout writes. The bundled injector reads its configuration from Resources and writes logs in an external working directory. These focused packaging checks require no repeated phone capture. Local download quarantine was cleared only on the verified artifacts built on this Mac; downloaded copies remain subject to Gatekeeper's publisher/notarization approval.
+The reported damaged-app warning was reproduced as an invalid bundle signature; extracted files matched the ZIP exactly. The repaired full ZIP passes strict recursive signature verification after extraction. The repaired local app opens through LaunchServices, displays its window, quits cleanly, and retains its seal after external layout writes. The bundled injector reads its configuration from Resources and writes logs in an external working directory. These focused packaging checks require no repeated phone capture. Local download quarantine was cleared only on the verified artifacts built on this Mac; downloaded copies remain subject to Gatekeeper's publisher/notarization approval.

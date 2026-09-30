@@ -47,15 +47,13 @@ def add_tree(entries: dict[str, Path], source: Path, destination: str,
             add_file(entries, path, f"{destination}/{path.relative_to(source).as_posix()}")
 
 
-def add_runtime(entries: dict[str, Path], destination: str, *, include_hooks: bool = True) -> None:
+def add_runtime(entries: dict[str, Path], destination: str) -> None:
     for filename in ("jdwp-shellifier.py", "logging.json"):
         add_file(entries, ROOT / "python" / filename,
                  f"{destination}/{filename}" if destination else filename)
     add_file(entries, ROOT / "res" / "loli_cat_icon.png",
              f"{destination}/res/loli_cat_icon.png" if destination else
              "res/loli_cat_icon.png")
-    if not include_hooks:
-        return
     for abi in LLVM_ABIS:
         add_file(entries, ROOT / "plugins" / "Android" / "llvm" / abi / "libloli.so",
                  f"{destination}/remote/llvm/{abi}/libloli.so" if destination else
@@ -68,7 +66,7 @@ def add_runtime(entries: dict[str, Path], destination: str, *, include_hooks: bo
                      f"remote/gcc/{abi}/libloli.so")
 
 
-def build_entries(platform: str, build_dir: Path, *, native_only: bool = False) -> dict[str, Path]:
+def build_entries(platform: str, build_dir: Path) -> dict[str, Path]:
     entries: dict[str, Path] = {}
     if platform == "windows":
         add_file(entries, find_build_output(build_dir, "LoliProfilerImGui.exe"),
@@ -89,15 +87,13 @@ def build_entries(platform: str, build_dir: Path, *, native_only: bool = False) 
              if name.startswith(macos_prefix) and name != macos_prefix + "LoliProfilerImGui"
              else name): path
             for name, path in entries.items()
-            if "/_CodeSignature/" not in name and
-               (not native_only or "/remote/" not in name)
+            if "/_CodeSignature/" not in name
         }
         add_file(entries, find_build_output(build_dir, "LoliProfilerCLI"),
                  "LoliProfilerCLI")
         add_file(entries, find_build_output(build_dir, "LoliProfilerCompare"),
                  "LoliProfilerCompare")
-        add_runtime(entries, "LoliProfilerImGui.app/Contents/Resources",
-                    include_hooks=not native_only)
+        add_runtime(entries, "LoliProfilerImGui.app/Contents/Resources")
         icon = ROOT / "res" / "loli_cat_icon.icns"
         if icon.is_file():
             add_file(entries, icon, "LoliProfilerImGui.app/Contents/Resources/loli_cat_icon.icns")
@@ -109,7 +105,7 @@ def build_entries(platform: str, build_dir: Path, *, native_only: bool = False) 
         add_file(entries, find_build_output(build_dir, "LoliProfilerCompare"),
                  "LoliProfilerCompare")
 
-    add_runtime(entries, "", include_hooks=not native_only)
+    add_runtime(entries, "")
     add_tree(entries, ROOT / "agentcli", "agentcli")
     add_tree(entries, ROOT / "docs", "docs")
     for filename in ("README.md", "LICENSE", "pyproject.toml",
@@ -157,16 +153,13 @@ def main() -> int:
     parser.add_argument("--platform", choices=("windows", "macos", "linux"), required=True)
     parser.add_argument("--build-dir", type=Path, default=ROOT / "build" / "cmake")
     parser.add_argument("--out-dir", type=Path, default=ROOT / "dist")
-    parser.add_argument("--native-only", action="store_true",
-                        help="package offline GUI/CLI without Android hooks; archive is named *-native.zip")
     args = parser.parse_args()
     build_dir = args.build_dir.resolve()
     out_dir = args.out_dir.resolve()
     try:
-        entries = build_entries(args.platform, build_dir, native_only=args.native_only)
+        entries = build_entries(args.platform, build_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
-        suffix = "-native" if args.native_only else ""
-        output = out_dir / f"LoliProfiler-{args.platform}{suffix}.zip"
+        output = out_dir / f"LoliProfiler-{args.platform}.zip"
         temporary = output.with_suffix(".zip.tmp")
         with tempfile.TemporaryDirectory(prefix="loli-release-") as staging_directory:
             staging = Path(staging_directory)
@@ -183,6 +176,8 @@ def main() -> int:
                 if args.platform == "macos":
                     verify_archived_macos_bundle(archive, staging / "extracted")
         os.replace(temporary, output)
+        # Keep existing output directories consistent with the single-package policy.
+        (out_dir / f"LoliProfiler-{args.platform}-native.zip").unlink(missing_ok=True)
         print(f"Packaged {output} ({output.stat().st_size:,} bytes, "
               f"{len(entries)} files)")
         return 0

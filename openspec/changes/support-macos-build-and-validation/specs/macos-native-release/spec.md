@@ -36,7 +36,7 @@ The capture-ready macOS release ZIP SHALL contain the main GUI, CLI, standalone 
 - **THEN** the CLI help and sample export succeed and the GUI loads a sample with its bundled resources
 
 #### Scenario: Bundle seal survives packaging and use
-- **WHEN** either macOS release is packaged, extracted, and launched
+- **WHEN** the macOS release is packaged, extracted, and launched
 - **THEN** the complete app has a valid ad-hoc signature, including its resource seal, verified with strict recursive codesign checks after ZIP extraction
 - **AND** normal settings, layout, and default logging writes do not modify the sealed bundle
 - **AND** documentation distinguishes local signature validity from Developer ID signing and Apple notarization for downloaded-app approval
@@ -46,12 +46,17 @@ The capture-ready macOS release ZIP SHALL contain the main GUI, CLI, standalone 
 - **THEN** all three desktop targets build, the standalone comparison viewer renders Base/Comparer/Diff, and its report matches the shared CLI signed comparison
 - **AND** the main app bundle can locate the independent comparison executable beside the bundle
 
-### Requirement: Explicit offline native archive
-The package script SHALL support an explicit native-only archive for saved-record inspection without requiring Android hooks. Its filename SHALL distinguish it from the capture-ready release, and the default full-release mode SHALL still fail when required hooks are missing. App archives SHALL omit generated settings, logs, and caches.
+### Requirement: Single capture-ready macOS archive
+The package script SHALL produce only `LoliProfiler-macos.zip` for macOS, containing both phone-capture runtime and saved-record analysis tools. It SHALL require all four LLVM Android hooks, omit generated settings/logs/caches, and remove the obsolete desktop-only ZIP from the output directory after successful packaging. A separate desktop-only release option SHALL NOT be supported. The native desktop build mode MAY remain available for development without producing a separate ZIP.
 
-#### Scenario: Native package without Android tools
-- **WHEN** packaging is requested with `--native-only` before Android hooks are available
-- **THEN** `LoliProfiler-macos-native.zip` contains the runnable GUI/CLI and offline agent/runtime resources without stale staged hooks or generated application state
+#### Scenario: Existing output directory has an obsolete desktop-only archive
+- **WHEN** macOS packaging succeeds in that output directory
+- **THEN** the full release includes all four required hook ABIs beside the CLI and in GUI Resources
+- **AND** the obsolete desktop-only archive is removed
+
+#### Scenario: Required Android hooks are unavailable
+- **WHEN** macOS packaging runs with a required LLVM hook missing
+- **THEN** packaging fails clearly instead of creating a partial release
 
 ### Requirement: macOS Android tool resolution
 The core SHALL discover explicit SDK/NDK environment paths and side-by-side installed NDKs on macOS, use available LLVM tools for both supported ARM capture architectures, and resolve macOS symbolizers in live capture as well as offline operations.

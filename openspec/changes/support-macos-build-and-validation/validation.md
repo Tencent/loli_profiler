@@ -7,7 +7,7 @@ Validated on 2026-09-30: macOS 26.6.2 arm64, AppleClang 21/Xcode, pinned SFML 3.
 - Native Release GUI app and CLI built through the Python driver. Mach-O arm64 binaries use system libraries/frameworks, with no Qt or build-tree dylib dependencies. Bundle metadata/icon and executable-relative resources were checked.
 - All six supplied archived captures passed read-only validation: independent raw/live accounting, SQLite integrity/root totals/parent depth, text export, zero self-differences, cross comparison, and Python agent summary/hotspot/call-path queries. Source archive SHA-256 hashes remain unchanged.
 - Native and extracted GUI load/range analysis passed, including range-tree byte accounting and rendering. Single-series iOS imports display Total memory without requiring six Android categories.
-- Both native-only and capture-ready archives retained executable modes and passed CRC checks. All four LLVM Android hooks built with NDK r27 and matched staged/extracted copies.
+- The capture-ready archive retained executable modes and passed CRC checks. All four LLVM Android hooks built with NDK r27 and matched staged/extracted copies. The temporary desktop-only archive used during bring-up is retired; the full ZIP is the single macOS release.
 
 ## Fixes verified
 

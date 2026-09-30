@@ -38,3 +38,7 @@
 
 - [x] 7.1 Move immutable GUI runtime into Resources and mutable settings/layout/logs outside the bundle; preserve legacy settings and portable CLI paths.
 - [x] 7.2 Ad-hoc sign the complete staged release bundle, verify its signature after ZIP extraction, rebuild both archives, and repair/launch the reported local app.
+
+## 8. Single macOS release
+
+- [x] 8.1 Remove the desktop-only packaging option, update release specs/docs, regenerate and verify the full ZIP, and remove the obsolete ZIP from dist.

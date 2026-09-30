@@ -42,7 +42,7 @@ export ANDROID_NDK_HOME=/path/to/android-ndk
 python3 scripts/build.py
 ```
 
-With no arguments the same interactive menu appears. Use `python3 scripts/build.py --mode full --non-interactive` for automation with an installed NDK. A complete build writes `dist/LoliProfiler-macos.zip`. The Apple Silicon native GUI/CLI build, all four LLVM Android hooks, six saved-capture regressions, and extracted full/native archives have passed on macOS. The connected UE4 phone passed launch/injection, game scene capture, save/export, symbolization, and GUI reopening with the corrected ARM64 frame-pointer hook. See [macOS notes](BUILD_MACOS.md) for native-only packaging, exact tested scope, and validation commands.
+With no arguments the same interactive menu appears. Use `python3 scripts/build.py --mode full --non-interactive` for automation with an installed NDK. A complete build writes the single macOS release, `dist/LoliProfiler-macos.zip`, including Android hooks and saved-record analysis tools. The Apple Silicon native GUI/CLI build, all four LLVM Android hooks, six saved-capture regressions, and extracted full archive have passed on macOS. The connected UE4 phone passed launch/injection, game scene capture, save/export, symbolization, and GUI reopening with the corrected ARM64 frame-pointer hook. See [macOS notes](BUILD_MACOS.md) for packaging, exact tested scope, and validation commands.
 
 ## Linux
 

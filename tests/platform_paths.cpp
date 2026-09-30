@@ -70,12 +70,12 @@ int main(int argc, char** argv) {
             Env(key, "");
         PathUtilsLite::SetSDKPath("");
         Require(PathUtilsLite::GetSDKPath() == sdk.string(), "SDK_ROOT discovery failed");
-        Require(PathUtilsLite::GetADBExecutablePath() == adb.string(), "adb discovery failed");
+        Require(fs::equivalent(PathUtilsLite::GetADBExecutablePath(), adb), "adb discovery failed");
         PathUtilsLite::SetNDKPath("");
         Require(PathUtilsLite::GetNDKPath() == ndk.string(), "numeric side-by-side NDK selection failed");
-        Require(PathUtilsLite::GetNDKToolPath("nm", true) == (tools / ("llvm-nm" + ext)).string(), "ARMv7 LLVM fallback failed");
-        Require(PathUtilsLite::GetNDKToolPath("nm", false) == (tools / ("llvm-nm" + ext)).string(), "ARM64 LLVM fallback failed");
-        Require(PathUtilsLite::GetNDKToolPath("symbolizer") == (tools / ("llvm-symbolizer" + ext)).string(), "host symbolizer discovery failed");
+        Require(fs::equivalent(PathUtilsLite::GetNDKToolPath("nm", true), tools / ("llvm-nm" + ext)), "ARMv7 LLVM fallback failed");
+        Require(fs::equivalent(PathUtilsLite::GetNDKToolPath("nm", false), tools / ("llvm-nm" + ext)), "ARM64 LLVM fallback failed");
+        Require(fs::equivalent(PathUtilsLite::GetNDKToolPath("symbolizer"), tools / ("llvm-symbolizer" + ext)), "host symbolizer discovery failed");
         const auto explicitNdk = scratch / "standalone NDK";
         fs::create_directories(explicitNdk);
         Env("ANDROID_NDK_HOME", explicitNdk.string());

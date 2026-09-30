@@ -35,6 +35,7 @@ set(LOLI_QTFREE_SRCS
     src/smaps/smapssectionlite.cpp
     src/lolilogger.cpp
     src/profilecomparatorlite.cpp
+    src/profilecomparison.cpp
     src/profilecomparatorlite_sqlite.cpp
     src/captureconfig.cpp
     src/symboltranslator.cpp
@@ -57,6 +58,7 @@ set(LOLI_QTFREE_INCS
     include/smaps/smapssectionlite.h
     include/lolilogger.h
     include/profilecomparatorlite.h
+    include/profilecomparison.h
     include/captureconfig.h
     include/symboltranslator.h
     include/clicapture.h
@@ -89,8 +91,8 @@ if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 endif()
 
 # Qt-free since the remove-qt change: no find_package(Qt5) anywhere. The
-# executables are LoliProfilerImGui (GUI) and LoliProfilerCLI (headless),
-# both built from the LoliCore static library.
+# executables are LoliProfilerImGui, LoliProfilerCompare, and LoliProfilerCLI,
+# all built from the LoliCore static library.
 
 # Avoid generating ZERO_CHECK VS project, must in root CMakeLists.txt
 if(MSVC)
@@ -190,6 +192,9 @@ if(BUILD_QTFREE_CLI AND BUILD_QTFREE_CORE AND LOLI_QTFREE_SRCS)
         target_compile_options(LoliProfilerCLI PRIVATE "-Wall" "-Wextra" "-Wno-missing-braces")
     endif()
     target_link_libraries(LoliProfilerCLI PRIVATE LoliCore)
+    if(WIN32)
+        target_link_libraries(LoliProfilerCLI PRIVATE shell32)
+    endif()
     install(TARGETS LoliProfilerCLI DESTINATION ${CMAKE_BINARY_DIR}/bin/release)
 endif()
 
@@ -230,6 +235,7 @@ add_subdirectory(thirdparty/nativefiledialog-extended)
 # OpenGL3 backend is compiled here.
 set(IMGUI_GUI_SRCS
     src/gui/main_imgui.cpp
+    src/gui/comparelaunch.cpp
     src/gui/themes.cpp
     src/gui/filedialogs.cpp
     src/gui/guidatabridge.cpp
@@ -325,4 +331,42 @@ endif()
 install(TARGETS LoliProfilerImGui DESTINATION ${CMAKE_BINARY_DIR}/bin/release)
 install(FILES res/loli_cat_icon.png DESTINATION ${CMAKE_BINARY_DIR}/bin/release/res)
 
+# Standalone desktop comparison shares the same LoliCore API as --compare.
+if(WIN32)
+    set(COMPARE_BUNDLE WIN32)
+else()
+    set(COMPARE_BUNDLE "")
+endif()
+add_executable(LoliProfilerCompare ${COMPARE_BUNDLE}
+    src/gui/main_compare.cpp
+    src/gui/comparetreestate.cpp
+    src/gui/comparepanel.cpp
+    src/gui/filedialogs.cpp
+    src/gui/themes.cpp)
+set_target_properties(LoliProfilerCompare PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+target_link_libraries(LoliProfilerCompare PRIVATE LoliCore SFML::Graphics SFML::Window SFML::System
+    sfml-main ImGui-SFML::ImGui-SFML nfd)
+if(MSVC)
+    target_compile_options(LoliProfilerCompare PRIVATE /W3 /EHsc /MP)
+    target_compile_definitions(LoliProfilerCompare PRIVATE _CRT_SECURE_NO_WARNINGS=1 NOMINMAX)
+endif()
+if(WIN32)
+    target_sources(LoliProfilerCompare PRIVATE windows.rc)
+    target_link_libraries(LoliProfilerCompare PRIVATE opengl32 shell32)
+elseif(APPLE)
+    target_link_libraries(LoliProfilerCompare PRIVATE "-framework OpenGL")
+endif()
+install(TARGETS LoliProfilerCompare DESTINATION ${CMAKE_BINARY_DIR}/bin/release)
+add_dependencies(LoliProfilerImGui LoliProfilerCompare)
+
 endif() # BUILD_IMGUI_GUI
+
+option(BUILD_COMPARISON_TESTS "Build focused comparison regression tests" OFF)
+if(BUILD_COMPARISON_TESTS)
+    enable_testing()
+    add_executable(LoliComparisonTests tests/comparison_tests.cpp src/gui/comparetreestate.cpp src/gui/comparelaunch.cpp)
+    target_include_directories(LoliComparisonTests PRIVATE src/gui)
+    target_link_libraries(LoliComparisonTests PRIVATE LoliCore)
+    set_target_properties(LoliComparisonTests PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+    add_test(NAME comparison-regressions COMMAND LoliComparisonTests)
+endif()

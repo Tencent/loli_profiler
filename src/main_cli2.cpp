@@ -21,6 +21,7 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#include <shellapi.h>
 #elif defined(__APPLE__)
 #include <mach-o/dyld.h>
 #else
@@ -49,7 +50,7 @@ void PrintUsage() {
     std::cout << "  --enable-memory-optimization\n";
     std::cout << "                         Keep only allocations live at stop (large captures)\n\n";
     std::cout << "Compare/dump options:\n";
-    std::cout << "  --compare              Compare two .loli files (baseline vs comparison)\n";
+    std::cout << "  --compare              Signed live allocation diff (comparison - baseline)\n";
     std::cout << "  --dump                 Export a .loli file to text or SQLite (.db)\n";
     std::cout << "  --symbolize            Resolve saved call stacks with a matching library\n";
     std::cout << "  --out <path>           Output path\n";
@@ -227,6 +228,23 @@ int RunCaptureMode(const std::vector<std::string>& args) {
 
 int main(int argc, char** argv) {
     std::vector<std::string> args(argv + (argc > 0 ? 1 : 0), argv + argc);
+#ifdef _WIN32
+    // The shared comparison API accepts UTF-8 paths. The CRT's narrow argv
+    // uses the local code page, so decode comparison arguments from Windows.
+    if (HasOption(args, "compare")) {
+        int count = 0;
+        wchar_t** wideArgs = CommandLineToArgvW(GetCommandLineW(), &count);
+        if (!wideArgs) return 1;
+        args.clear();
+        for (int i = 1; i < count; ++i) {
+            const int length = WideCharToMultiByte(CP_UTF8, 0, wideArgs[i], -1, nullptr, 0, nullptr, nullptr);
+            std::string text(length, '\0');
+            WideCharToMultiByte(CP_UTF8, 0, wideArgs[i], -1, &text[0], length, nullptr, nullptr);
+            text.pop_back(); args.push_back(std::move(text));
+        }
+        LocalFree(wideArgs);
+    }
+#endif
 
     if (args.empty()) {
         PrintUsage();

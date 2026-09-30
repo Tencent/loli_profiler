@@ -123,8 +123,8 @@ def ask(question: str, *, default: bool = False) -> bool:
 
 def menu() -> str | None:
     print("\nLoliProfiler build")
-    print("  1. Build GUI, CLI, Android hooks, and release zip")
-    print("  2. Build GUI and CLI only")
+    print("  1. Build profiling GUI, compare GUI, CLI, Android hooks, and release zip")
+    print("  2. Build profiling GUI, compare GUI, and CLI only")
     print("  3. Package existing binaries and hooks")
     print("  4. Install missing Android SDK/NDK tools")
     print("  q. Quit")
@@ -295,7 +295,7 @@ def run(command: list[str], *, dry_run: bool) -> None:
 def stage_windows_runtime() -> None:
     destination = BUILD_DIR / "bin" / "release"
     destination.mkdir(parents=True, exist_ok=True)
-    for name in ("LoliProfilerImGui.exe", "LoliProfilerCLI.exe"):
+    for name in ("LoliProfilerImGui.exe", "LoliProfilerCLI.exe", "LoliProfilerCompare.exe"):
         shutil.copy2(find_build_output(BUILD_DIR, name), destination / name)
     # Users also launch directly from the VS Release directory. Keep both
     # executable locations paired with the same freshly built Android hooks.
@@ -324,7 +324,7 @@ def build_native(system: str, *, dry_run: bool) -> None:
         command += ["-DCMAKE_BUILD_TYPE=Release"]
     run(command, dry_run=dry_run)
     run(["cmake", "--build", str(BUILD_DIR), "--config", "Release",
-         "--target", "LoliProfilerImGui", "LoliProfilerCLI", "--parallel"],
+         "--target", "LoliProfilerImGui", "LoliProfilerCLI", "LoliProfilerCompare", "--parallel"],
         dry_run=dry_run)
     if system == "windows" and not dry_run:
         stage_windows_runtime()

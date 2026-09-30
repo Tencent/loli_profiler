@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <fstream>
+#include <filesystem>
 #include <functional>
 #include <ostream>
 
@@ -69,17 +70,24 @@ void ProfileComparatorLite::DeleteTree(CallTreeNode* node) {
 
 bool ProfileComparatorLite::LoadProfile(const std::string& filePath,
                                         bool isBaseline) {
+    compared_ = signedComparison_ = false;
+    (isBaseline ? baselineLoaded_ : comparisonLoaded_) = false;
+    errorMessage_.clear();
     Session& session = isBaseline ? baselineSession_ : comparisonSession_;
 
     std::vector<uint8_t> bytes;
     {
-        std::ifstream file(filePath, std::ios::binary);
+        std::ifstream file(std::filesystem::u8path(filePath), std::ios::binary);
         if (!file) {
             errorMessage_ = "Cannot open file: " + filePath;
             return false;
         }
         file.seekg(0, std::ios::end);
         const std::streamoff size = file.tellg();
+        if (size < 0) {
+            errorMessage_ = "Cannot determine file size: " + filePath;
+            return false;
+        }
         file.seekg(0, std::ios::beg);
         bytes.resize(static_cast<std::size_t>(size));
         if (size > 0) {
@@ -102,8 +110,10 @@ bool ProfileComparatorLite::LoadProfile(const std::string& filePath,
 
     if (isBaseline) {
         baselineLoaded_ = true;
+        baselinePath_ = filePath;
     } else {
         comparisonLoaded_ = true;
+        comparisonPath_ = filePath;
     }
 
     compared_ = false; // Reset comparison state
@@ -267,150 +277,37 @@ ProfileComparatorLite::BuildCallTreeWithHashMap(const TreeSource& source,
 }
 
 bool ProfileComparatorLite::Compare(int skipRootLevels) {
+    compared_ = false;
+    signedComparison_ = false;
     if (!baselineLoaded_ || !comparisonLoaded_) {
         errorMessage_ = "Both baseline and comparison profiles must be loaded first";
         return false;
     }
-
-    skipRootLevels_ = skipRootLevels;
-
-    for (CallTreeNode* root : deltaRoots_) DeleteTree(root);
-    deltaRoots_.clear();
-
-    // Basic statistics
-    stats_ = ComparisonStats();
-    stats_.baselineAllocCount = static_cast<int>(baselineSession_.records.size());
-    stats_.comparisonAllocCount = static_cast<int>(comparisonSession_.records.size());
-
-    for (const auto& record : baselineSession_.records) {
-        stats_.baselineTotalSize += static_cast<uint64_t>(record.size);
-    }
-    for (const auto& record : comparisonSession_.records) {
-        stats_.comparisonTotalSize += static_cast<uint64_t>(record.size);
-    }
-
-    stats_.sizeDelta = static_cast<int64_t>(stats_.comparisonTotalSize) -
-                       static_cast<int64_t>(stats_.baselineTotalSize);
-
-    // Build call trees (O(1) lookup by suffix hash)
-    std::vector<CallTreeNode*> baselineRoots;
-    std::vector<CallTreeNode*> comparisonRoots;
-
-    TreeSource baselineSource{baselineSession_.records, baselineSession_.callStackMap,
-                              baselineSession_.symbolMap, baselineSession_.internTable};
-    TreeSource comparisonSource{comparisonSession_.records,
-                                comparisonSession_.callStackMap,
-                                comparisonSession_.symbolMap,
-                                comparisonSession_.internTable};
-
-    auto baselineHashmap = BuildCallTreeWithHashMap(baselineSource, baselineRoots);
-    auto comparisonHashmap = BuildCallTreeWithHashMap(comparisonSource, comparisonRoots);
-
-    // Size limiter - ignore small differences (1 KiB)
-    const uint64_t sizeLimiter = 1024;
-
-    // Leaf nodes for the bottom-up propagation
-    std::vector<CallTreeNode*> leafItems;
-    int newAllocationsCounter = 0;
-
-    // Diff leaf nodes only (matching the Qt on_actionShow_Leaks_triggered logic)
-    for (auto& kv : comparisonHashmap) {
-        const uint32_t key = kv.first;
-        CallTreeNode* compNode = kv.second;
-        const auto baselineIt = baselineHashmap.find(key);
-
-        // Skip non-leaf nodes
-        if (compNode->children.size() != 0) {
-            compNode->size = 0;
-            compNode->count = 0;
-            continue;
-        }
-
-        leafItems.push_back(compNode);
-
-        if (baselineIt == baselineHashmap.end()) {
-            // NEW ALLOCATION - exists in comparison only
-            if (compNode->size < static_cast<int64_t>(sizeLimiter)) {
-                compNode->size = 0;
-                compNode->count = 0;
-            } else {
-                // Keep original values as delta, count as new allocation
-                newAllocationsCounter++;
-            }
-        } else {
-            // EXISTING ALLOCATION - calculate delta
-            CallTreeNode* baseNode = baselineIt->second;
-            const int64_t newSize = compNode->size - baseNode->size;
-            const int64_t newCount = compNode->count - baseNode->count;
-
-            // Filter small differences
-            if (newSize < static_cast<int64_t>(sizeLimiter) || newCount <= 0) {
-                compNode->size = 0;
-                compNode->count = 0;
-            } else {
-                compNode->size = newSize;
-                compNode->count = newCount;
-            }
-        }
-    }
-
-    // Release baseline tree - no longer needed
-    for (CallTreeNode* root : baselineRoots) DeleteTree(root);
-    baselineRoots.clear();
-    baselineHashmap.clear();
-
-    // Recalculate parent size & count from leaf nodes (bottom-up).
-    // First reset all non-leaf nodes to zero.
-    for (auto& kv : comparisonHashmap) {
-        CallTreeNode* node = kv.second;
-        if (node->children.size() > 0) {
-            node->size = 0;
-            node->count = 0;
-        }
-    }
-
-    // Then propagate leaf values up to parents
-    for (CallTreeNode* leaf : leafItems) {
-        CallTreeNode* parent = leaf->parent;
-        while (parent != nullptr) {
-            parent->size += leaf->size;
-            parent->count += leaf->count;
-            parent = parent->parent;
-        }
-    }
-    leafItems.clear();
-
-    // Count statistics and remove zero-count nodes
-    stats_.changedAllocations = 0;
-    stats_.newAllocationsCount = newAllocationsCounter;
-
-    for (auto& kv : comparisonHashmap) {
-        CallTreeNode* node = kv.second;
-        if (node->count > 0) {
-            stats_.changedAllocations++;
-        } else {
-            // Remove from parent's children list
-            if (node->parent) {
-                auto& siblings = node->parent->children;
-                siblings.erase(std::remove(siblings.begin(), siblings.end(), node),
-                               siblings.end());
-            } else {
-                comparisonRoots.erase(
-                    std::remove(comparisonRoots.begin(), comparisonRoots.end(), node),
-                    comparisonRoots.end());
-            }
-        }
-    }
-    comparisonHashmap.clear();
-
-    // Store delta roots for export (transfer ownership)
-    deltaRoots_ = std::move(comparisonRoots);
-
-    compared_ = true;
+    if (!loli::CompareSessions(baselineSession_, comparisonSession_,
+                              comparisonResult_, errorMessage_, skipRootLevels))
+        return false;
+    stats_ = {};
+    stats_.baselineTotalSize = comparisonResult_.base.bytes;
+    stats_.comparisonTotalSize = comparisonResult_.comparison.bytes;
+    stats_.baselineAllocCount = comparisonResult_.base.count;
+    stats_.comparisonAllocCount = comparisonResult_.comparison.count;
+    stats_.sizeDelta = comparisonResult_.comparison.bytes - comparisonResult_.base.bytes;
+    stats_.changedAllocations = comparisonResult_.changedStacks;
+    stats_.newAllocationsCount = comparisonResult_.newStacks;
+    stats_.removedAllocationsCount = comparisonResult_.removedStacks;
+    comparisonResult_.basePath = baselinePath_;
+    comparisonResult_.comparisonPath = comparisonPath_;
+    signedComparison_ = compared_ = true;
     return true;
 }
 
 bool ProfileComparatorLite::DumpProfile(int skipRootLevels) {
+    compared_ = false;
+    signedComparison_ = false;
+    if (skipRootLevels < 0) {
+        errorMessage_ = "Root levels must be a non-negative integer";
+        return false;
+    }
     if (!baselineLoaded_) {
         errorMessage_ = "Profile must be loaded first (call LoadProfile with isBaseline=true)";
         return false;
@@ -441,7 +338,7 @@ bool ProfileComparatorLite::DumpProfile(int skipRootLevels) {
 
     // Statistics from filtered (live) allocations
     stats_ = ComparisonStats();
-    stats_.baselineAllocCount = static_cast<int>(filteredRecords.size());
+    stats_.baselineAllocCount = static_cast<int64_t>(filteredRecords.size());
     stats_.comparisonAllocCount = 0;
     stats_.baselineTotalSize = 0;
     stats_.comparisonTotalSize = 0;
@@ -461,7 +358,7 @@ bool ProfileComparatorLite::DumpProfile(int skipRootLevels) {
 }
 
 bool ProfileComparatorLite::ExportDumpToText(const std::string& outputPath) {
-    if (!compared_) {
+    if (!compared_ || signedComparison_) {
         errorMessage_ = "Must call DumpProfile() before exporting";
         return false;
     }
@@ -499,93 +396,13 @@ bool ProfileComparatorLite::ExportDumpToText(const std::string& outputPath) {
 }
 
 bool ProfileComparatorLite::ExportToText(const std::string& outputPath) {
-    if (!compared_) {
+    if (!compared_ || !signedComparison_) {
         errorMessage_ = "Must call Compare() before exporting";
         return false;
     }
-
-    std::ofstream file(outputPath);
-    if (!file) {
-        errorMessage_ = "Cannot create output file: " + outputPath;
-        return false;
-    }
-
-    file << "=== LoliProfiler Comparison Report ===\n\n";
-    file << "Baseline allocations: " << stats_.baselineAllocCount << "\n";
-    file << "Comparison allocations: " << stats_.comparisonAllocCount << "\n";
-    file << "Baseline total size: " << SizeToString(stats_.baselineTotalSize) << "\n";
-    file << "Comparison total size: " << SizeToString(stats_.comparisonTotalSize) << "\n";
-    file << "Size delta: ";
-    if (stats_.sizeDelta >= 0) {
-        file << "+" << SizeToString(static_cast<uint64_t>(stats_.sizeDelta));
-    } else {
-        file << "-" << SizeToString(static_cast<uint64_t>(-stats_.sizeDelta));
-    }
-    file << "\n\n";
-
-    file << "Changed allocations (>1KB growth): " << stats_.changedAllocations << "\n";
-    file << "New allocations (not in baseline): " << stats_.newAllocationsCount << "\n\n";
-
-    file << "=== Memory Growth (Delta: Comparison - Baseline) ===\n\n";
-
-    // Sort root nodes by size (descending order) before writing
-    std::vector<CallTreeNode*> sortedRoots = deltaRoots_;
-    std::sort(sortedRoots.begin(), sortedRoots.end(),
-              [](CallTreeNode* a, CallTreeNode* b) {
-                  return a->size > b->size;
-              });
-
-    for (CallTreeNode* root : sortedRoots) {
-        WriteCallTreeToText(file, root, 0);
-    }
-
-    file.close();
-    return file.good();
+    return loli::WriteComparisonReport(comparisonResult_, outputPath, errorMessage_);
 }
 
-void ProfileComparatorLite::WriteCallTreeToText(std::ostream& stream,
-                                                CallTreeNode* node, int depth) {
-    if (!node) return;
-
-    for (int i = 0; i < depth; ++i) {
-        stream << "    "; // 4 spaces for indentation
-    }
-
-    stream << node->functionName << ", ";
-
-    // Size with +/- prefix for deltas
-    if (node->size > 0) {
-        stream << "+" << SizeToString(static_cast<uint64_t>(node->size));
-    } else if (node->size < 0) {
-        stream << "-" << SizeToString(static_cast<uint64_t>(-node->size));
-    } else {
-        stream << SizeToString(0);
-    }
-
-    stream << ", ";
-
-    // Count with +/- prefix for deltas
-    if (node->count > 0) {
-        stream << "+" << node->count;
-    } else if (node->count < 0) {
-        stream << node->count; // Already has negative sign
-    } else {
-        stream << "0";
-    }
-
-    stream << "\n";
-
-    // Sort children by size (descending order) before writing
-    std::vector<CallTreeNode*> sortedChildren = node->children;
-    std::sort(sortedChildren.begin(), sortedChildren.end(),
-              [](CallTreeNode* a, CallTreeNode* b) {
-                  return a->size > b->size;
-              });
-
-    for (CallTreeNode* child : sortedChildren) {
-        WriteCallTreeToText(stream, child, depth + 1);
-    }
-}
 
 void ProfileComparatorLite::WriteCallTreeToTextAbsolute(std::ostream& stream,
                                                         CallTreeNode* node,
@@ -612,119 +429,8 @@ void ProfileComparatorLite::WriteCallTreeToTextAbsolute(std::ostream& stream,
     }
 }
 
-void ProfileComparatorLite::ConvertDeltaTreeToRecords(
-    std::vector<Record>& stackRecords,
-    std::unordered_map<LoliUuid, CallStack, LoliUuidHash>& callStackMap) {
-    // Delta tree -> StackRecords + callstack map. Each leaf with a non-zero
-    // delta becomes one record; the callstack path is stored leaf-first
-    // (allocation site first, root last).
-    stackRecords.clear();
-    callStackMap.clear();
 
-    uint32_t seqCounter = 0;
-
-    // Library-name -> hashcode resolution (HashString::hashmap_ reverse
-    // lookup parity): use the tree node's retained original libHash, which
-    // is the intern-table key the loaded session carried.
-    std::function<void(CallTreeNode*, std::vector<CallTreeNode*>&)> traverseTree;
-    traverseTree = [&](CallTreeNode* node, std::vector<CallTreeNode*>& callStackPath) {
-        if (!node) return;
-
-        callStackPath.push_back(node);
-
-        if (node->children.empty() && (node->size != 0 || node->count != 0)) {
-            Record record;
-            record.uuid = LoliUuid::CreateUuid();
-            record.seq = seqCounter++;
-            record.time = 0; // No meaningful timestamp for a delta
-            record.size = static_cast<int32_t>(node->size);
-            record.addr = 0;
-            record.funcAddr = 0;
-            record.libHash = 0;
-
-            // Build callstack leaf-first: reverse the root-to-leaf path.
-            CallStack callstack;
-            callstack.reserve(callStackPath.size());
-            for (auto it = callStackPath.rbegin(); it != callStackPath.rend(); ++it) {
-                callstack.emplace_back((*it)->libraryHash, (*it)->functionAddress);
-            }
-
-            if (!callstack.empty()) {
-                record.libHash = callstack[0].first;
-                record.funcAddr = callstack[0].second;
-            }
-
-            stackRecords.push_back(record);
-            callStackMap.emplace(record.uuid, std::move(callstack));
-        }
-
-        for (CallTreeNode* child : node->children) {
-            traverseTree(child, callStackPath);
-        }
-
-        callStackPath.pop_back();
-    };
-
-    for (CallTreeNode* root : deltaRoots_) {
-        std::vector<CallTreeNode*> path;
-        traverseTree(root, path);
-    }
-}
-
-bool ProfileComparatorLite::ExportToLoli(const std::string& outputPath) {
-    if (!compared_) {
-        errorMessage_ = "Must call Compare() before exporting";
-        return false;
-    }
-
-    std::ofstream file(outputPath, std::ios::binary);
-    if (!file) {
-        errorMessage_ = "Cannot create output file: " + outputPath;
-        return false;
-    }
-
-    std::vector<Record> stackRecords;
-    std::unordered_map<LoliUuid, CallStack, LoliUuidHash> callStackMap;
-    ConvertDeltaTreeToRecords(stackRecords, callStackMap);
-
-    // Delta comparison session: empty meminfo/screenshots/smaps/freeaddr.
-    Session outSession;
-    outSession.records = std::move(stackRecords);
-    outSession.callStackMap = std::move(callStackMap);
-
-    // Intern table: keep the intern table of the comparison session (the
-    // delta nodes carry original hash codes resolved from it). The Qt
-    // version wrote HashString::hashmap_, which both loads had merged into
-    // the same global map - union both loaded sessions' tables.
-    outSession.internTable = comparisonSession_.internTable;
-    for (const auto& kv : baselineSession_.internTable) {
-        outSession.internTable.insert(kv);
-    }
-
-    // Symbol map from comparison data, merged with baseline symbols not
-    // already present (std::map iteration order is deterministic, matching
-    // what the format needs; both readers accept any order).
-    outSession.symbolMap = comparisonSession_.symbolMap;
-    for (const auto& lib : baselineSession_.symbolMap) {
-        auto& targetSymbols = outSession.symbolMap[lib.first];
-        for (const auto& sym : lib.second) {
-            if (targetSymbols.find(sym.first) == targetSymbols.end()) {
-                targetSymbols[sym.first] = sym.second;
-            }
-        }
-    }
-
-    std::vector<uint8_t> bytes;
-    if (!loli::WriteSession(outSession, bytes)) {
-        errorMessage_ = "Failed to serialize delta session";
-        return false;
-    }
-    file.write(reinterpret_cast<const char*>(bytes.data()),
-               static_cast<std::streamsize>(bytes.size()));
-    file.close();
-    if (!file.good()) {
-        errorMessage_ = "Failed to write output file: " + outputPath;
-        return false;
-    }
-    return true;
+bool ProfileComparatorLite::ExportToLoli(const std::string&) {
+    errorMessage_ = "Signed comparison cannot be represented faithfully in capture .loli format; export .txt instead";
+    return false;
 }

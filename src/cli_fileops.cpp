@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <charconv>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
@@ -107,67 +108,70 @@ std::vector<std::string> PositionalArgs(const std::vector<std::string>& args) {
 
 int RunCompare(const std::vector<std::string>& args) {
     const auto start = loli::LoliLogger::Clock::now();
-    const std::vector<std::string> files = PositionalArgs(args);
-    const std::string outFile = GetOptionValue(args, "out");
-    const std::string skipStr = GetOptionValue(args, "skip-root-levels");
-    const int skipRootLevels = skipStr.empty() ? 0 : atoi(skipStr.c_str());
-
-    if (files.size() != 2) {
-        FileError( "Error: --compare requires exactly two .loli files\n");
+    std::vector<std::string> files;
+    std::string output, skip;
+    for (size_t i = 0; i < args.size(); ++i) {
+        std::string option = args[i];
+        if (option == "--compare" || option == "--verbose") continue;
+        if (option.rfind("--", 0) != 0) { files.push_back(option); continue; }
+        std::string value;
+        const auto equal = option.find('=');
+        if (equal != std::string::npos) { value = option.substr(equal + 1); option.resize(equal); }
+        if (option != "--out" && option != "--skip-root-levels" && option != "--log-file" && option != "--log-level") {
+            FileError("Error: unknown comparison option: %s\n", option.c_str());
+            return 1;
+        }
+        if (equal == std::string::npos) {
+            if (++i == args.size() || args[i].rfind("--", 0) == 0) {
+                FileError("Error: missing value for %s\n", option.c_str());
+                return 1;
+            }
+            value = args[i];
+        }
+        if (value.empty()) {
+            FileError("Error: missing value for %s\n", option.c_str());
+            return 1;
+        }
+        if (option == "--out") output = value;
+        if (option == "--skip-root-levels") skip = value;
+    }
+    int levels = 0;
+    if (!skip.empty()) {
+        const auto parsed = std::from_chars(skip.data(), skip.data() + skip.size(), levels);
+        if (parsed.ec != std::errc() || parsed.ptr != skip.data() + skip.size() || levels < 0) {
+            FileError("Error: --skip-root-levels must be a non-negative integer\n");
+            return 1;
+        }
+    }
+    if (files.size() != 2 || output.empty()) {
+        FileError("Error: --compare requires two .loli files and --out <diff.txt>\n");
         return 1;
     }
-    if (outFile.empty()) {
-        FileError( "Error: --out is required to specify output file\n");
+    loli::ComparisonResult result;
+    std::string error;
+    if (!loli::CompareFiles(files[0], files[1], result, error, levels,
+        [](const std::string& progress) { std::printf("%s\n", progress.c_str()); })) {
+        FileError("Error: %s\n", error.c_str());
         return 1;
     }
-    if (skipRootLevels < 0) {
-        FileError( "Error: --skip-root-levels must be a non-negative integer\n");
+    if (!loli::WriteComparisonReport(result, output, error)) {
+        FileError("Error: %s\n", error.c_str());
         return 1;
     }
-    LOLI_INFO("file") << "compare baseline=" << files[0]
-                      << " current=" << files[1] << " output=" << outFile;
-
-    std::printf("Loading baseline profile: %s...\n", files[0].c_str());
-    ProfileComparatorLite comparator;
-    if (!comparator.LoadProfile(files[0], true)) {
-        FileError( "Error: %s\n", comparator.GetErrorMessage().c_str());
-        return 1;
-    }
-    std::printf("Loading comparison profile: %s...\n", files[1].c_str());
-    if (!comparator.LoadProfile(files[1], false)) {
-        FileError( "Error: %s\n", comparator.GetErrorMessage().c_str());
-        return 1;
-    }
-    std::printf("Comparing profiles%s...\n",
-                skipRootLevels > 0 ? " (skipping root levels)" : "");
-    if (!comparator.Compare(skipRootLevels)) {
-        FileError( "Error: %s\n", comparator.GetErrorMessage().c_str());
-        return 1;
-    }
-
-    const auto stats = comparator.GetStats();
-    std::printf("\n=== Comparison Results ===\n");
-    std::printf("Baseline allocations: %lld\n", (long long)stats.baselineAllocCount);
-    std::printf("Comparison allocations: %lld\n", (long long)stats.comparisonAllocCount);
-    std::printf("Baseline total size: %s\n",
-                SizeToString(stats.baselineTotalSize).c_str());
-    std::printf("Comparison total size: %s\n",
-                SizeToString(stats.comparisonTotalSize).c_str());
-    std::printf("Changed allocations (>1KB growth): %lld\n", (long long)stats.changedAllocations);
-    std::printf("New allocations (not in baseline): %lld\n\n", (long long)stats.newAllocationsCount);
-
-    // Output format by extension: .loli writes a diff .loli, else text.
-    const bool asLoli = outFile.size() >= 5 &&
-                        strcmp(outFile.c_str() + outFile.size() - 5, ".loli") == 0;
-    const bool ok = asLoli ? comparator.ExportToLoli(outFile)
-                           : comparator.ExportToText(outFile);
-    if (!ok) {
-        FileError( "Error: failed to write %s\n", outFile.c_str());
-        return 1;
-    }
-    std::printf("Comparison written to %s\n", outFile.c_str());
+    std::printf("\n=== Comparison Results (live allocations) ===\n"
+                "Baseline allocations: %lld\nComparison allocations: %lld\n"
+                "Baseline total bytes: %lld\nComparison total bytes: %lld\n"
+                "Size delta bytes: %+lld\nCount delta: %+lld\n"
+                "Changed allocation stacks: %lld\nNew allocation stacks: %lld\n"
+                "Removed allocation stacks: %lld\nReport: %s\n",
+                (long long)result.base.count, (long long)result.comparison.count,
+                (long long)result.base.bytes, (long long)result.comparison.bytes,
+                (long long)(result.comparison.bytes - result.base.bytes),
+                (long long)(result.comparison.count - result.base.count),
+                (long long)result.changedStacks, (long long)result.newStacks,
+                (long long)result.removedStacks, output.c_str());
     loli::LoliLogger::Instance().LogStage("file", "compare_complete", start,
-        "output=" + outFile);
+                                       "output=" + output);
     return 0;
 }
 

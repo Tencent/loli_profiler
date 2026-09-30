@@ -64,11 +64,15 @@ def build_entries(platform: str, build_dir: Path) -> dict[str, Path]:
                  "LoliProfilerImGui.exe")
         add_file(entries, find_build_output(build_dir, "LoliProfilerCLI.exe"),
                  "LoliProfilerCLI.exe")
+        add_file(entries, find_build_output(build_dir, "LoliProfilerCompare.exe"),
+                 "LoliProfilerCompare.exe")
     elif platform == "macos":
         app = find_build_output(build_dir, "LoliProfilerImGui.app")
         add_tree(entries, app, "LoliProfilerImGui.app")
         add_file(entries, find_build_output(build_dir, "LoliProfilerCLI"),
                  "LoliProfilerCLI")
+        add_file(entries, find_build_output(build_dir, "LoliProfilerCompare"),
+                 "LoliProfilerCompare")
         # The GUI resolves tools relative to its executable inside the bundle.
         add_runtime(entries, "LoliProfilerImGui.app/Contents/MacOS")
         icon = ROOT / "res" / "loli_cat_icon.icns"
@@ -79,6 +83,8 @@ def build_entries(platform: str, build_dir: Path) -> dict[str, Path]:
                  "LoliProfilerImGui")
         add_file(entries, find_build_output(build_dir, "LoliProfilerCLI"),
                  "LoliProfilerCLI")
+        add_file(entries, find_build_output(build_dir, "LoliProfilerCompare"),
+                 "LoliProfilerCompare")
 
     add_runtime(entries, "")
     add_tree(entries, ROOT / "agentcli", "agentcli")

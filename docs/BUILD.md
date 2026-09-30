@@ -18,7 +18,7 @@ No Qt SDK or runtime is needed.
 python scripts\build.py
 ```
 
-Without arguments, `scripts/build.py` opens an interactive menu: full release, native binaries only, package existing binaries, or install missing Android tools. A full build configures VS2022, builds both executables and Android hooks, and creates `dist/LoliProfiler-windows.zip`. Android object files are kept in NDK-specific directories under `build/ndk-obj`, so switching NDK versions does not reuse incompatible intermediates.
+Without arguments, `scripts/build.py` opens an interactive menu: full release, native binaries only, package existing binaries, or install missing Android tools. A full build configures VS2022, builds all three executables (profiling GUI, CLI, comparison GUI) and Android hooks, and creates `dist/LoliProfiler-windows.zip`. Android object files are kept in NDK-specific directories under `build/ndk-obj`, so switching NDK versions does not reuse incompatible intermediates.
 
 For CI or another non-interactive shell, specify a mode and installed paths:
 
@@ -55,6 +55,6 @@ With no arguments the same interactive menu appears. Use `python3 scripts/build.
 
 ## Archive contents
 
-Each zip has a `LoliProfiler/` root with the GUI, native CLI, Python injector and config, `remote/llvm/<abi>/libloli.so` for ARM and x86, optional legacy GCC hooks, the `agentcli/` Python package, app icon, README, and analysis scripts. On macOS the GUI's runtime files are also inside `LoliProfilerImGui.app/Contents/MacOS/`.
+Each zip has a `LoliProfiler/` root with the profiling GUI, native CLI, standalone `LoliProfilerCompare` window, Python injector and config, `remote/llvm/<abi>/libloli.so` for ARM and x86, optional legacy GCC hooks, the `agentcli/` Python package, app icon, README, and analysis scripts. On macOS the GUI's runtime files are also inside `LoliProfilerImGui.app/Contents/MacOS/`; the comparison executable is beside the bundle.
 
 The native CLI can export `.loli` to text or SQLite: `LoliProfilerCLI --dump capture.loli --out capture.db`. The installed Python command remains `loli`; `agentcli` is also available. See [CLI mode](CLI_MODE.md).

@@ -20,6 +20,7 @@
 #include "pathutilslite.h"
 #include "appsettings.h"
 #include "processrunner.h"
+#include "comparelaunch.h"
 
 
 #include <SFML/Graphics/RenderWindow.hpp>
@@ -824,6 +825,12 @@ int main(int argc, char** argv) {
         " adb=" + PathUtilsLite::GetADBExecutablePath() +
         " python=" + PathUtilsLite::GetPythonExecutablePath());
     std::string loadedRecordName;
+    std::string compareLaunchError;
+    bool showCompareLaunchError = false;
+    auto launchCompare = [&]() {
+        if (!gui::LaunchComparison(GuiExecutablePath(), compareLaunchError))
+            showCompareLaunchError = true;
+    };
     std::string recordPath;
     std::string pendingSymbolizeSave;
     std::string pendingSymbolLibrary;
@@ -1197,6 +1204,7 @@ int main(int argc, char** argv) {
                 if (ImGui::MenuItem("Symbolize Record...", nullptr, false,
                                     canSaveRecord))
                     startSymbolize();
+                if (ImGui::MenuItem("Compare...")) launchCompare();
                 ImGui::Separator();
                 if (ImGui::MenuItem("Settings...", kSettingsShortcut)) {
                     showSettingsDialog = true;
@@ -1291,8 +1299,10 @@ int main(int argc, char** argv) {
                 ImGui::GetStyle().FramePadding.x * 2.0f;
             const float leaksW = ImGui::CalcTextSize("Leaks").x +
                                  ImGui::GetStyle().FramePadding.x * 2.0f;
-            const float buttonsWidth = captureActionW + leaksW +
-                                       ImGui::GetStyle().ItemSpacing.x;
+            const float compareW = ImGui::CalcTextSize("Compare").x +
+                                   ImGui::GetStyle().FramePadding.x * 2.0f;
+            const float buttonsWidth = captureActionW + leaksW + compareW +
+                                       2.0f * ImGui::GetStyle().ItemSpacing.x;
             const float toolbarWidth = ImGui::GetContentRegionAvail().x;
             ImGui::SetCursorPosX((toolbarWidth - buttonsWidth) * 0.5f);
             if (capturing) {
@@ -1316,8 +1326,21 @@ int main(int argc, char** argv) {
                 showLeakViewChoice = true;
             if (!canAnalyzeLeaks) ImGui::EndDisabled();
             ImGui::SetItemTooltip("Select a timeline interval first. Compare callstack growth between its start and end marks.");
+            ImGui::SameLine();
+            if (ImGui::Button("Compare")) launchCompare();
+            ImGui::SetItemTooltip("Open a separate window to compare two saved captures.");
         }
         ImGui::End();
+
+        if (showCompareLaunchError) {
+            ImGui::OpenPopup("Compare launch failed");
+            showCompareLaunchError = false;
+        }
+        if (ImGui::BeginPopupModal("Compare launch failed", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+            ImGui::TextWrapped("%s", compareLaunchError.c_str());
+            if (ImGui::Button("OK")) ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+        }
 
         if (showLeakViewChoice) {
             ImGui::OpenPopup("Leaks view");

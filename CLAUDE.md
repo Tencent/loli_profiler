@@ -6,11 +6,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 LoliProfiler is a C/C++ memory profiling tool for Android games and applications. It connects to Android devices via ADB to capture and analyze memory allocation patterns, stack traces, and system memory information.
 
-The project is **Qt-free** (since the `remove-qt` change): pure C++ with vendored dependencies only. It builds two executables:
+The project is **Qt-free** (since the `remove-qt` change): pure C++ with vendored dependencies only. It builds three executables:
 - **LoliProfilerImGui** — the GUI (Dear ImGui docking + SFML): dockable panels (Stacktrace, Timeline, Treemap, Smaps, Screenshot, Console). Launch settings live in the modal Run/Launch dialog (File → Run or the toolbar Run button).
 - **LoliProfilerCLI** — headless console application with the SAME capture capability as the GUI (launch/attach, capture, save .loli) plus `--dump`/`--compare` file processing, for automated profiling and CI/CD integration.
 
-Both executables are built from the **LoliCore** static library (Qt-free core: adb tools, device socket channel, .loli serializer, launch driver, capture engine, symbol translation, config stores). `agentcli/` (Python) is the analysis-only heap explorer (`loli` command).
+- **LoliProfilerCompare** is the standalone ImGui comparison window. File > Compare and the toolbar Compare button launch it independently. It accepts two positional captures or `--base` and `--compare`. Its three dockable Base/Comparer/Diff panels default to columns, persist layout in `loli_compare_imgui.ini`, and have separate search/selection/expansion state with search footers. Its compact toolbar has fixed-width filenames and theme Settings; full paths are in the title/tooltips and loading/allocation status is in the bottom bar.
+
+All three executables are built from the **LoliCore** static library (Qt-free core: adb tools, device socket channel, .loli serializer, launch driver, capture engine, symbol translation, config stores, comparison). `agentcli/` (Python) is the analysis-only heap explorer (`loli` command).
 
 For architecture details, data structures, threading model, and development patterns see **[docs/ARCH.md](docs/ARCH.md)**.
 
@@ -35,6 +37,7 @@ No-argument runs show an interactive menu. Downloads need a prompt or explicit
 ### Build Outputs
 - GUI: `./build/cmake/bin/release/LoliProfilerImGui.exe` (Windows)
 - CLI: `./build/cmake/bin/release/LoliProfilerCLI.exe` (Windows) or `LoliProfilerCLI` (macOS/Linux)
+- Comparison GUI: `./build/cmake/bin/release/LoliProfilerCompare.exe` (Windows) or `LoliProfilerCompare` (macOS/Linux)
 - Final package: `./dist/`
 
 ### Direct CMake (development)
@@ -60,6 +63,8 @@ targets use C++17 per-target.
 
 - `LoliCore` (`LOLI_QTFREE_SRCS` in CMakeLists.txt) holds every core service.
   New core code must be Qt-free (STL + vendored deps only).
+- `profilecomparison.h` is the shared comparison API: exact library-qualified symbol paths, saved-free filtering, signed 64-bit inclusive/self bytes and counts. CLI and standalone GUI use `CompareFiles` and `WriteComparisonReport`. Do not reintroduce hash-only identity, thresholded leaf diffs, or lossy signed `.loli` exports.
+- Comparison Settings contains theme selection and infrequent root skipping. Documentation screenshots must show the comparer with no capture files opened; do not publish private sample paths, allocation data, or symbols. Credit the comparison reference fork `leoin2012/loli_profiler` and its Loli Compare contributor `shuchangliu`.
 - **Design D12** (see `openspec/changes/remove-qt-dependency/design.md`): capture
   orchestration is a LoliCore API; the GUI and the headless CLI are equal
   consumers calling the same APIs. The Python `agentcli/` package is

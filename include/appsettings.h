@@ -11,7 +11,8 @@
 //
 // On Windows QSettings used the registry; the spec requires a per-user
 // config file instead. Location: a "loli_settings.json" next to the
-// executable (portable, single-binary friendly - matches the app's
+// executable (macOS app bundles use ~/Library/Application Support/LoliProfiler
+// so settings cannot invalidate the signed bundle; portable binaries match the app's
 // existing convention of keeping loli3.conf/cache/ next to the binary).
 //
 // Usage mirrors QSettings call sites:
@@ -21,7 +22,7 @@
 //   settings.Sync();                      // persist (or rely on destructor)
 class AppSettings {
 public:
-    // Uses the default location next to the executable.
+    // Uses the portable executable directory or the macOS bundle's user state directory.
     AppSettings();
     // Explicit path (used by tests).
     explicit AppSettings(const std::string& filePath);

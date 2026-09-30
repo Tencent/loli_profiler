@@ -2,6 +2,7 @@
 #include "launchdriver.h"
 #include "pathutilslite.h"
 #include "processrunner.h"
+#include "runtimepaths.h"
 
 #include <chrono>
 #include <cstdlib>
@@ -39,6 +40,20 @@ int main(int argc, char** argv) {
         Require(argc > 0, "missing executable path");
         fs::create_directories(scratch / "unrelated cwd");
         fs::current_path(scratch / "unrelated cwd");
+        Require(loli::RuntimeDirectory(executable.parent_path()) == executable.parent_path(),
+                "portable runtime moved away from executable");
+#ifdef __APPLE__
+        const auto app = scratch / "LoliProfilerImGui.app";
+        const auto macos = app / "Contents" / "MacOS";
+        Require(loli::RuntimeDirectory(macos) == app / "Contents" / "Resources",
+                "bundle runtime is not in Resources");
+        const auto state = loli::StateDirectory(macos);
+        Require(state.string().find(app.string()) != 0, "state would invalidate the bundle seal");
+        AppSettings nested((scratch / "user state" / "settings.json").string());
+        nested.Set("fixture", "value");
+        nested.Sync();
+        Require(fs::is_regular_file(nested.GetFilePath()), "state directory was not created");
+#endif
         AppSettings settings;
         Require(fs::equivalent(fs::path(settings.GetFilePath()).parent_path(),
                                executable.parent_path()), "settings follow working directory");

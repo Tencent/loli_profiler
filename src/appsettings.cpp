@@ -1,4 +1,5 @@
 #include "appsettings.h"
+#include "runtimepaths.h"
 
 #include <cstdio>
 #ifdef _WIN32
@@ -19,7 +20,7 @@
 
 namespace {
 
-// Settings file name next to the executable.
+// Portable binaries keep settings beside the executable; app bundles use user state.
 constexpr const char* kSettingsFileName = "loli_settings.json";
 
 std::string GetExecutableDir() {
@@ -52,7 +53,19 @@ std::string GetExecutableDir() {
 } // namespace
 
 AppSettings::AppSettings()
-    : AppSettings(GetExecutableDir() + "/" + kSettingsFileName) {}
+    : AppSettings((loli::StateDirectory(GetExecutableDir()) / kSettingsFileName).string()) {
+    // Preserve settings from earlier macOS builds that wrote inside the bundle.
+    const auto legacy = std::filesystem::path(GetExecutableDir()) / kSettingsFileName;
+    if (legacy != filePath_ && !std::filesystem::exists(filePath_)) {
+        AppSettings previous(legacy.string());
+        values_ = previous.values_;
+        auto logPath = values_.find("DiagnosticLogPath");
+        if (logPath != values_.end() &&
+            logPath->second == (legacy.parent_path() / "loli_gui.log").string())
+            logPath->second = (std::filesystem::path(filePath_).parent_path() / "loli_gui.log").string();
+        dirty_ = !values_.empty();
+    }
+}
 
 AppSettings::AppSettings(const std::string& filePath)
     : filePath_(filePath) {
@@ -117,6 +130,10 @@ void AppSettings::Sync() {
                       allocator);
     }
 
+    std::error_code error;
+    const auto directory = std::filesystem::path(filePath_).parent_path();
+    if (!directory.empty())
+        std::filesystem::create_directories(directory, error);
     std::ofstream out(filePath_.c_str());
     if (!out.good())
         return; // best-effort persistence (QSettings parity: silent failure)

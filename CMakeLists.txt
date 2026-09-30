@@ -289,11 +289,16 @@ elseif(APPLE)
         MACOSX_BUNDLE_COPYRIGHT "${COPYRIGHT}"
         MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/cmake/macosx_bundle_info.plist.in")
 endif()
+if(APPLE)
+    set(LOLI_GUI_RUNTIME_DIR "$<TARGET_FILE_DIR:LoliProfilerImGui>/../Resources")
+else()
+    set(LOLI_GUI_RUNTIME_DIR "$<TARGET_FILE_DIR:LoliProfilerImGui>")
+endif()
 add_custom_command(TARGET LoliProfilerImGui POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:LoliProfilerImGui>/res"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${LOLI_GUI_RUNTIME_DIR}/res"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/res/loli_cat_icon.png"
-        "$<TARGET_FILE_DIR:LoliProfilerImGui>/res/loli_cat_icon.png"
+        "${LOLI_GUI_RUNTIME_DIR}/res/loli_cat_icon.png"
     VERBATIM)
 
 # C++17 is required by SFML 3 / ImGui-SFML (do NOT change the global standard)

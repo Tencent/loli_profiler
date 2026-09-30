@@ -33,3 +33,8 @@
 ## 6. Upstream integration
 
 - [x] 6.1 Merge the upstream shared signed comparison/viewer feature, retain macOS snapshot and runtime fixes, build all three desktop targets and four hook ABIs, verify comparison/packaged launch checks, and prepare tested changes for commit/push.
+
+## 7. macOS bundle signature repair
+
+- [x] 7.1 Move immutable GUI runtime into Resources and mutable settings/layout/logs outside the bundle; preserve legacy settings and portable CLI paths.
+- [x] 7.2 Ad-hoc sign the complete staged release bundle, verify its signature after ZIP extraction, rebuild both archives, and repair/launch the reported local app.

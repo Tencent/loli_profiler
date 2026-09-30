@@ -20,6 +20,7 @@
 #include "treemappanel.h"
 #include "pathutilslite.h"
 #include "appsettings.h"
+#include "runtimepaths.h"
 #include "processrunner.h"
 #include "comparelaunch.h"
 
@@ -730,8 +731,10 @@ int main(int argc, char** argv) {
     }
     if (smokeTest && diagnosticLogPath.empty())
         defaultDiagnosticLogPath = true;
-    const std::string defaultLogPath =
-        (GuiExecutablePath().parent_path() / "loli_gui.log").string();
+    const auto stateDirectory = loli::StateDirectory(GuiExecutablePath().parent_path());
+    std::error_code stateError;
+    std::filesystem::create_directories(stateDirectory, stateError);
+    const std::string defaultLogPath = (stateDirectory / "loli_gui.log").string();
     const bool commandLineLogging = defaultDiagnosticLogPath ||
                                     !diagnosticLogPath.empty();
     if (defaultDiagnosticLogPath && diagnosticLogPath.empty())
@@ -762,7 +765,7 @@ int main(int argc, char** argv) {
 
     sf::RenderWindow window(sf::VideoMode({1440, 810}), "LoliProfiler",
                             sf::Style::Default, sf::State::Windowed, settings);
-    const std::filesystem::path iconDir = GuiExecutablePath().parent_path();
+    const auto iconDir = loli::RuntimeDirectory(GuiExecutablePath().parent_path());
     sf::Image windowIcon;
     if (!iconDir.empty() &&
         windowIcon.loadFromFile(iconDir / "res" / "loli_cat_icon.png"))
@@ -773,6 +776,8 @@ int main(int argc, char** argv) {
         return -1;
 
     ImGuiIO& io = ImGui::GetIO();
+    const std::string layoutPath = (stateDirectory / "imgui.ini").string();
+    io.IniFilename = smokeTest ? nullptr : layoutPath.c_str();
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 

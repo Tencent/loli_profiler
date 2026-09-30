@@ -6,7 +6,10 @@ from __future__ import annotations
 import argparse
 import os
 from pathlib import Path
+import shutil
+import subprocess
 import sys
+import tempfile
 import zipfile
 
 
@@ -77,16 +80,23 @@ def build_entries(platform: str, build_dir: Path, *, native_only: bool = False) 
     elif platform == "macos":
         app = find_build_output(build_dir, "LoliProfilerImGui.app")
         add_tree(entries, app, "LoliProfilerImGui.app", omit_runtime_state=True)
-        if native_only:
-            # Staged hooks from prior builds must not sneak into an offline ZIP.
-            entries = {name: path for name, path in entries.items()
-                       if "/Contents/MacOS/remote/" not in name}
+        # Older builds staged non-Mach-O runtime files in MacOS, where codesign
+        # treats them as nested code. Move them into the sealed Resources tree.
+        macos_prefix = "LoliProfiler/LoliProfilerImGui.app/Contents/MacOS/"
+        resources_prefix = "LoliProfiler/LoliProfilerImGui.app/Contents/Resources/"
+        entries = {
+            (resources_prefix + name[len(macos_prefix):]
+             if name.startswith(macos_prefix) and name != macos_prefix + "LoliProfilerImGui"
+             else name): path
+            for name, path in entries.items()
+            if "/_CodeSignature/" not in name and
+               (not native_only or "/remote/" not in name)
+        }
         add_file(entries, find_build_output(build_dir, "LoliProfilerCLI"),
                  "LoliProfilerCLI")
         add_file(entries, find_build_output(build_dir, "LoliProfilerCompare"),
                  "LoliProfilerCompare")
-        # The GUI resolves tools relative to its executable inside the bundle.
-        add_runtime(entries, "LoliProfilerImGui.app/Contents/MacOS",
+        add_runtime(entries, "LoliProfilerImGui.app/Contents/Resources",
                     include_hooks=not native_only)
         icon = ROOT / "res" / "loli_cat_icon.icns"
         if icon.is_file():
@@ -108,6 +118,40 @@ def build_entries(platform: str, build_dir: Path, *, native_only: bool = False) 
     return entries
 
 
+def sign_macos_bundle(entries: dict[str, Path], staging: Path) -> dict[str, Path]:
+    """Seal the final bundle, without modifying the reusable build output."""
+    if sys.platform != "darwin" or not shutil.which("codesign"):
+        raise RuntimeError("macOS releases must be packaged on macOS with codesign installed")
+    prefix = "LoliProfiler/LoliProfilerImGui.app/"
+    remaining = {name: path for name, path in entries.items() if not name.startswith(prefix)}
+    for name, source in entries.items():
+        if name.startswith(prefix):
+            destination = staging / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            # Only file bytes/modes belong in the ZIP, never extended-attribute
+            # signatures on scripts, images, JSON, or Android ELF libraries.
+            shutil.copyfile(source, destination)
+            destination.chmod(source.stat().st_mode & 0o777)
+    app = staging / "LoliProfiler" / "LoliProfilerImGui.app"
+    subprocess.run(["codesign", "--force", "--sign", "-", "--timestamp=none", str(app)], check=True)
+    verify_macos_bundle(app)
+    add_tree(remaining, app, "LoliProfilerImGui.app")
+    return remaining
+
+
+def verify_macos_bundle(app: Path) -> None:
+    subprocess.run(["codesign", "--verify", "--deep", "--strict", str(app)], check=True)
+
+
+def verify_archived_macos_bundle(archive: zipfile.ZipFile, destination: Path) -> None:
+    prefix = "LoliProfiler/LoliProfilerImGui.app/"
+    for member in archive.infolist():
+        if member.filename.startswith(prefix):
+            path = Path(archive.extract(member, destination))
+            path.chmod((member.external_attr >> 16) & 0o777)
+    verify_macos_bundle(destination / "LoliProfiler" / "LoliProfilerImGui.app")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--platform", choices=("windows", "macos", "linux"), required=True)
@@ -124,19 +168,25 @@ def main() -> int:
         suffix = "-native" if args.native_only else ""
         output = out_dir / f"LoliProfiler-{args.platform}{suffix}.zip"
         temporary = output.with_suffix(".zip.tmp")
-        with zipfile.ZipFile(temporary, "w", compression=zipfile.ZIP_DEFLATED,
-                             compresslevel=6, allowZip64=True) as archive:
-            for destination, source in sorted(entries.items()):
-                archive.write(source, destination)
-        with zipfile.ZipFile(temporary) as archive:
-            bad = archive.testzip()
-            if bad:
-                raise RuntimeError(f"zip verification failed at {bad}")
+        with tempfile.TemporaryDirectory(prefix="loli-release-") as staging_directory:
+            staging = Path(staging_directory)
+            if args.platform == "macos":
+                entries = sign_macos_bundle(entries, staging / "signed")
+            with zipfile.ZipFile(temporary, "w", compression=zipfile.ZIP_DEFLATED,
+                                 compresslevel=6, allowZip64=True) as archive:
+                for destination, source in sorted(entries.items()):
+                    archive.write(source, destination)
+            with zipfile.ZipFile(temporary) as archive:
+                bad = archive.testzip()
+                if bad:
+                    raise RuntimeError(f"zip verification failed at {bad}")
+                if args.platform == "macos":
+                    verify_archived_macos_bundle(archive, staging / "extracted")
         os.replace(temporary, output)
         print(f"Packaged {output} ({output.stat().st_size:,} bytes, "
               f"{len(entries)} files)")
         return 0
-    except (OSError, RuntimeError) as error:
+    except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
         print(f"Packaging failed: {error}", file=sys.stderr)
         return 1
 

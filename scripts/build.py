@@ -302,7 +302,7 @@ def stage_runtime(system: str) -> None:
     elif system == "macos":
         runtime_dirs = (find_build_output(BUILD_DIR, "LoliProfilerCLI").parent,
                         find_build_output(BUILD_DIR, "LoliProfilerImGui.app") /
-                        "Contents" / "MacOS")
+                        "Contents" / "Resources")
     else:
         runtime_dirs = (find_build_output(BUILD_DIR, "LoliProfilerCLI").parent,)
     # Keep every launch location paired with the freshly built runtime.

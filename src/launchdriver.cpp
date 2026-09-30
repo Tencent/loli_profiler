@@ -2,6 +2,7 @@
 #include "lolilogger.h"
 #include "captureconfig.h"
 #include "processrunner.h"
+#include "runtimepaths.h"
 
 #include <cctype>
 #include <cstdio>
@@ -155,14 +156,16 @@ bool LaunchDriver::Run(const Config& config,
     startResult_ = false;
     injectCallback_ = std::move(onInjectFinished);
 
-    const std::string execDir = GetExecutableDir();
+    const auto executableDirectory = GetExecutableDir();
+    const std::string execDir = loli::RuntimeDirectory(executableDirectory).string();
+    const std::string stateDir = loli::StateDirectory(executableDirectory).string();
     auto report = [&onProgress](int step) {
         if (onProgress)
             onProgress(step, StepLabel(step));
     };
 
     if (config.useCache) // clear local cache folder before the first push
-        ClearLocalCache(execDir);
+        ClearLocalCache(stateDir);
 
     const bool hasSerial = !config.deviceSerial.empty();
 
@@ -341,7 +344,7 @@ bool LaunchDriver::Run(const Config& config,
     // left running - the caller polls IsRunning()/Stop(); completion (or
     // spawn failure) fires injectCallback_.
     std::vector<std::string> arguments;
-    arguments.push_back("jdwp-shellifier.py");
+    arguments.push_back((std::filesystem::path(execDir) / "jdwp-shellifier.py").string());
     arguments.push_back("--target");
     arguments.push_back("127.0.0.1");
     arguments.push_back("--port");
@@ -353,7 +356,9 @@ bool LaunchDriver::Run(const Config& config,
     injectRunner_.reset(new ProcessRunner());
     injectRunner_->SetProgram(config.pythonPath);
     injectRunner_->SetArguments(arguments);
-    injectRunner_->SetWorkingDirectory(execDir);
+    std::error_code stateError;
+    std::filesystem::create_directories(stateDir, stateError);
+    injectRunner_->SetWorkingDirectory(stateDir);
 
     // Capturing "this" is safe: Stop() (and the destructor via Stop())
     // always joins the watcher thread through Kill() before the runner

@@ -11,7 +11,7 @@ build/cmake/LoliProfilerCLI --help
 open build/cmake/LoliProfilerImGui.app
 ```
 
-The driver stages injector/config/icon files beside the CLI and inside `LoliProfilerImGui.app/Contents/MacOS/`, along with any already-built Android hooks. Settings and injection paths resolve relative to the executable, even when launched from another directory. The default deployment target is macOS 13.0; an existing build cache with the former 10.13 target needs an explicit update:
+The driver stages injector/config/icon files beside the CLI and inside `LoliProfilerImGui.app/Contents/Resources/`, along with any already-built Android hooks. The macOS GUI stores settings, layout, and default logs in `~/Library/Application Support/LoliProfiler/`, outside the signed bundle, and migrates earlier in-bundle settings when user settings do not yet exist. The CLI retains executable-relative settings and runtime paths. The injector reads logging configuration beside its script and writes logs in its working directory. The default deployment target is macOS 13.0; an existing build cache with the former 10.13 target needs an explicit update:
 
 ```sh
 cmake -S . -B build/cmake -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0
@@ -26,6 +26,14 @@ open build/macos-release-test/LoliProfiler/LoliProfilerImGui.app
 ```
 
 The `*-native.zip` contains GUI, CLI, injector, Python agent, icon, and docs. Android capture requires hook libraries and configured Android tools. `ditto` retains executable permissions; ZIP utilities that discard modes may require restoring them. Generated settings, logs, and caches are omitted from the app bundle archive.
+
+Packaging ad-hoc signs the complete app after staging resources and verifies its seal again after ZIP extraction. This requires macOS and `codesign`; no paid signing identity is needed. Check an extracted app with:
+
+```sh
+codesign --verify --deep --strict dist/LoliProfiler/LoliProfilerImGui.app
+```
+
+Ad-hoc signing does not establish an Apple-verified publisher or notarization. For a trusted downloaded release, macOS may block opening until the user tries opening it and then selects **System Settings > Privacy & Security > Open Anyway**. See [Apple's app-opening guidance](https://support.apple.com/en-us/102445). A signature verification failure must be fixed by rebuilding/repackaging; do not bypass it as a routine installation step. Developer ID signing and notarization are needed for distribution without this manual approval.
 
 GUI shortcuts use Command on macOS and Control on Windows/Linux for Open (O), Run (R), Save (S), Settings (,), and Quit (Q). The handler uses ImGui's normalized primary modifier, preserving native text-editing shortcuts.
 
@@ -113,4 +121,6 @@ python3.13 tests/check_comparison_cli.py --cli build/cmake/LoliProfilerCLI --gui
 
 On 2026-09-30: macOS 26.6.2 arm64, AppleClang 21/Xcode, pinned SFML 3.0.2, Python 3.13.15, SDK Platform-Tools 37.0.1, and NDK r27 (27.0.12077973). Native GUI/CLI, all four LLVM hook ABIs, six supplied archived captures, extracted native/full archives, and real UE4 phone launch/injection, scene entry, stop/save, symbolization, export, and GUI reopening passed. Source archives remain unchanged. The Python 3 injector and ARM64 authenticated-return-PC fixes were verified on the phone.
 
-After merging the shared signed comparison feature, all three desktop targets build and all five CTest cases pass. Synthetic comparison CLI/GUI checks verify signed live accounting, Unicode/spaced paths, strict arguments, input protection, docked/stacked layouts, identical-file rendering, and exact GUI/CLI report parity. A representative saved capture passes snapshot/SQLite/agent/self-comparison regression with the new engine. Private capture paths, statistics, and symbols are kept in local build evidence; public documentation records reproducible commands and pass/fail scope. Intel/universal binaries, execution on macOS 13, and public distribution signing/notarization remain untested.
+After merging the shared signed comparison feature, all three desktop targets build and all five CTest cases pass. Synthetic comparison CLI/GUI checks verify signed live accounting, Unicode/spaced paths, strict arguments, input protection, docked/stacked layouts, identical-file rendering, and exact GUI/CLI report parity. A representative saved capture passes snapshot/SQLite/agent/self-comparison regression with the new engine. Private capture paths, statistics, and symbols are kept in local build evidence; public documentation records reproducible commands and pass/fail scope. Intel/universal binaries, execution on macOS 13, and Developer ID signing/notarization remain untested.
+
+The reported damaged-app warning was reproduced as an invalid bundle signature; extracted files matched the ZIP exactly. The repaired native/full ZIPs pass strict recursive signature verification after extraction. The repaired local app opens through LaunchServices, displays its window, quits cleanly, and retains its seal after external layout writes. The bundled injector reads its configuration from Resources and writes logs in an external working directory. These focused packaging checks require no repeated phone capture. Local download quarantine was cleared only on the verified artifacts built on this Mac; downloaded copies remain subject to Gatekeeper's publisher/notarization approval.

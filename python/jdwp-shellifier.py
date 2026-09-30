@@ -760,7 +760,7 @@ def setup_logging(default_path='logging.json', default_level=logging.INFO):
 
 
 if __name__ == "__main__":
-    logger = setup_logging(default_path=os.path.join(os.getcwd(), 'logging.json'))
+    logger = setup_logging(default_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logging.json'))
     parser = argparse.ArgumentParser(description="Universal exploitation script for JDWP by @_hugsy_",
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 

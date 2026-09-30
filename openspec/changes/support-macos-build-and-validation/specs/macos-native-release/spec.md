@@ -22,6 +22,8 @@ The project SHALL build the Qt-free GUI app bundle and CLI with the installed Ap
 ### Requirement: Executable-relative capture runtime
 The build driver SHALL stage injector, logging configuration, icon, and available Android hook libraries beside the CLI and inside the GUI bundle. Full builds SHALL refresh those copies after hooks build.
 
+The macOS GUI SHALL load immutable runtime from `Contents/Resources` and store settings, layout, and default logs outside the signed bundle in the user's Application Support directory. Portable binaries SHALL retain executable-relative paths.
+
 #### Scenario: Full build stages fresh hooks
 - **WHEN** a full macOS build finishes building all four LLVM Android hook ABIs
 - **THEN** local CLI and GUI runtime paths contain copies matching the freshly built source hooks
@@ -32,6 +34,12 @@ The capture-ready macOS release ZIP SHALL contain the main GUI, CLI, standalone 
 #### Scenario: Extracted archive execution
 - **WHEN** the archive is extracted to a separate directory
 - **THEN** the CLI help and sample export succeed and the GUI loads a sample with its bundled resources
+
+#### Scenario: Bundle seal survives packaging and use
+- **WHEN** either macOS release is packaged, extracted, and launched
+- **THEN** the complete app has a valid ad-hoc signature, including its resource seal, verified with strict recursive codesign checks after ZIP extraction
+- **AND** normal settings, layout, and default logging writes do not modify the sealed bundle
+- **AND** documentation distinguishes local signature validity from Developer ID signing and Apple notarization for downloaded-app approval
 
 #### Scenario: Upstream comparison viewer in the macOS release
 - **WHEN** the merged release is built and extracted
